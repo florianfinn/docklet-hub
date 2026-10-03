@@ -13,18 +13,18 @@
   },
   "dependencies": {
     "contract": "workspace:*",
-    "better-auth": "1.7.2",
-    "dotenv": "^17.4.2",
+    "better-auth": "1.7.6",
+    "dotenv": "^18.0.4",
     "express": "^5.2.1",
     "pg": "^8.23.0",
-    "yaml": "^2.9.0",
-    "zod": "4.5.2"
+    "yaml": "^2.9.1",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
-    "@types/node": "^26.4.0",
+    "@types/node": "^26.6.3",
     "@types/pg": "^8.23.1",
-    "tsx": "^4.19.2",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }
