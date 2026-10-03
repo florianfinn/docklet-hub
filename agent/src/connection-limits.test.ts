@@ -237,8 +237,10 @@ test("maxConnections rejects the excess connection instead of holding it", async
   const fallback = setTimeout(() => release("fallback"), 1_500);
   fallback.unref();
   let rejectedSoFar = 0;
+  let requestsSeen = 0;
   await withServer(
     (request, response) => {
+      requestsSeen += 1;
       if (released) response.end("ok");
       else held.push(response);
     },
@@ -262,6 +264,8 @@ test("maxConnections rejects the excess connection instead of holding it", async
       const served = outcomes.filter((outcome) => outcome.first.startsWith("HTTP/1.1 200")).length;
       assert.equal(served, 2, `served=${served}: ${JSON.stringify(outcomes)}`);
       assert.equal(outcomes.length - served, 2);
+      // The excess connections never reached the handler: refused at accept.
+      assert.equal(requestsSeen, 2);
       // Rejected while both slots were still occupied, not held in an
       // invisible queue — the same promise as with the stream cap from R3.
       assert.deepEqual(events, ["rejected", "rejected", "released:rejections"], JSON.stringify(outcomes));
