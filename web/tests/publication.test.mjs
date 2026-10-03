@@ -55,3 +55,19 @@ test("Testdateien erhalten keine pauschale Freigabe privater Adressen", () => {
   const address=[192,168,88,44].join(".");
   assert.equal(inspectText(address,"web/tests/another.test.mjs")[0].category,"private-network-address");
 });
+
+test("offizielle GitHub-Automation bleibt erlaubt, persönliche Identitäten bleiben gesperrt", () => {
+  assert.deepEqual(inspectText("noreply@github.com support@github.com"),[]);
+  assert.equal(inspectText(["personal","github.com"].join("@"))[0].category,"non-example-email");
+  const directory=mkdtempSync(join(tmpdir(),"publication-bot-"));
+  try {
+    scratchGit(directory,["init","-q"]);
+    scratchGit(directory,["config","user.name","GitHub"]);
+    scratchGit(directory,["config","user.email","noreply@github.com"]);
+    scratchGit(directory,["commit","--allow-empty","-qm","chore: automation fixture"]);
+    assert.deepEqual(inspectRepository(directory,{history:true}),[]);
+    scratchGit(directory,["config","user.email",["personal","github.com"].join("@")]);
+    scratchGit(directory,["commit","--allow-empty","-qm","chore: invalid identity fixture"]);
+    assert.ok(inspectRepository(directory,{history:true}).some(f=>f.category==="private-commit-identity"));
+  } finally {rmSync(directory,{recursive:true,force:true});}
+});

@@ -10,6 +10,8 @@ const SECRET = /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----|\b(?:gh[pousr]_[A-Za-z0-
 const LOCAL_PATH = /[A-Z]:[\\/](?:Users|Documents and Settings)[\\/][^\s"'\x60]+/gi;
 const PRIVATE_HOST = /\b[a-z0-9-]+\.(?:lan|home\.arpa|internal)\b/gi;
 const EXAMPLE_EMAIL = /@(?:users\.noreply\.github\.com|(?:[a-z0-9-]+\.)*example\.(?:com|org|net)|(?:[a-z0-9-]+\.)*(?:test|invalid))$/i;
+// Public GitHub automation contacts are not private operator identities.
+const PUBLIC_AUTOMATION_EMAILS = new Set(["noreply@github.com","support@github.com"]);
 const PRODUCT_NETWORK = /^(?:10\.(?:253|254)\.0\.\d{1,3}|10\.0\.0\.0|172\.16\.0\.0|192\.168\.0\.0|100\.64\.0\.0)$/;
 // Exact synthetic fixtures, never a blanket exemption for test directories.
 const ADDRESS_FIXTURES = new Map([
@@ -29,7 +31,7 @@ const ADDRESS_FIXTURES = new Map([
 export function inspectText(text, path = "text") {
   const findings = [];
   const report = (category, index) => findings.push({ path, line: text.slice(0,index).split("\n").length, category });
-  for (const match of text.matchAll(EMAIL)) if (!EXAMPLE_EMAIL.test(match[0])) report("non-example-email", match.index);
+  for (const match of text.matchAll(EMAIL)) if (!EXAMPLE_EMAIL.test(match[0]) && !PUBLIC_AUTOMATION_EMAILS.has(match[0].toLowerCase())) report("non-example-email", match.index);
   for (const match of text.matchAll(SECRET)) report("credential-pattern", match.index);
   for (const match of text.matchAll(LOCAL_PATH)) report("workstation-path", match.index);
   for (const match of text.matchAll(PRIVATE_HOST)) report("private-hostname", match.index);
@@ -101,7 +103,7 @@ export function inspectRepository(root = ROOT, { staged = false, history = false
     const objects=new Map();
     for(const record of commits) {
       const [sha,author,committer,...body]=record.trim().split("\x1e");
-      for(const email of [author,committer])if(!/@users\.noreply\.github\.com$/i.test(email))findings.push({path:sha.slice(0,7),line:1,category:"private-commit-identity"});
+      for(const email of [author,committer])if(!/@users\.noreply\.github\.com$/i.test(email) && email.toLowerCase()!=="noreply@github.com")findings.push({path:sha.slice(0,7),line:1,category:"private-commit-identity"});
       findings.push(...inspectText(body.join("\x1e"),sha.slice(0,7)));
       for(const entry of git(root,["ls-tree","-rz","--full-tree",sha]).split("\0").filter(Boolean)) {
         const [metadata,path]=entry.split("\t");

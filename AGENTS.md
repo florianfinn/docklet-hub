@@ -23,6 +23,11 @@ in docs/design/ und sind dort im Index verlinkt.
   SHADCNBLOCKS_API_KEY, nachfragen. Nur wenn das keinen Baustein liefert,
   die freie Registry verwenden. Jede Kopie erhält einen Herkunftskopf.
 
+- Keine automatisch eingefügten Autoren- oder Maintainerzuschreibungen an
+  KI-Werkzeuge und keine Co-Authored-By-Trailer für solche Werkzeuge in Code,
+  Dokumentation, Commit-Texten, Issues oder PRs. Echte Lizenz- und
+  Herkunftsnachweise übernommener Komponenten bleiben erhalten.
+
 ## Öffentliche Daten
 
 - Das Repo und alle seine Issues, PRs, Commit-Texte, Screenshots und
@@ -82,8 +87,15 @@ in docs/design/ und sind dort im Index verlinkt.
   erneuten Review. Blockierende Befunde werden vor dem Merge behoben.
 - Die veröffentlichende Sitzung attestiert einen abgeschlossenen Review mit
   scripts/record-agent-review.mjs. Der erforderliche agent-review-Status
-  liegt ausschließlich am aktuellen PR-Test-Merge-SHA und bindet Head und Base; die Sitzung verantwortet die
-  Wahrhaftigkeit der Attestation. Das Skript ersetzt keine Prüfung.
+  liegt am PR-Head. Der Beleg nennt die geprüften Head-, Base- und
+  Test-Merge-SHAs; die Sitzung verantwortet die Wahrhaftigkeit der Attestation.
+  Das Skript ersetzt keine Prüfung.
+- Jeder Merge läuft über scripts/merge-reviewed-pr.mjs mit dem aktuellen
+  privaten Review-Bericht und UTF-8-Merge-Text. Der Helfer verlangt den neuesten
+  erfolgreichen GitHub-Prüflauf für genau diese Integration und prüft die
+  PR-SHAs unmittelbar vor dem Merge erneut. Währenddessen erfolgen keine
+  parallelen Änderungen am Zielbranch. Direkte UI-/API-Merges sind untersagt.
+  GitHub erzwingt den Helfer nicht; seine Merge-API bindet atomar nur den Head.
 - Für main und codex/feature-* gelten aktive Rulesets mit PR-Pflicht,
   erforderlichen checks und agent-review sowie strikter Aktualität zur Basis.
   GitHub prüft den Test-Merge; dessen künstliche Metadaten werden von der

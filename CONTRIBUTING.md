@@ -12,6 +12,9 @@ personal email addresses, real infrastructure addresses, private routes,
 workstation paths, runtime configuration, logs or screenshots with such data.
 Use your GitHub noreply email for commits. Report scanner findings without
 copying their values into public issues.
+Do not add automatic AI authorship or maintainer claims, or AI co-author
+trailers, to source, documentation, commits, issues or pull requests.
+Preserve actual third-party license and provenance notices.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -38,6 +41,9 @@ Record a real review with scripts/record-agent-review.mjs; see
 [review workflow](docs/design/review-workflow.md). Required checks enforce a
 recorded review status and automated checks. Posting a status is an attestation
 by a trusted maintainer, not an automatic proof of reviewer independence.
+Merge only through scripts/merge-reviewed-pr.mjs with the current private
+review report and UTF-8 merge payload. It verifies the newest successful
+Actions run for exactly the reviewed integration and rechecks the PR SHAs.
 
 Use fresh issues with explicit scope, dependencies and acceptance criteria.
 Issues belong to feature/intermediate milestones; release:first-public joins
