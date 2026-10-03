@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { DockerEngine } from "./engine.js";
-import { foreignManagementOf, UNRAID_MANAGED_LABEL } from "./external-management.js";
+import { createImageManagerLabelLookup, foreignManagementOf, UNRAID_MANAGED_LABEL } from "./external-management.js";
 import { toContainerSummary } from "./redact.js";
 
 const COMPOSE = { "com.docker.compose.project": "media", "com.docker.compose.service": "web" };
@@ -59,6 +59,40 @@ test("the container summary classifies with the image label it is given", () => 
   } as never;
   assert.deepEqual(toContainerSummary(raw, { imageManagerLabel: null }).externalManagement, { manager: "unraid" });
   assert.deepEqual(toContainerSummary(raw).externalManagement, { manager: "unknown" });
+});
+
+test("the image lookup reads the image only for a claim and caches its answer", async () => {
+  const seen: string[] = [];
+  const lookup = createImageManagerLabelLookup(async (imageId) => {
+    seen.push(imageId);
+    return imageId === "sha256:claimed" ? { Config: { Labels: { [UNRAID_MANAGED_LABEL]: "dockerman" } } } : { Config: {} };
+  });
+  const claim = { [UNRAID_MANAGED_LABEL]: "dockerman" };
+  assert.equal(await lookup({}, "sha256:plain"), null);
+  assert.equal(await lookup(claim, "sha256:plain"), null);
+  assert.equal(await lookup(claim, "sha256:plain"), null);
+  assert.equal(await lookup(claim, "sha256:claimed"), "dockerman");
+  assert.deepEqual(seen, ["sha256:plain", "sha256:claimed"]);
+});
+
+test("an unreadable image is unknown and is asked again next time", async () => {
+  let calls = 0;
+  const failing = createImageManagerLabelLookup(async () => {
+    calls += 1;
+    throw new Error("socket closed");
+  });
+  const claim = { [UNRAID_MANAGED_LABEL]: "dockerman" };
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    assert.equal(await failing(claim, "sha256:feed"), undefined);
+    assert.equal(await failing(claim, "sha256:feed"), undefined);
+  } finally {
+    console.error = originalError;
+  }
+  assert.equal(calls, 2);
+  assert.equal(await createImageManagerLabelLookup(async () => null)(claim, "sha256:gone"), undefined);
+  assert.equal(await createImageManagerLabelLookup(async () => null)(claim, undefined), undefined);
 });
 
 function socketPath(name: string): string {

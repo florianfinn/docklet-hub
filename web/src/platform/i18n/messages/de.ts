@@ -104,7 +104,7 @@ export const de = {
   containerExternalTitle: "Diesen Container verwaltet {manager}.",
   containerExternalUnknownTitle: "Wer diesen Container verwaltet, ist nicht sicher bestimmbar.",
   containerExternalUnknownDefinition:
-    "Er trägt ein Unraid-Verwaltermerkmal, das nicht zu seinen übrigen Merkmalen passt oder schon im Image steht. Der Hub behandelt ihn deshalb als fremdverwaltet: Protokoll, Dateien, Shell sowie Start und Stopp gehen, Update, Neuerstellen und Entfernen lehnt der Arm ab.",
+    "Er trägt ein Unraid-Verwaltermerkmal, das nicht zu seinen übrigen Merkmalen passt, schon im Image steht oder sich am Image nicht prüfen ließ. Der Hub behandelt ihn deshalb als fremdverwaltet: Protokoll, Dateien, Shell sowie Start und Stopp gehen, Update, Neuerstellen und Entfernen lehnt der Arm ab.",
   containerExternalDefinition:
     "Protokoll, Dateien, Shell sowie Start und Stopp gehen wie bei jedem anderen Container. Update, Neuerstellen und Entfernen macht {manager} selbst: der Arm lehnt sie vom Hub ab, weil {manager} sie beim nächsten Update aus seiner Vorlage zurückbauen würde.",
 
