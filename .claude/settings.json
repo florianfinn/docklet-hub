@@ -1,0 +1,18 @@
+{
+  "attribution": {
+    "commit": "Assisted-by: Claude Code",
+    "pr": "Mit Unterstützung von Claude Code erstellt."
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/setup-git-hooks.mjs\""
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -16,7 +16,9 @@ dist/
 *.tgz
 .DS_Store
 CLAUDE.md
-.claude/
+/.claude/*
+!/.claude/settings.json
+*/**/.claude/
 .remember/
 .private/
 review-reports/

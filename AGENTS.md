@@ -35,10 +35,14 @@ in docs/design/ und sind dort im Index verlinkt.
   SHADCNBLOCKS_API_KEY, nachfragen. Nur wenn das keinen Baustein liefert,
   die freie Registry verwenden. Jede Kopie erhält einen Herkunftskopf.
 
-- Keine automatisch eingefügten Autoren- oder Maintainerzuschreibungen an
-  KI-Werkzeuge und keine Co-Authored-By-Trailer für solche Werkzeuge in Code,
-  Dokumentation, Commit-Texten, Issues oder PRs. Echte Lizenz- und
-  Herkunftsnachweise übernommener Komponenten bleiben erhalten.
+- Keine Autoren- oder Maintainerzuschreibungen an KI-Werkzeuge und keine
+  Co-Authored-By-Trailer für solche Werkzeuge in Code, Dokumentation,
+  Commit-Texten, Issues oder PRs. Commits und PRs dürfen KI-Mitarbeit als
+  Texthinweis ohne E-Mail-Adresse nennen, etwa Assisted-by: Claude Code;
+  .claude/settings.json legt ihn fest. Sitzungslinks entfallen. Autor und
+  Committer sind Menschen mit Noreply-Absender; die Identität setzt die
+  jeweilige Umgebung, nicht das Repo. Echte Lizenz- und Herkunftsnachweise
+  übernommener Komponenten bleiben erhalten.
 
 ## Öffentliche Daten
 

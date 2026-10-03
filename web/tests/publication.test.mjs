@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inspectText, inspectRepository } from "../../scripts/check-publication.mjs";
@@ -69,5 +69,45 @@ test("offizielle GitHub-Automation bleibt erlaubt, persönliche Identitäten ble
     scratchGit(directory,["config","user.email",["personal","github.com"].join("@")]);
     scratchGit(directory,["commit","--allow-empty","-qm","chore: invalid identity fixture"]);
     assert.ok(inspectRepository(directory,{history:true}).some(f=>f.category==="private-commit-identity"));
+  } finally {rmSync(directory,{recursive:true,force:true});}
+});
+
+test("KI-Werkzeuge erscheinen nicht als verknüpfte Co-Autoren", () => {
+  const trailer=(name,email)=>["Co-authored-by",": "+name+" <"+email+">"].join("");
+  assert.ok(inspectText(trailer("Claude","bot@users.noreply.github.com")).some(f=>f.category==="ai-co-author"));
+  assert.ok(inspectText("fix: x\n\n"+trailer("Copilot","bot@users.noreply.github.com").toLowerCase()).some(f=>f.category==="ai-co-author"));
+  assert.ok(inspectText(trailer("Claude Opus 5","bot@users.noreply.github.com")).some(f=>f.category==="ai-co-author"));
+  assert.ok(inspectText(trailer("Helper",["noreply","anthropic.com"].join("@"))).some(f=>f.category==="ai-co-author"));
+  assert.deepEqual(inspectText(trailer("Erika Muster","erika@users.noreply.github.com")),[]);
+  assert.deepEqual(inspectText(trailer("Claude Martin","claude-martin@users.noreply.github.com")).filter(f=>f.category==="ai-co-author"),[]);
+  for (const [name,login] of [["Copilot","175728472+Copilot"],["copilot-swe-agent[bot]","1+copilot-swe-agent[bot]"],["Gemini Code Assist","1+gemini-code-assist[bot]"],["Jules","1+google-labs-jules[bot]"]])
+    assert.ok(inspectText(trailer(name,login+"@users.noreply.github.com")).some(f=>f.category==="ai-co-author"),name);
+  for (const name of ["OpenAI Codex","Gemini CLI","Copilot Coding Agent","Claude (AI)","claude_code"])
+    assert.ok(inspectText(trailer(name,"x@users.noreply.github.com")).some(f=>f.category==="ai-co-author"),name);
+  assert.deepEqual(inspectText(trailer("Devin Muster","devin-muster@users.noreply.github.com")),[]);
+  assert.deepEqual(inspectText("Assisted-by: Claude Code"),[]);
+});
+
+test("die Co-Autor-Prüfung bleibt bei feindlicher Eingabe linear", () => {
+  // Synchronous code cannot be interrupted by a test timeout; measure instead so a regression fails.
+  // A backtracking pattern needs seconds for 22 repetitions; the linear check needs well under 1 ms.
+  const hostile=["Co-authored-by",": Claude"+"-1".repeat(22)+"! <x>"].join("");
+  const started=performance.now();
+  assert.ok(inspectText(hostile).some(f=>f.category==="ai-co-author"));
+  assert.ok(performance.now()-started<500,"die Co-Autor-Prüfung ist nicht linear");
+  assert.ok(inspectText(["Co-authored-by",": Claude"+"-1".repeat(50000)+" <x>"].join("")).length>0);
+});
+
+test("unter .claude ist nur die geteilte Projekteinstellung öffentlich", () => {
+  const directory=mkdtempSync(join(tmpdir(),"publication-claude-"));
+  try {
+    scratchGit(directory,["init","-q"]);
+    mkdirSync(join(directory,".claude"));
+    writeFileSync(join(directory,".claude","settings.json"),"{}");
+    writeFileSync(join(directory,".claude","settings.local.json"),"{}");
+    scratchGit(directory,["add","-f",".claude"]);
+    const findings=inspectRepository(directory,{staged:true});
+    assert.equal(findings.some(f=>f.path===".claude/settings.json"),false);
+    assert.equal(findings.some(f=>f.path===".claude/settings.local.json"&&f.category==="private-artifact"),true);
   } finally {rmSync(directory,{recursive:true,force:true});}
 });

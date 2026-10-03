@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { resolveRepository } from "./github-repository.mjs";
 import { validateReview } from "./review-evidence.mjs";
 import { validateMerge } from "./merge-evidence.mjs";
 
@@ -8,7 +9,7 @@ if(!/^\d+$/.test(number??"") || !reportPath || !payloadPath)throw new Error("Usa
 const report=JSON.parse(readFileSync(reportPath,"utf8"));
 const payload=JSON.parse(readFileSync(payloadPath,"utf8"));
 const gh=args=>execFileSync("gh",args,{encoding:"utf8",maxBuffer:32*1024*1024});
-const repo=JSON.parse(gh(["repo","view","--json","nameWithOwner"])).nameWithOwner;
+const repo=resolveRepository();
 const api=path=>JSON.parse(gh(["api","repos/"+repo+"/"+path]));
 const getPr=()=>api("pulls/"+number);
 const pr=getPr();
