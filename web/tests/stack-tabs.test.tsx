@@ -328,8 +328,8 @@ test("ein Stack ohne Container sagt das, statt einen Fehler zu zeigen", async ()
       </MemoryRouter>
     </AppLanguageProvider>
   );
-  await settle();
   try {
+    assert.ok(await composeSettled(), "ComposeView did not settle");
     // ⚠️ KEIN AUFRUF. Ohne Container gibt es keinen Anker in die Datei, und
     // ein Abruf mit leerer Kennung liefe in eine 404, die wie eine Störung
     // aussieht.
