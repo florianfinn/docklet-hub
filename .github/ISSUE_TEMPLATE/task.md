@@ -1,6 +1,6 @@
 ---
 name: Aufgabe
-about: Ein Arbeitsschritt. Hier lebt der Status — nicht in docs/.
+about: Feature-Arbeit, Entscheidung oder offener Befund. Kleine Aufgaben direkt per PR.
 labels: []
 ---
 
@@ -12,5 +12,5 @@ labels: []
 
 ## Bezug
 
-<!-- Falls es zu einem Sammel-Issue gehört: dessen Nummer. Sammel-Issues tragen
-     das Label `track`; die Übersicht ist eine Abfrage, keine gepflegte Datei. -->
+<!-- Feature- und Release-Issues: zugehöriger Meilenstein. Kleine eigenständige
+     Korrekturen, Wartung und Doku brauchen kein Issue, sondern nur einen PR. -->
