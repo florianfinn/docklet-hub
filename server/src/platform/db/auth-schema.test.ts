@@ -17,8 +17,7 @@ import { AUTH_OPTIONS_FOR_SCHEMA } from "../auth/schema-source.js";
 // Der Preis dafür ist Drift: better-auth ergänzt in einer neuen Fassung ein
 // Feld, die Migration weiß nichts davon, und der Fehler fällt beim ersten
 // Anmeldeversuch auf — in einer Meldung über eine fehlende Spalte, die
-// niemand mit einem Abhängigkeits-Update in Verbindung bringt. Genau so ist
-// `account.issuer` in 1.7 entstanden.
+// niemand mit einem Abhängigkeits-Update in Verbindung bringt.
 //
 // Dieser Fall zahlt den Preis nicht, sondern verschiebt ihn: er liest
 // dieselbe Beschreibung, aus der das Werkzeug seine Migrationen erzeugt, und
