@@ -27,6 +27,7 @@ import {
 import { mapLimit } from "../concurrency.js";
 import { containerStatsOf } from "../stats.js";
 import { composeCandidates } from "../compose-selection.js";
+import { UNRAID_MANAGED_LABEL } from "../external-management.js";
 import { config, engine, registry, composeSelections, statsHistory, hardeningOptions } from "./state.js";
 
 // Stage 5c: the same path is also the root of the compose directories. A
@@ -152,6 +153,34 @@ export async function violationKey(raw: RawInspect, containerId: string): Promis
     await inspectedContainer(raw),
     hardeningOptionsFor(containerId)
   ).map((violation) => `${violation.rule} — ${violation.hostPath ?? violation.detail}`);
+}
+
+// Unraid's manager label as the image itself carries it, for
+// foreignManagementOf: `null` when absent, `undefined` when unreadable. An image
+// id names immutable content, so a cached answer never goes stale.
+const IMAGE_LABEL_CACHE_LIMIT = 512;
+const imageManagerLabels = new Map<string, string | null>();
+
+export async function imageManagerLabelOf(
+  labels: Record<string, string> | null | undefined,
+  imageId: string | undefined
+): Promise<string | null | undefined> {
+  // Without a claim on the container there is nothing to verify.
+  if (labels?.[UNRAID_MANAGED_LABEL] === undefined) return null;
+  if (!imageId) return undefined;
+  const cached = imageManagerLabels.get(imageId);
+  if (cached !== undefined) return cached;
+  try {
+    const image = await engine.inspectImage(imageId);
+    if (!image) return undefined;
+    const value = image.Config?.Labels?.[UNRAID_MANAGED_LABEL] ?? null;
+    if (imageManagerLabels.size >= IMAGE_LABEL_CACHE_LIMIT) imageManagerLabels.clear();
+    imageManagerLabels.set(imageId, value);
+    return value;
+  } catch (error) {
+    console.error(`[agent] image ${imageId} not readable:`, error);
+    return undefined;
+  }
 }
 
 // CPU/RAM sampling (S13) — best effort. A failed stats call (container is

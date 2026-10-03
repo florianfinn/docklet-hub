@@ -24,6 +24,10 @@ export const enContainers = {
   overviewExternallyManaged: "externally managed",
   externalManagedByUnraid:
     "Unraid creates these containers from its templates. The hub shows and controls them; Unraid handles updates and recreation.",
+  externalManagedByUnraidCompose:
+    "Unraid''s Compose Manager plugin starts these containers from its projects. The hub shows and controls them; the plugin handles updates, recreation and Compose changes.",
+  externalManagedUnknown:
+    "These containers carry a manager label the agent cannot attribute to a manager with certainty. The hub shows and controls them; updates, recreation and removal stay locked.",
   externalManagedByOther: "{manager} manages these containers. The hub shows and controls them; {manager} handles updates and recreation.",
   stackOpen: "Open stack {project}",
   stackContainersCount: "Stack · {count, plural, one {# container} other {# containers}}",

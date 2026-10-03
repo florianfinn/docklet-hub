@@ -14,7 +14,7 @@ import { containerPath, type ContainerTab } from "../../platform/routes/containe
 import { detailPageClass } from "./detail-page";
 import { hostDisplay } from "../../domain/hosts";
 import { MarkList } from "../../features/marks";
-import { ContainerStateDot, useOverview } from "../../features/containers";
+import { ContainerStateDot, isUnknownManager, managerName, useOverview } from "../../features/containers";
 import { stackPath } from "../../platform/routes/stack-path";
 
 // ⚠️ LOADED LAZILY (#258): the log view, its line renderer and the stream
@@ -261,10 +261,16 @@ function ContainerDetail({ found, tab }: { found: Found; tab: ContainerTab }) {
  */
 function ExternalNote({ manager }: { manager: string }) {
   const t = useTranslations();
+  const unknown = isUnknownManager(manager);
+  const name = managerName(manager);
   return (
     <Card className="gap-1 border-card-line bg-body-face p-4" data-testid="container-external-note">
-      <p className="text-sm font-medium">{t("containerExternalTitle", { manager })}</p>
-      <p className="max-w-prose text-[13px] text-muted-foreground">{t("containerExternalDefinition", { manager })}</p>
+      <p className="text-sm font-medium">
+        {unknown ? t("containerExternalUnknownTitle") : t("containerExternalTitle", { manager: name })}
+      </p>
+      <p className="max-w-prose text-[13px] text-muted-foreground">
+        {unknown ? t("containerExternalUnknownDefinition") : t("containerExternalDefinition", { manager: name })}
+      </p>
     </Card>
   );
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { envKeysOf, envPlaintextOf, foreignManagementOf, redactKnownSecrets, splitEnvEntry, toContainerSummary } from "./redact.js";
+import { envKeysOf, envPlaintextOf, redactKnownSecrets, splitEnvEntry, toContainerSummary } from "./redact.js";
 import type { RawInspect } from "./engine.js";
 
 const raw: RawInspect = {
@@ -147,22 +147,6 @@ test("ONLY project and service travel along from the labels", () => {
     }
   });
   assert.equal(JSON.stringify(summary).includes("geheim"), false);
-});
-
-// --- External management (S23) ----------------------------------------------
-
-test("foreignManagementOf recognizes a container run by Unraid", () => {
-  assert.deepEqual(foreignManagementOf({ "net.unraid.docker.managed": "dockerman" }), {
-    manager: "unraid"
-  });
-});
-
-test("foreignManagementOf reports nothing for an ordinary container", () => {
-  assert.equal(foreignManagementOf({ "com.docker.compose.project": "arr_stack" }), null);
-  assert.equal(foreignManagementOf({}), null);
-  assert.equal(foreignManagementOf(null), null);
-  // An empty value is not a claim.
-  assert.equal(foreignManagementOf({ "net.unraid.docker.managed": "  " }), null);
 });
 
 test("the summary classifies the mutability of the running ref", () => {

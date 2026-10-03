@@ -144,6 +144,14 @@ test("kennt der Agent die Klasse, reist ein fremdverwalteter mit externallyManag
   assert.equal(own !== undefined && "externallyManaged" in own, false);
 });
 
+test("jeder gemeldete Verwalter sperrt die Definition, auch ein unsicherer (#5)", () => {
+  for (const manager of ["unraid", "unraid-compose", "unknown"]) {
+    const container: HostInventoryContainer = { ...UNRAID_PLEX, externalManagement: { manager } };
+    const [entry] = toRegistryRequestBody(buildRegistryEntries([container], [], [], { externallyManaged: true })).entries;
+    assert.equal(entry?.externallyManaged, true, manager);
+  }
+});
+
 test("die Liste ist vollständig und keine Änderungsmenge", () => {
   // `PUT /registry` ersetzt die Liste des Agenten VOLLSTÄNDIG
   // (`registry.replaceAll`). Was im Bestand steht, steht drin — sonst entzieht

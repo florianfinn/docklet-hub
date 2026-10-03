@@ -28,8 +28,25 @@ import type { ContainerEntry, OverviewContainer } from "contract";
 // nicht kennt, darf nicht in einen Standardtext fallen, der seinen Namen
 // verschluckt — er bekommt den Satz mit eingesetztem Namen.
 const MANAGER_NOTE_KEYS: Record<string, keyof Messages> = {
-  unraid: "externalManagedByUnraid"
+  unraid: "externalManagedByUnraid",
+  "unraid-compose": "externalManagedByUnraidCompose",
+  unknown: "externalManagedUnknown"
 };
+
+// Product names for the managers the agent reports (agent:
+// `external-management.ts`); `unknown` is no name and has its own texts.
+const MANAGER_NAMES: Record<string, string> = {
+  unraid: "Unraid",
+  "unraid-compose": "Unraid Compose Manager"
+};
+
+export function isUnknownManager(manager: string): boolean {
+  return manager.toLowerCase() === "unknown";
+}
+
+export function managerName(manager: string): string {
+  return MANAGER_NAMES[manager.toLowerCase()] ?? manager;
+}
 
 export function isExternallyManaged(container: ContainerEntry): boolean {
   return container.externalManagement !== null;
