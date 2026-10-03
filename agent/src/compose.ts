@@ -29,9 +29,6 @@ export const COMPOSE_FILE_NAME = "compose.yaml";
 // rollback it briefly pins a service to the previous image id.
 export const UPDATE_ROLLBACK_OVERRIDE_FILE_NAME = ".dashboard-update-rollback.yaml";
 
-// Written by the agent into every project the hub creates (project-marker.ts).
-export const PROJECT_MARKER_FILE_NAME = ".docklet-hub-project";
-
 // The label by which a stack created by the dashboard can be recognized. Not a
 // security feature — the authoritative information is the pointer row in the
 // DB — but it makes the origin visible in `docker ps`.
@@ -57,7 +54,7 @@ export function isValidProjectName(name: unknown): name is string {
 export function isValidComposeFileName(name: string): boolean {
   if (!name || name.length > 255) return false;
   if (name.includes("/") || name.includes("\\")) return false;
-  if (name === "." || name === ".." || name === PROJECT_MARKER_FILE_NAME) return false;
+  if (name === "." || name === "..") return false;
   // No control characters. Checked via character codes instead of a regex: a
   // literal range in the source would itself be a control character in the
   // file again.

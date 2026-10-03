@@ -239,8 +239,6 @@ export const deCompose = {
     "Der Arm legt das Projekt an und startet es. Das kann mit dem Ziehen der Images einige Minuten dauern; Schließen hält den Vorgang nicht an.",
   projectCreated: "Das Projekt ist angelegt.",
   projectRestartLooping: "{count, plural, one {# Dienst startet} other {# Dienste starten}} wiederholt neu.",
-  projectMarkerMissing:
-    "Der Arm konnte die Eigentumsmarke nicht schreiben. Das Projekt läuft, gilt aber nicht als Hub-eigen.",
   projectResyncWarning:
     "Die Allowlist des Arms ist noch nicht abgeglichen. Bis zum nächsten Abgleich lehnt er Aktionen an den neuen Containern ab.",
   projectDirectoryLeft:

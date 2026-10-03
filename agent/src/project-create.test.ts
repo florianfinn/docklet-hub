@@ -30,22 +30,13 @@ test("a create checks occupancy under the lock before creating the directory", (
   );
 });
 
-test("only a successful create writes the ownership marker", () => {
-  const body = bodyOf("createProject");
-  const success = body.indexOf("if (result.status === 200) {");
-  const marker = body.indexOf("writeProjectMarker(");
-  assert.ok(success >= 0 && marker > success, "the marker is written outside the success branch");
-  assert.equal(body.match(/writeProjectMarker\(/g)?.length, 1);
-  assert.ok(marker < body.indexOf("return { status: 200"), "the marker is written after the answer");
-});
-
 test("a failed rollback keeps everything, otherwise only empty directories go", () => {
   ordered(
     bodyOf("createProject"),
     ["if (result.body.rolledBack === false) return result;", "removeEmptyProjectDir("],
     "cleanup runs before the rollback check"
   );
-  assert.doesNotMatch(source, /rmSync\(|rmdirSync\(|removeProjectMarker\(/);
+  assert.doesNotMatch(source, /rmSync\(|rmdirSync\(/);
 });
 
 test("the preview removes the directory it created, even when the check throws", () => {

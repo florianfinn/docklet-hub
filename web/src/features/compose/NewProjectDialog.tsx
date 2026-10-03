@@ -380,9 +380,6 @@ function CreatedCard({
       {restartLooping > 0 ? (
         <p className="text-[13px] text-state-warn">{t("projectRestartLooping", { count: restartLooping })}</p>
       ) : null}
-      {project.hubOwned === false ? (
-        <p className="text-[13px] text-state-warn">{t("projectMarkerMissing")}</p>
-      ) : null}
       {resyncWarns(resync.status) ? (
         <p className="text-[13px] text-state-warn">{t("projectResyncWarning")}</p>
       ) : null}
