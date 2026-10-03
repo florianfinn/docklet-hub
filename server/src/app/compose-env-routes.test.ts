@@ -144,3 +144,24 @@ test("Benutzer und fremde Herkunft erreichen den .env-Endpunkt des Arms nicht", 
     await agent.close();
   }
 });
+
+test("der Hub schreibt keine .env: ein direkter PUT erreicht den Arm nicht", async () => {
+  const agent = await startAgent();
+  const hub = await startHub(agent);
+  try {
+    // The agent refuses the write for externally managed stacks (#121); the
+    // hub offers no write route at all, so no direct call can forward one.
+    for (const method of ["PUT", "POST", "PATCH"]) {
+      const response = await fetch(`http://127.0.0.1:${hub.port}${BASE}`, {
+        method,
+        headers: { "x-test-role": "admin", origin: `http://127.0.0.1:${hub.port}`, "content-type": "application/json" },
+        body: JSON.stringify({ expectedEnvHash: null, set: { DB_PASSWORD: "neu" }, remove: [] })
+      });
+      assert.equal(response.status, 404, method);
+    }
+    assert.deepEqual(agent.seen, []);
+  } finally {
+    await hub.close();
+    await agent.close();
+  }
+});

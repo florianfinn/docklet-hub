@@ -7,7 +7,8 @@ import { AgentRegistry } from "./registry.js";
 import { DEFINITION_ACTIONS } from "./route-policy.js";
 import { externallyManagedServices } from "./raw-ownership.js";
 
-// The ownership lock of the raw editor and the stack actions (#56).
+// The ownership lock of the raw editor, the stack actions (#56) and the
+// `.env` write (#121).
 //
 // The handlers need engine, registry file and a socket, so the decision is
 // checked as a pure function against a real registry, and its use in the
@@ -87,4 +88,21 @@ test("apply and preview check ownership again under the project lock", () => {
     const managed = body.indexOf("managedDenial(");
     assert.ok(lock >= 0 && managed > lock, `${name} does not check ownership under the lock`);
   }
+});
+
+const composeRoutes = fs.readFileSync(new URL("./routes/compose-routes.ts", import.meta.url), "utf8");
+
+test("the .env write refuses an externally managed stack right before writing, but not the read", () => {
+  const start = composeRoutes.indexOf("export async function handleEnv(");
+  assert.ok(start >= 0, "handleEnv is gone");
+  const body = composeRoutes.slice(start, composeRoutes.indexOf("\n}\n", start));
+  const read = body.indexOf("if (!writing) {");
+  const check = body.indexOf("externallyManagedServices(containerId, before.serviceIds,");
+  const write = body.indexOf("writeEnvFile(");
+  assert.ok(check >= 0, "the ownership check in handleEnv is gone");
+  assert.ok(read >= 0 && read < check, "the read branch no longer returns before the ownership check");
+  assert.ok(check < write, "the .env is written before the ownership check");
+  // No await between check and write: the registry cannot change in between.
+  assert.doesNotMatch(body.slice(check, write), /\bawait\b/);
+  assert.match(body.slice(check, write), /send\(response, 403, \{ error: "externally-managed", services: managed \}\)/);
 });
