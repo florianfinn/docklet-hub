@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inspectText, inspectRepository } from "../../scripts/check-publication.mjs";
@@ -69,5 +69,27 @@ test("offizielle GitHub-Automation bleibt erlaubt, persönliche Identitäten ble
     scratchGit(directory,["config","user.email",["personal","github.com"].join("@")]);
     scratchGit(directory,["commit","--allow-empty","-qm","chore: invalid identity fixture"]);
     assert.ok(inspectRepository(directory,{history:true}).some(f=>f.category==="private-commit-identity"));
+  } finally {rmSync(directory,{recursive:true,force:true});}
+});
+
+test("KI-Werkzeuge erscheinen nicht als verknüpfte Co-Autoren", () => {
+  const trailer=(name,email)=>["Co-authored-by",": "+name+" <"+email+">"].join("");
+  assert.ok(inspectText(trailer("Claude","bot@users.noreply.github.com")).some(f=>f.category==="ai-co-author"));
+  assert.ok(inspectText("fix: x\n\n"+trailer("Copilot","bot@users.noreply.github.com").toLowerCase()).some(f=>f.category==="ai-co-author"));
+  assert.deepEqual(inspectText(trailer("Erika Muster","erika@users.noreply.github.com")),[]);
+  assert.deepEqual(inspectText("Assisted-by: Claude Code"),[]);
+});
+
+test("unter .claude ist nur die geteilte Projekteinstellung öffentlich", () => {
+  const directory=mkdtempSync(join(tmpdir(),"publication-claude-"));
+  try {
+    scratchGit(directory,["init","-q"]);
+    mkdirSync(join(directory,".claude"));
+    writeFileSync(join(directory,".claude","settings.json"),"{}");
+    writeFileSync(join(directory,".claude","settings.local.json"),"{}");
+    scratchGit(directory,["add","-f",".claude"]);
+    const findings=inspectRepository(directory,{staged:true});
+    assert.equal(findings.some(f=>f.path===".claude/settings.json"),false);
+    assert.equal(findings.some(f=>f.path===".claude/settings.local.json"&&f.category==="private-artifact"),true);
   } finally {rmSync(directory,{recursive:true,force:true});}
 });

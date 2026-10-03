@@ -9,6 +9,8 @@ const PRIVATE_ADDRESS = /\b(?:192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\
 const SECRET = /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----|\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[0-9A-Z]{16})\b/g;
 const LOCAL_PATH = /[A-Z]:[\\/](?:Users|Documents and Settings)[\\/][^\s"'\x60]+/gi;
 const PRIVATE_HOST = /\b[a-z0-9-]+\.(?:lan|home\.arpa|internal)\b/gi;
+// AI tools may be named in plain text, never as a co-author linked to an account.
+const AI_CO_AUTHOR = /^[ \t]*Co-authored-by:[^\n]*\b(?:claude|anthropic|copilot|codex|openai|chatgpt|gemini|cursor|devin)\b/gim;
 const EXAMPLE_EMAIL = /@(?:users\.noreply\.github\.com|(?:[a-z0-9-]+\.)*example\.(?:com|org|net)|(?:[a-z0-9-]+\.)*(?:test|invalid))$/i;
 // Public GitHub automation contacts are not private operator identities.
 const PUBLIC_AUTOMATION_EMAILS = new Set(["noreply@github.com","support@github.com"]);
@@ -35,6 +37,7 @@ export function inspectText(text, path = "text") {
   for (const match of text.matchAll(SECRET)) report("credential-pattern", match.index);
   for (const match of text.matchAll(LOCAL_PATH)) report("workstation-path", match.index);
   for (const match of text.matchAll(PRIVATE_HOST)) report("private-hostname", match.index);
+  for (const match of text.matchAll(AI_CO_AUTHOR)) report("ai-co-author", match.index);
   for (const match of text.matchAll(PRIVATE_ADDRESS)) {
     if (!ADDRESS_FIXTURES.get(path)?.has(match[0]) && !PRODUCT_NETWORK.test(match[0])) report("private-network-address", match.index);
   }
@@ -44,7 +47,8 @@ export function inspectText(text, path = "text") {
 function inspectPath(path) {
   const findings=[];
   if (/(?:^|\/)\.env(?:\..+)?$/.test(path) && !path.endsWith(".env.example")) findings.push({ path, line: 1, category: "runtime-env-file" });
-  if (/(?:^|\/)(?:\.claude|\.remember|\.private|review-reports)\//.test(path) || /\.(?:pem|key|p12|dump|sqlite3?|log|zip|tgz)$/.test(path)) findings.push({path,line:1,category:"private-artifact"});
+  // Shared project settings are public; everything else below .claude/ stays local.
+  if (path!==".claude/settings.json" && /(?:^|\/)(?:\.claude|\.remember|\.private|review-reports)\//.test(path) || /\.(?:pem|key|p12|dump|sqlite3?|log|zip|tgz)$/.test(path)) findings.push({path,line:1,category:"private-artifact"});
   return findings;
 }
 

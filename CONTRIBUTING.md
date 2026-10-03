@@ -12,8 +12,11 @@ personal email addresses, real infrastructure addresses, private routes,
 workstation paths, runtime configuration, logs or screenshots with such data.
 Use your GitHub noreply email for commits. Report scanner findings without
 copying their values into public issues.
-Do not add automatic AI authorship or maintainer claims, or AI co-author
-trailers, to source, documentation, commits, issues or pull requests.
+Do not add AI authorship or maintainer claims, or AI co-author trailers,
+to source, documentation, commits, issues or pull requests. Commits and pull
+requests may note AI assistance as plain text without an email address, such
+as `Assisted-by: Claude Code`. Commit authors and committers are people with
+their noreply address.
 Preserve actual third-party license and provenance notices.
 
 ```sh
