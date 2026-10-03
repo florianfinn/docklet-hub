@@ -39,8 +39,8 @@ branch take the full chain locally.
 
 ## Features and reviews
 
-Develop a feature on codex/feature-<name>. Task branches open pull requests
-against that branch. Integrate the complete feature with one final PR to main.
+Develop a feature on its own feature branch; branch names are not prescribed.
+Task branches open pull requests against that branch. Integrate the complete feature with one final PR to main.
 Every PR needs an independent agent review before merging. The reviewer must
 not have implemented it and reviews the actual head against the actual base.
 Changed code or integration bases require another review.

@@ -69,7 +69,7 @@ in docs/design/ und sind dort im Index verlinkt.
 
 - Releases, wichtige Features und überprüfbare Zwischenschritte bekommen
   Meilensteine vor ihrem Beginn. Neue track-Sammel-Issues werden nicht angelegt.
-- Jeder Meilenstein nennt Ziel, Umfang, Abhängigkeiten, Zielbranch und
+- Jeder Meilenstein nennt Ziel, Umfang, Abhängigkeiten und
   Abnahmekriterium. Ein Abschluss-Issue trägt den Nachweis.
 - Issues entstehen nur für Feature-Arbeit, Produkt- und
   Architekturentscheidungen und Befunde, die nicht in der laufenden Sitzung
@@ -100,8 +100,9 @@ in docs/design/ und sind dort im Index verlinkt.
 
 ## Branches und unabhängige Agentenreviews
 
-- Feature-Integrationsbranch: codex/feature-<name>. Arbeitsschritte entstehen
-  auf eigenen Branches und kommen per PR auf diesen Feature-Branch.
+- Jedes Feature wird auf einem eigenen Feature-Branch integriert.
+  Arbeitsschritte entstehen auf eigenen Branches und kommen per PR auf diesen
+  Feature-Branch. Branch-Namen sind nicht vorgegeben.
 - Erst das vollständige Feature kommt mit einem Abschluss-PR auf main.
   Eigenständige Fehlerkorrekturen und Dokumentation dürfen direkt per PR dorthin.
 - Jeder PR wird vor dem Merge automatisch von einem unabhängigen Agenten
@@ -122,8 +123,9 @@ in docs/design/ und sind dort im Index verlinkt.
   PR-SHAs unmittelbar vor dem Merge erneut. Währenddessen erfolgen keine
   parallelen Änderungen am Zielbranch. Direkte UI-/API-Merges sind untersagt.
   GitHub erzwingt den Helfer nicht; seine Merge-API bindet atomar nur den Head.
-- Für main und codex/feature-* gelten aktive Rulesets mit PR-Pflicht,
-  erforderlichen checks und agent-review sowie strikter Aktualität zur Basis.
+- Für main gilt ein aktives Ruleset mit PR-Pflicht, erforderlichen checks
+  und agent-review sowie strikter Aktualität zur Basis. Auf Feature-Branches
+  gelten dieselben Schritte als Arbeitsregel; GitHub erzwingt sie dort nicht.
   GitHub prüft den Test-Merge; dessen künstliche Metadaten werden von der
   vollständigen Prüfung der echten PR-Historie getrennt.
 - Der Feature-Branch übernimmt main regelmäßig per Merge. Geteilte Historie
@@ -133,7 +135,7 @@ in docs/design/ und sind dort im Index verlinkt.
 
 ## Git und Veröffentlichungen
 
-- Branches heißen codex/<topic> oder claude/<topic>; kein direkter Push auf main.
+- Kein direkter Push auf main.
 - Commits sind Conventional Commits mit deutschem Betreff. Sobald ein Issue
   existiert, steht (#<number>) am Ende. Öffentliche Noreply-Absender verwenden.
 - Commit-Text über git commit -F, PR-Text über --body-file und Titel/Merge-Text
