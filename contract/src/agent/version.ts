@@ -29,9 +29,8 @@ import * as z from "zod/mini";
  *       `403 externally-managed` (#56)
  *   8 — host discovery reports `externalManagement` with the managers
  *       `unraid`, `unraid-compose` and `unknown` (#5)
- *   9 — new stacks get a dry run `POST /stacks/raw-preview`, mount sources,
- *       per-source confirmation of external binds and the project marker
- *       reported as `hubOwned` in stack discovery (#3)
+ *   9 — new stacks get a dry run `POST /stacks/raw-preview`, mount sources
+ *       and per-source confirmation of external binds (#3)
  */
 export const CONTRACT_VERSION = 9;
 
