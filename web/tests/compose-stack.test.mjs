@@ -326,8 +326,14 @@ test("die Images laufen auf derselben Node-Fassung wie die Arbeitskopie", () => 
   const nvmrc = readFileSync(new URL(".nvmrc", `file://${ROOT}`), "utf8").trim();
   for (const path of ["server/Dockerfile", "agent/Dockerfile"]) {
     const dockerfile = readFileSync(new URL(path, `file://${ROOT}`), "utf8");
-    const bases = [...dockerfile.matchAll(/^FROM\s+(node:\S+)/gm)].map((found) => found[1]);
-    assert.ok(bases.length > 0, `${path} nennt kein node-Basisimage`);
+    // Every external base counts, whatever the spelling; earlier stages are skipped.
+    const stages = new Set();
+    const bases = [];
+    for (const [, base, stage] of dockerfile.matchAll(/^\s*FROM\s+(?:--\S+\s+)*(\S+)(?:\s+AS\s+(\S+))?/gim)) {
+      if (!stages.has(base.toLowerCase())) bases.push(base);
+      if (stage) stages.add(stage.toLowerCase());
+    }
+    assert.ok(bases.length > 0, `${path} nennt kein Basisimage`);
     for (const base of bases) {
       assert.match(base, /^node:\d+-alpine@sha256:[0-9a-f]{64}$/, `${path}: „${base}" ist nicht auf Tag und Digest gepinnt`);
       assert.equal(base.match(/^node:(\d+)-/)[1], nvmrc, `.nvmrc sagt Node ${nvmrc}, ${path} baut auf „${base}"`);
@@ -340,8 +346,13 @@ test("@types/node beschreibt dieselbe Node-Fassung wie .nvmrc", () => {
   const nvmrc = readFileSync(new URL(".nvmrc", `file://${ROOT}`), "utf8").trim();
   for (const pkg of ["agent", "server", "web"]) {
     const manifest = JSON.parse(readFileSync(new URL(`${pkg}/package.json`, `file://${ROOT}`), "utf8"));
-    const range = manifest.dependencies?.["@types/node"] ?? manifest.devDependencies?.["@types/node"];
-    assert.equal(range?.match(/^\^(\d+)\./)?.[1], nvmrc, `${pkg}: @types/node „${range}" passt nicht zu Node ${nvmrc}`);
+    const ranges = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"]
+      .map((field) => manifest[field]?.["@types/node"])
+      .filter((range) => range !== undefined);
+    assert.ok(ranges.length > 0, `${pkg}: @types/node fehlt`);
+    for (const range of ranges) {
+      assert.equal(range.match(/^\^(\d+)\./)?.[1], nvmrc, `${pkg}: @types/node „${range}" passt nicht zu Node ${nvmrc}`);
+    }
   }
 });
 

@@ -7,7 +7,7 @@
 # einordnen müsste — für Dateien, die der Server ohnehin ausliefern kann.
 #
 # Das Basisimage ist auf Tag UND Digest gepinnt (AGENTS.md, „Abhängigkeiten
-# und Images"). Digest abgerufen am 2026-10-03.
+# und Images"). Dependabot zieht den Digest wöchentlich nach.
 #
 # Node 24 und nicht 22: die 22er Linie ist seit 2025-10-21 im Wartungsmodus
 # (nur noch Sicherheits- und kritische Korrekturen) und endet 2027-04-30, die

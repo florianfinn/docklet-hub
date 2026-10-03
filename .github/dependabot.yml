@@ -25,9 +25,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 1
+    # One PR for both directories, so hub and agent keep the same base.
     groups:
       node-base:
         patterns: ["node"]
+        group-by: dependency-name
     ignore:
       - dependency-name: node
         update-types: ["version-update:semver-major"]
