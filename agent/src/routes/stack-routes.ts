@@ -54,6 +54,7 @@ import {
   stackProjectFromRegistry,
   prepareStack,
   ensureCreateScopeAllowlisted,
+  ensureCreateScopeNotExternallyManaged,
   reanchorStackRegistry,
   containerIdsOf
 } from "../runtime/stack.js";
@@ -613,7 +614,10 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
         allowFallbackUp: body.allowFallbackUp
       });
       if (denied) throw new StackEndpointError(denied.status, denied.code);
-      if (action === "apply" || usedFallbackUp) ensureCreateScopeAllowlisted(prepared);
+      if (action === "apply" || usedFallbackUp) {
+        ensureCreateScopeAllowlisted(prepared);
+        ensureCreateScopeNotExternallyManaged(prepared);
+      }
 
       let composeFailed = false;
       try {

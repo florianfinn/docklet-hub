@@ -28,6 +28,7 @@ import { config, engine, registry } from "./state.js";
 import { composeBasePath } from "./containers.js";
 import { AgentTier } from "./http.js";
 import { gate } from "./gate.js";
+import { createScopeContainerIds, externallyManagedServices } from "../raw-ownership.js";
 
 export type StackResolvedProject = NamedComposeProject & {
   anchorServiceName: string;
@@ -326,6 +327,20 @@ export function ensureCreateScopeAllowlisted(prepared: PreparedStack): void {
   if (denied.length > 0) {
     throw new StackEndpointError(403, "stack-service-not-allowlisted", { services: denied });
   }
+}
+
+// `up` may recreate any container of the project, so an externally managed
+// anchor, existing container or missing service's last container locks it
+// (#5, #122). `start`/`stop`/`restart` do not come through here.
+export function ensureCreateScopeNotExternallyManaged(prepared: PreparedStack): void {
+  const containers = createScopeContainerIds(
+    prepared.context.services,
+    (serviceName) => prepared.entriesByService.get(serviceName)?.containerId
+  );
+  const managed = externallyManagedServices(prepared.project.anchorEntry.containerId, containers, (id) =>
+    registry.isExternallyManaged(id)
+  );
+  if (managed !== null) throw new StackEndpointError(403, "externally-managed", { services: managed });
 }
 
 export async function reanchorStackRegistry(prepared: PreparedStack): Promise<void> {

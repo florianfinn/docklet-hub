@@ -5,10 +5,10 @@ import path from "node:path";
 import test from "node:test";
 import { AgentRegistry } from "./registry.js";
 import { DEFINITION_ACTIONS } from "./route-policy.js";
-import { externallyManagedServices } from "./raw-ownership.js";
+import { createScopeContainerIds, externallyManagedServices } from "./raw-ownership.js";
 
-// The ownership lock of the raw editor, the stack actions (#56) and the
-// `.env` write (#121).
+// The ownership lock of the raw editor, the stack actions (#56), the `.env`
+// write (#121) and the stack `up` of apply and start fallback (#122).
 //
 // The handlers need engine, registry file and a socket, so the decision is
 // checked as a pure function against a real registry, and its use in the
@@ -105,4 +105,63 @@ test("the .env write refuses an externally managed stack right before writing, b
   // No await between check and write: the registry cannot change in between.
   assert.doesNotMatch(body.slice(check, write), /\bawait\b/);
   assert.match(body.slice(check, write), /send\(response, 403, \{ error: "externally-managed", services: managed \}\)/);
+});
+
+test("the create scope of a stack up covers a missing service through its last registry entry", () => {
+  const registry = registryWith([{ id: "anchor-id" }, { id: "db-old-id", externallyManaged: true }, { id: "web-id" }]);
+  const check = (id: string) => registry.isExternallyManaged(id);
+  const registryIds = new Map([["db", "db-old-id"]]);
+  const scope = createScopeContainerIds(
+    [
+      { serviceName: "db", containerId: null },
+      { serviceName: "web", containerId: "web-id" },
+      { serviceName: "cache", containerId: null }
+    ],
+    (serviceName) => registryIds.get(serviceName)
+  );
+  assert.deepEqual([...scope.entries()], [
+    ["db", "db-old-id"],
+    ["web", "web-id"]
+  ]);
+  assert.deepEqual(externallyManagedServices("anchor-id", scope, check), ["db"]);
+});
+
+test("the create scope of a stack up locks for an existing externally managed container", () => {
+  const registry = registryWith([{ id: "anchor-id" }, { id: "web-id", externallyManaged: true }]);
+  const scope = createScopeContainerIds(
+    [
+      { serviceName: "db", containerId: null },
+      { serviceName: "web", containerId: "web-id" }
+    ],
+    () => undefined
+  );
+  assert.deepEqual(externallyManagedServices("anchor-id", scope, (id) => registry.isExternallyManaged(id)), ["web"]);
+});
+
+const stackRoutes = fs.readFileSync(new URL("./routes/stack-routes.ts", import.meta.url), "utf8");
+const stackRuntime = fs.readFileSync(new URL("./runtime/stack.ts", import.meta.url), "utf8");
+
+test("stack start fallback and apply refuse an externally managed stack under the lock before compose up", () => {
+  const start = stackRoutes.indexOf("export async function handleStackAction(");
+  assert.ok(start >= 0, "handleStackAction is gone");
+  const body = stackRoutes.slice(start, stackRoutes.indexOf("\n}\n", start));
+  const lock = body.indexOf("stackLocks.runExclusive(");
+  const scope = body.indexOf("if (action === \"apply\" || usedFallbackUp) {");
+  const check = body.indexOf("ensureCreateScopeNotExternallyManaged(prepared);");
+  const startOnly = body.indexOf("await composeStart(project);");
+  const up = body.indexOf("await composeUp(project,");
+  assert.ok(lock >= 0 && scope > lock, "the create scope is not checked under the project lock");
+  assert.ok(check > scope && check < body.indexOf("}", scope), "the ownership check is not tied to apply and fallback up");
+  assert.ok(check < startOnly && check < up, "compose runs before the ownership check");
+  // No await between check and CLI call: the registry cannot change in between.
+  assert.doesNotMatch(body.slice(check, startOnly), /\bawait\b/);
+});
+
+test("the create scope check answers 403 externally-managed with the services", () => {
+  const start = stackRuntime.indexOf("export function ensureCreateScopeNotExternallyManaged(");
+  assert.ok(start >= 0, "ensureCreateScopeNotExternallyManaged is gone");
+  const body = stackRuntime.slice(start, stackRuntime.indexOf("\n}\n", start));
+  assert.match(body, /createScopeContainerIds\(\s*prepared\.context\.services,/);
+  assert.match(body, /externallyManagedServices\(prepared\.project\.anchorEntry\.containerId,/);
+  assert.match(body, /new StackEndpointError\(403, "externally-managed", \{ services: managed \}\)/);
 });
