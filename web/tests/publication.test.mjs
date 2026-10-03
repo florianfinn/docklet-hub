@@ -82,13 +82,20 @@ test("KI-Werkzeuge erscheinen nicht als verknüpfte Co-Autoren", () => {
   assert.deepEqual(inspectText(trailer("Claude Martin","claude-martin@users.noreply.github.com")).filter(f=>f.category==="ai-co-author"),[]);
   for (const [name,login] of [["Copilot","175728472+Copilot"],["copilot-swe-agent[bot]","1+copilot-swe-agent[bot]"],["Gemini Code Assist","1+gemini-code-assist[bot]"],["Jules","1+google-labs-jules[bot]"]])
     assert.ok(inspectText(trailer(name,login+"@users.noreply.github.com")).some(f=>f.category==="ai-co-author"),name);
+  for (const name of ["OpenAI Codex","Gemini CLI","Copilot Coding Agent","Claude (AI)","claude_code"])
+    assert.ok(inspectText(trailer(name,"x@users.noreply.github.com")).some(f=>f.category==="ai-co-author"),name);
   assert.deepEqual(inspectText(trailer("Devin Muster","devin-muster@users.noreply.github.com")),[]);
   assert.deepEqual(inspectText("Assisted-by: Claude Code"),[]);
 });
 
-test("die Co-Autor-Prüfung bleibt bei feindlicher Eingabe linear", {timeout:5000}, () => {
-  const hostile=["Co-authored-by",": Claude"+"-1".repeat(5000)+"! <x>"].join("");
+test("die Co-Autor-Prüfung bleibt bei feindlicher Eingabe linear", () => {
+  // Synchronous code cannot be interrupted by a test timeout; measure instead so a regression fails.
+  // A backtracking pattern needs seconds for 22 repetitions; the linear check needs well under 1 ms.
+  const hostile=["Co-authored-by",": Claude"+"-1".repeat(22)+"! <x>"].join("");
+  const started=performance.now();
   assert.ok(inspectText(hostile).some(f=>f.category==="ai-co-author"));
+  assert.ok(performance.now()-started<500,"die Co-Autor-Prüfung ist nicht linear");
+  assert.ok(inspectText(["Co-authored-by",": Claude"+"-1".repeat(50000)+" <x>"].join("")).length>0);
 });
 
 test("unter .claude ist nur die geteilte Projekteinstellung öffentlich", () => {

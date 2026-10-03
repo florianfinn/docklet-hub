@@ -13,14 +13,14 @@ const PRIVATE_HOST = /\b[a-z0-9-]+\.(?:lan|home\.arpa|internal)\b/gi;
 // Token checks instead of nested patterns keep the scan linear on hostile input.
 const CO_AUTHOR = /^[ \t]*Co-authored-by:([^<\n]*)<([^>\n]*)>/gim;
 const AI_TOOLS = new Set(["claude","copilot","codex","chatgpt","openai","gemini","cursor","devin"]);
-const AI_QUALIFIERS = new Set(["ai","agent","code","assist","bot","[bot]","opus","sonnet","haiku","fable","pro","flash"]);
+const AI_QUALIFIERS = new Set(["ai","agent","code","coding","codex","cli","assist","bot","[bot]","opus","sonnet","haiku","fable","pro","flash"]);
 const AI_BOT_WORDS = [...AI_TOOLS,"jules"];
 const AI_DOMAINS = ["anthropic.com","openai.com","cursor.com","cursor.sh","devin.ai","cognition.ai"];
 const GITHUB_NOREPLY = "@users.noreply.github.com";
 
 // Names people also carry (Claude Martin) pass; only the tool name with model words fails.
 function isAiName(name) {
-  const tokens=name.trim().toLowerCase().replace(/\[bot\]$/,"").split(/[\s-]+/).filter(Boolean);
+  const tokens=name.trim().toLowerCase().replace(/\[bot\]$/,"").split(/[\s_()-]+/).filter(Boolean);
   if(tokens[0]==="github")tokens.shift();
   return tokens.length>0 && AI_TOOLS.has(tokens[0]) && tokens.slice(1).every(t=>AI_QUALIFIERS.has(t) || /\d/.test(t));
 }
