@@ -285,9 +285,8 @@ export function ComposeView({
             </button>
             </div>
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2 px-3 py-1.5">
-              {/* ⚠️ Beim eigenen Stack des Hubs (#183) und bei fremdverwalteten
-                  Stacks (#56) gibt es den Knopf nicht — nicht ausgegraut, sondern
-                  weg: der Hinweis darunter sagt warum. */}
+              {/* No edit button for the hub's own stack (#183) or an externally
+                  managed stack (#56): removed, not disabled; the note below says why. */}
               {activeFile === "compose" && pane === "file" && !file.hubOwnStack && !file.externallyManaged ? (
                 <Button size="sm" className="font-semibold shadow-[0_0_14px_var(--accent-strong)]" disabled={!file.fileReadable} onClick={beginEdit}>
                   <Pencil data-icon="inline-start" aria-hidden="true" />
