@@ -22,6 +22,7 @@ jobs:
       - run: npm install --global pnpm@11.21.0
       - run: pnpm install --frozen-lockfile
       - run: git config core.hooksPath .githooks
+      - run: node scripts/show-check-evidence.mjs
       - run: node scripts/check-publication.mjs --history
       - run: node scripts/check-pr-publication.mjs
       - run: pnpm run lint

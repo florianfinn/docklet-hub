@@ -22,6 +22,6 @@ try {
   const current=JSON.parse(gh(["api","repos/"+repo+"/pulls/"+number]));
   validateReview(report,current);
   writeFileSync(input,JSON.stringify({state:"success",context:"agent-review",description:"PR "+number+" base="+report.baseSha,target_url:comment.html_url}),"utf8");
-  gh(["api","repos/"+repo+"/statuses/"+report.mergeSha,"--input",input]);
+  gh(["api","repos/"+repo+"/statuses/"+report.headSha,"--input",input]);
   console.log(comment.html_url);
 } finally {rmSync(dir,{recursive:true,force:true});}

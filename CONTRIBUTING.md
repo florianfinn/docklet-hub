@@ -12,6 +12,9 @@ personal email addresses, real infrastructure addresses, private routes,
 workstation paths, runtime configuration, logs or screenshots with such data.
 Use your GitHub noreply email for commits. Report scanner findings without
 copying their values into public issues.
+Do not add automatic AI authorship or maintainer claims, or AI co-author
+trailers, to source, documentation, commits, issues or pull requests.
+Preserve actual third-party license and provenance notices.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -38,6 +41,9 @@ Record a real review with scripts/record-agent-review.mjs; see
 [review workflow](docs/design/review-workflow.md). Required checks enforce a
 recorded review status and automated checks. Posting a status is an attestation
 by a trusted maintainer, not an automatic proof of reviewer independence.
+Merge only through scripts/merge-reviewed-pr.mjs with the current private
+review report and UTF-8 merge payload. It verifies the newest successful
+Actions run for exactly the reviewed integration and rechecks the PR SHAs.
 
 Use fresh issues with explicit scope, dependencies and acceptance criteria.
 Issues belong to feature/intermediate milestones; release:first-public joins
@@ -48,6 +54,13 @@ acceptance is distinct from implementation completion.
 
 Keep files below 1,000 lines; adopted files must be split when imported.
 Keep provenance headers and license notices. Tests run without real services.
+Keep comments short and focused on current contracts, constraints or subtle
+behavior, usually one to three lines. Do not narrate obvious code or embed
+change history, past fixes, previous names or discussions of rejected alternatives.
+Use Git and issues for change history, and indexed design documents for detailed
+rationale when it remains useful. Apply this when editing existing code.
+Preserve license and provenance notices and required tool directives.
+
 Shared API and agent schemas live in contract/. Protocol breaks change the
 contract version; necessary agent changes raise MIN_AGENT_VERSION.
 The hub and agent share one release version. Future supported versions retain
