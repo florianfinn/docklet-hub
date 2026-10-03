@@ -34,7 +34,7 @@
 // both sides since #278. Whoever renames one here builds a surface that
 // silently shows nothing: an unknown `kind` falls through.
 
-import { isAbort, readNdjson } from "contract";
+import { isAbort, readNdjson, type MountSource } from "contract";
 import { ApiError, postJson, putJson, readErrorDetail, request } from "../../platform/http/transport";
 
 // ---------------------------------------------------------------------------
@@ -139,6 +139,8 @@ export type ComposeDryRun = {
 export type ComposeQuestion =
   | { kind: "services"; added: string[]; removed: string[] }
   | { kind: "images"; missing: string[] }
+  // Only when creating a project (#3): bind sources outside its directory.
+  | { kind: "external-sources"; sources: string[] }
   | { kind: "hardening"; newViolations: string[]; rolledBack: boolean }
   | { kind: "changed-elsewhere"; actualHash: string }
   | { kind: "start-failed"; detail: string; rolledBack: boolean }
@@ -457,4 +459,69 @@ export async function fetchProjectEnv(
         `/api/hosts/${encodeURIComponent(hostId)}/containers/${encodeURIComponent(containerId)}/compose/env`
       );
   return answer.env;
+}
+
+// ---------------------------------------------------------------------------
+// Neues Projekt (#3)
+// ---------------------------------------------------------------------------
+
+// The calls for a new hub-owned project (#3): the dry run and the create on a
+// host. The shapes mirror `server/src/features/compose/project-client.ts` and
+// `project-service.ts`; web and server share no code.
+
+export type ProjectPreview = {
+  projectDir: string;
+  stackName: string;
+  valid: boolean;
+  reason: string | null;
+  errors: string[];
+  configError: string | null;
+  services: string[] | null;
+  imagesByService: Record<string, string>;
+  /** `null` is "not surveyed", not "none missing". */
+  missingImages: string[] | null;
+  servicesWithoutImage: string[];
+  mountSources: MountSource[];
+  externalSources: string[];
+};
+
+export type ProjectCreateInput = {
+  name: string;
+  content: string;
+  confirmNew: string[];
+  acknowledgeImagePull: string[];
+  acknowledgeHardening: string[];
+  confirmExternalSources: string[];
+};
+
+export type ProjectCreateOutcome =
+  | { kind: "created"; project: Record<string, unknown>; resync: ComposeResync }
+  | { kind: "question"; question: ComposeQuestion; projectDirRemoved: boolean | null };
+
+export async function previewProject(hostId: string, name: string, content: string): Promise<ProjectPreview> {
+  const answer = await postJson<{ preview: ProjectPreview }>(
+    `/api/hosts/${encodeURIComponent(hostId)}/projects/preview`,
+    { name, content }
+  );
+  return answer.preview;
+}
+
+/** Answers synchronously; the agent may pull, start and roll back first. */
+export async function createProject(hostId: string, input: ProjectCreateInput): Promise<ProjectCreateOutcome> {
+  const answer = await postJson<{ outcome: ProjectCreateOutcome }>(
+    `/api/hosts/${encodeURIComponent(hostId)}/projects`,
+    input
+  );
+  return answer.outcome;
+}
+
+/** The agent's cleanup flag next to a refused create, or `null`. */
+export function projectDirRemovedOf(error: unknown): boolean | null {
+  if (!(error instanceof ApiError)) return null;
+  try {
+    const parsed = JSON.parse(error.message) as { projectDirRemoved?: unknown };
+    return typeof parsed.projectDirRemoved === "boolean" ? parsed.projectDirRemoved : null;
+  } catch {
+    return null;
+  }
 }

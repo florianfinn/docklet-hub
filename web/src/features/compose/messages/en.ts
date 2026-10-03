@@ -164,5 +164,48 @@ export const enCompose = {
   composeSelectionClear: "Remove assignment",
   composeSelectionClose: "Close",
   composeSelectionSkipped: "For these containers the arm found no file of their own:",
-  composeSelectionInvalid: "The arm did not accept this file. It is no longer on its list; the list is reloaded."
+  composeSelectionInvalid: "The arm did not accept this file. It is no longer on its list; the list is reloaded.",
+
+  // ── New hub-owned project (#3) ────────────────────────────────────────────
+  composeQuestionExternalSources:
+    "The project mounts directories outside its project folder. The arm asks to confirm each source: {list}",
+  projectNewAction: "New project",
+  projectNewTitle: "New project on {host}",
+  projectNewDescription:
+    "The project gets its own folder under the arm''s base path and its own compose file. Several services share this folder.",
+  projectNameLabel: "Name",
+  projectNameHint:
+    "Name of the project and its folder: 2 to 63 letters, digits, dots, hyphens and underscores, starting with a letter or digit.",
+  projectCheck: "Check",
+  projectPreviewStale: "Name or draft changed since the check.",
+  projectDirectory: "Project folder:",
+  projectConfirmServices: "These services are created",
+  projectSources: "Data sources",
+  projectSourceProject: "project folder",
+  projectSourceExternal: "external",
+  projectSourceVolume: "volume",
+  projectSourceAnonymous: "anonymous",
+  projectSourceReadOnly: "read-only",
+  projectSourceShared: "shared",
+  projectConfirmExternal: "Confirm external sources",
+  projectConfirmExternalNote:
+    "These directories lie outside the project folder. The container gets access to them; removal and file access treat them separately.",
+  projectCreate: "Create project",
+  projectCreating:
+    "The arm creates and starts the project. Pulling images can take several minutes; closing does not stop it.",
+  projectCreated: "The project is created.",
+  projectRestartLooping: "{count, plural, one {# service is} other {# services are}} restarting repeatedly.",
+  projectMarkerMissing:
+    "The arm could not write the ownership marker. The project runs but does not count as hub-owned.",
+  projectResyncWarning:
+    "The arm''s allowlist is not reconciled yet. Until the next reconciliation it refuses actions on the new containers.",
+  projectDirectoryLeft:
+    "A container wrote files into the project folder. The folder therefore stays and keeps the name taken.",
+  projectBlockerName: "Enter a name first.",
+  projectBlockerCheck: "Run the check first.",
+  projectBlockerExternal:
+    "{count, plural, one {# external source is} other {# external sources are}} not confirmed yet.",
+  projectErrorDirectoryTaken: "A folder with this name is already taken.",
+  projectErrorNameInvalid: "This name cannot be used as a project and folder name.",
+  projectErrorLocked: "This folder is locked against self-management."
 } satisfies typeof deCompose;

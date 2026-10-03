@@ -190,7 +190,7 @@ export function toggled(set: ReadonlySet<string>, value: string): Set<string> {
  *
  * Jeder Status, den der Hub liefern kann, ist hier entschieden: die fünf aus
  * `HostCycleStatus` (`server/src/domain/hosts/host-cycle.ts`), dazu `skipped`
- * aus `server/src/features/compose/service.ts`, wenn kein Abgleich verdrahtet ist, und `null`, wenn
+ * aus `server/src/features/compose/resync.ts`, wenn kein Abgleich verdrahtet ist, und `null`, wenn
  * die Ergebniszeile keinen trug (#176).
  *
  * ⚠️ `unchanged` WARNT NICHT. Der Hub hat die Liste frisch aus dem Bestand des
