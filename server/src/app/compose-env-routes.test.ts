@@ -85,7 +85,7 @@ async function startHub(agent: Agent): Promise<{ port: number; close: () => Prom
     enrollment: {} as Enrollment,
     agentSecret: "test-secret",
     config: { wireguardEndpoint: "hub.test", wireguardPort: 51821 },
-    probeHost: () => Promise.resolve({ reachable: true, version: "0.32.0", contractVersion: 8, readOnly: false, entries: null })
+    probeHost: () => Promise.resolve({ reachable: true, version: "0.32.0", contractVersion: 9, readOnly: false, entries: null })
   }));
   const server = http.createServer(app);
   await listenOnFetchablePort(server);

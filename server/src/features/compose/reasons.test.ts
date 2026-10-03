@@ -106,14 +106,15 @@ test("ein Fehler des Hubs behält den Text des Transports", () => {
 
 // ── Die Fragen ──────────────────────────────────────────────────────────────
 
-test("genau zwölf Schlüssel sind eine Frage, jeder mit der Liste des Arms", () => {
+test("genau dreizehn Schlüssel sind eine Frage, jeder mit der Liste des Arms", () => {
   const asked = COMPOSE_RAW_FAILURE_REASONS.filter((key) => COMPOSE_REASONS[key].question !== undefined);
-  assert.equal(asked.length, 12);
+  assert.equal(asked.length, 13);
 
   const body = {
     new: ["a"],
     removed: ["b"],
     missingImages: ["c:1"],
+    externalSources: ["/mnt/user/media"],
     newViolations: ["s:privileged"],
     rolledBack: true,
     actualHash: "h2",
@@ -130,6 +131,7 @@ test("genau zwölf Schlüssel sind eine Frage, jeder mit der Liste des Arms", ()
     "image-ref-unreadable": "image-ref-unreadable",
     "service-confirmation-missing": "services",
     "image-not-local": "images",
+    "external-source-confirmation-missing": "external-sources",
     "file-changed-externally": "changed-elsewhere",
     "compose-up-failed": "start-failed",
     "container-not-resolvable": "container-missing",

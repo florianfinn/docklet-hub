@@ -67,6 +67,42 @@ export function directoryOccupied(projectDir: string): boolean {
   }
 }
 
+// Cleanup after a failed or previewed create (#128): removes the leftover
+// draft and every directory that is empty, deepest first. Files written by a
+// container stay; symlinks are never followed. Returns whether the project
+// directory itself is gone.
+export function removeEmptyProjectDir(projectDir: string, basePath: string): boolean {
+  if (!isInsideBase(projectDir, basePath)) {
+    throw new Error(`project directory lies outside ${basePath}`);
+  }
+  try {
+    removeCandidateFile(projectDir);
+  } catch {
+    // A draft that cannot be removed keeps the directory, which is reported.
+  }
+  return removeIfEmpty(projectDir);
+}
+
+function removeIfEmpty(directory: string): boolean {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(directory, { withFileTypes: true });
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT";
+  }
+  let empty = true;
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !removeIfEmpty(path.join(directory, entry.name))) empty = false;
+  }
+  if (!empty) return false;
+  try {
+    fs.rmdirSync(directory);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Create bind directories with the agent UID before Docker creates root-owned
 // sources. Non-root application processes must be able to write their data.
 export function ensureProjectDir(projectDir: string, basePath: string): void {

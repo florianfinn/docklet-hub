@@ -43,7 +43,7 @@ export const SHARE = "immich/library";
 
 // One version at the mark (0.32.0 since #279) and one far below it. They stand
 // for "recent enough" and "too old".
-export const CURRENT: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 8, readOnly: false, entries: null };
+export const CURRENT: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 9, readOnly: false, entries: null };
 export const ANCIENT: AgentHealth = { reachable: true, version: "0.6.0", contractVersion: null, readOnly: false, entries: null };
 export const GONE: AgentHealth = { reachable: false, error: "keine Verbindung" };
 

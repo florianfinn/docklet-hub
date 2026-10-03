@@ -41,6 +41,7 @@ test("services of the same directory end up in ONE stack", () => {
       )
     ],
     basePath: Base,
+    isHubOwned: () => false,
     directoryHasFile: () => true,
     directoriesWithFile: []
   });
@@ -69,6 +70,7 @@ test("the dashboard's own stack is forced to read-only", () => {
       container("edge-traefik-1", composeLabels("edge", "traefik", "/home/docker/dashboard-repo/edge", "docker-compose.yml"))
     ],
     basePath: Base,
+    isHubOwned: () => false,
     directoryHasFile: () => true,
     directoriesWithFile: []
   });
@@ -110,6 +112,7 @@ test("a container without a project directory is reported as a finding, not left
       container("test_nginx", composeLabels("test_nginx", "nginx", "/home/docker/test_nginx"), "exited")
     ],
     basePath: Base,
+    isHubOwned: () => false,
     directoryHasFile: () => false,
     directoriesWithFile: []
   });
@@ -132,6 +135,7 @@ test("a container without any compose reference is named", () => {
       container("fremd", {}, "running")
     ],
     basePath: Base,
+    isHubOwned: () => false,
     directoryHasFile: () => true,
     directoriesWithFile: []
   });
@@ -147,6 +151,7 @@ test("a stack outside the base path is not adoptable and says so", () => {
   const result = discoverStacks({
     containers: [container("fremd", composeLabels("fremd", "fremd", "/opt/stacks/fremd"))],
     basePath: Base,
+    isHubOwned: () => false,
     directoryHasFile: () => true,
     directoriesWithFile: []
   });
@@ -162,6 +167,7 @@ test("a definition without a container is the opposite direction of the same fin
   const result = discoverStacks({
     containers: [container("homepage", composeLabels("homepage", "homepage", "/home/docker/homepage"))],
     basePath: Base,
+    isHubOwned: () => false,
     directoryHasFile: () => true,
     directoriesWithFile: ["/home/docker/homepage", "/home/docker/paperlessngx"]
   });
@@ -179,6 +185,7 @@ test("the finding shape carries the English keys", () => {
   const result = discoverStacks({
     containers: [container("elegant_bartik", {})],
     basePath: Base,
+    isHubOwned: () => false,
     directoryHasFile: () => true,
     directoriesWithFile: ["/home/docker/paperlessngx"]
   });
@@ -193,4 +200,22 @@ test("the finding shape carries the English keys", () => {
       "projectDir"
     ]);
   }
+});
+
+test("a project carries the agent's ownership marker as hubOwned", () => {
+  const result = discoverStacks({
+    containers: [
+      container("notes", composeLabels("notes", "app", "/home/docker/notes")),
+      container("foreign", composeLabels("foreign", "app", "/home/docker/foreign"))
+    ],
+    basePath: Base,
+    isHubOwned: (projectDir) => projectDir === "/home/docker/notes",
+    directoryHasFile: () => true,
+    directoriesWithFile: []
+  });
+
+  assert.deepEqual(
+    result.stacks.map((stack) => [stack.projectName, stack.hubOwned]),
+    [["foreign", false], ["notes", true]]
+  );
 });

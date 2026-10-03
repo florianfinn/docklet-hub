@@ -6,6 +6,7 @@ import test from "node:test";
 import { AgentRegistry } from "./registry.js";
 import { DEFINITION_ACTIONS } from "./route-policy.js";
 import { createScopeContainerIds, externallyManagedServices } from "./raw-ownership.js";
+import { handlerSource } from "./handler-source-test-support.js";
 
 // The ownership lock of the raw editor, the stack actions (#56), the `.env`
 // write (#121) and the stack `up` of apply and start fallback (#122).
@@ -79,15 +80,37 @@ test("the raw route refuses preview and apply before either branch runs, but not
   assert.match(routes.slice(check, check + 600), /send\(response, 403, \{ error: rawReason\("externally-managed"\)/);
 });
 
+function rawOpsBody(name: string): string {
+  const start = rawOps.indexOf(`export async function ${name}(`);
+  assert.ok(start >= 0, name);
+  return rawOps.slice(start, rawOps.indexOf("\n}\n", start));
+}
+
 test("apply and preview check ownership again under the project lock", () => {
-  for (const name of ["executeRaw", "previewRaw"]) {
-    const start = rawOps.indexOf(`export async function ${name}(`);
-    assert.ok(start >= 0, name);
-    const body = rawOps.slice(start, rawOps.indexOf("\n}\n", start));
-    const lock = body.indexOf("stackLocks.runExclusive(");
-    const managed = body.indexOf("managedDenial(");
-    assert.ok(lock >= 0 && managed > lock, `${name} does not check ownership under the lock`);
-  }
+  const preview = rawOpsBody("previewRaw");
+  const previewLock = preview.indexOf("stackLocks.runExclusive(");
+  assert.ok(
+    previewLock >= 0 && preview.indexOf("managedDenial(") > previewLock,
+    "previewRaw does not check ownership under the lock"
+  );
+
+  // The apply locks in executeRaw and checks in executeRawLocked.
+  const apply = rawOpsBody("executeRaw");
+  const applyLock = apply.indexOf("stackLocks.runExclusive(");
+  assert.ok(applyLock >= 0 && apply.indexOf("executeRawLocked(") > applyLock, "executeRaw does not delegate under the lock");
+  assert.ok(rawOpsBody("executeRawLocked").includes("managedDenial("), "executeRawLocked does not check ownership");
+
+  // Every other caller of the locked body holds the lock itself.
+  const create = fs.readFileSync(new URL("./runtime/project-create.ts", import.meta.url), "utf8");
+  const createLock = create.indexOf("stackLocks.runExclusive(");
+  assert.ok(
+    createLock >= 0 && create.indexOf("executeRawLocked(") > createLock,
+    "createProject calls the apply outside the lock"
+  );
+  // Definition, executeRaw and createProject, across every handler source.
+  assert.equal(handlerSource().match(/executeRawLocked\(/g)?.length, 3);
+  assert.equal(rawOps.match(/executeRawLocked\(/g)?.length, 2);
+  assert.equal(create.match(/executeRawLocked\(/g)?.length, 1);
 });
 
 const composeRoutes = fs.readFileSync(new URL("./routes/compose-routes.ts", import.meta.url), "utf8");

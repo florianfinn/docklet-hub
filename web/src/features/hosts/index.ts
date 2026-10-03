@@ -8,6 +8,6 @@
 // takes the load view over.
 
 export { HostsView } from "./HostsView";
-export type { HostRole, RenderHostLoad } from "./HostCard";
+export type { HostRole, RenderHostActions, RenderHostLoad } from "./HostCard";
 export { deHosts } from "./messages/de";
 export { enHosts } from "./messages/en";

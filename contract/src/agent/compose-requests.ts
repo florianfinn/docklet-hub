@@ -1,4 +1,5 @@
 import * as z from "zod/mini";
+import { since } from "./version.js";
 
 // The requests of the compose surface (#272): the raw editor, stacks, the
 // container definition and recreating. The rules of `requests.ts` apply: a
@@ -60,9 +61,18 @@ export type ComposeConfirmations = Pick<
 export const stackRawRequestSchema = z.object({
   name: z.pipe(z._default(z.string(), ""), z.transform((value) => value.trim())),
   content: z._default(z.string(), ""),
-  ...composeConfirmations
+  ...composeConfirmations,
+  // Every external bind source of the new project, named back (#128).
+  confirmExternalSources: since(stringList(), 9)
 });
 export type StackRawRequest = z.input<typeof stackRawRequestSchema>;
+
+/** `POST /stacks/raw-preview`: the dry run of a new stack, without confirmations. */
+export const stackRawPreviewRequestSchema = z.object({
+  name: z.pipe(z._default(z.string(), ""), z.transform((value) => value.trim())),
+  content: z._default(z.string(), "")
+});
+export type StackRawPreviewRequest = z.input<typeof stackRawPreviewRequestSchema>;
 
 /** `POST /stacks/adopt`: read the compose context of a running container. */
 export const stackAdoptRequestSchema = z.object({

@@ -219,6 +219,12 @@ export type HostRole = "admin" | "user";
  */
 export type RenderHostLoad = (hostId: string, load: HostLoad) => ReactNode;
 
+/**
+ * Admin actions another feature offers on an arm (#3: a new project). Shown
+ * for every kind of arm, the local one included; `app/` puts them in.
+ */
+export type RenderHostActions = (host: DockerHost) => ReactNode;
+
 type HostCardProps = {
   host: DockerHost;
   role: HostRole;
@@ -227,14 +233,16 @@ type HostCardProps = {
   // Nach dem Ausgang eines Agent-Updates die Liste neu messen.
   onAgentUpdated: () => void;
   renderLoad?: RenderHostLoad;
+  renderActions?: RenderHostActions;
 };
 
-export function HostCard({ host, role, counters, onRemoved, onAgentUpdated, renderLoad }: HostCardProps) {
+export function HostCard({ host, role, counters, onRemoved, onAgentUpdated, renderLoad, renderActions }: HostCardProps) {
   const t = useTranslations();
   const kindKey = knownKey(HOST_KIND_KEYS, host.kind);
   // Ton und Farbeinsatz kommen aus der Ablage (D7a) und nicht mehr aus der
   // Kennung. Ein Arm ohne vergebene Farbe steht auf „neutral".
   const display = hostDisplay(host);
+  const actions = role === "admin" ? (renderActions?.(host) ?? null) : null;
 
   return (
     <Card
@@ -301,13 +309,18 @@ export function HostCard({ host, role, counters, onRemoved, onAgentUpdated, rend
       {/* Die Aktionen tragen alle `requireAdmin`-Routen aus Phase 4a. Die Rolle
           verbirgt sie hier nur — der Server weist sie ohnehin ab, und das ist
           die Stelle, die zählt (§4, „Rolle nur zum Verbergen"). */}
-      {role === "admin" && host.kind !== "local" ? (
+      {role === "admin" && (host.kind !== "local" || actions !== null) ? (
         <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-2.5">
-          <AgentUpdate host={host} onFinished={onAgentUpdated} />
-          <ReloadArchiveDialog host={host} />
-          <span className="ml-auto">
-            <RemoveHostDialog host={host} onRemoved={onRemoved} />
-          </span>
+          {actions}
+          {host.kind !== "local" ? (
+            <>
+              <AgentUpdate host={host} onFinished={onAgentUpdated} />
+              <ReloadArchiveDialog host={host} />
+              <span className="ml-auto">
+                <RemoveHostDialog host={host} onRemoved={onRemoved} />
+              </span>
+            </>
+          ) : null}
         </div>
       ) : null}
     </Card>

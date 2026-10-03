@@ -2,6 +2,7 @@ import {
   containerCreateRequestSchema,
   stackActionRequestSchema,
   stackAdoptRequestSchema,
+  stackRawPreviewRequestSchema,
   stackRawRequestSchema
 } from "contract";
 import {
@@ -9,12 +10,12 @@ import {
 } from "../engine.js";
 import { parseImageRef } from "../image-ref.js";
 import {
-  COMPOSE_FILE_NAME,
   composeContextOf,
   locationFor,
   servicesFromComposeConfig
 } from "../compose.js";
 import { discoverStacks, forcedManagement } from "../stacks.js";
+import { isHubOwnedProject } from "../project-marker.js";
 import {
   composeConfig,
   composeDependencySafeRestart,
@@ -28,7 +29,6 @@ import {
 import { applyCompose } from "../compose-apply.js";
 import {
   directoryOccupied,
-  ensureProjectDir,
   hasComposeFile,
   readComposeFile,
   directoriesWithComposeFile
@@ -47,7 +47,8 @@ import {
 } from "../stack-control.js";
 import { config, engine, registry, audit, stackLocks } from "../runtime/state.js";
 import { composeBasePath } from "../runtime/containers.js";
-import { applyOps, rawReason, executeRaw } from "../runtime/raw-ops.js";
+import { applyOps, rawReason } from "../runtime/raw-ops.js";
+import { createProject, previewProject } from "../runtime/project-create.js";
 import { send, readJsonBody, parseRequest, rejectRequest, RouteContext } from "../runtime/http.js";
 import {
   StackEndpointError,
@@ -71,6 +72,7 @@ export async function handleStackList(ctx: RouteContext): Promise<void> {
   const result = discoverStacks({
     containers: await engine.listWithComposeLabels(),
     basePath: composeBasePath,
+    isHubOwned: (projectDir) => isHubOwnedProject(projectDir, composeBasePath),
     directoryHasFile: hasComposeFile,
     directoriesWithFile: directoriesWithComposeFile(composeBasePath)
   });
@@ -228,7 +230,7 @@ export async function handleStackAdopt(ctx: RouteContext): Promise<void> {
 // The location follows from the NAME (locationFor), never from anything the
 // caller states — the same traversal guard as when creating from a spec.
 export async function handleStackRaw(ctx: RouteContext): Promise<void> {
-  const { request, response, actor, tier, parsedTier } = ctx;
+  const { request, response, actor, parsedTier } = ctx;
   if (config.readOnly) {
     send(response, 503, { error: rawReason("agent-read-only") });
     return;
@@ -239,62 +241,43 @@ export async function handleStackRaw(ctx: RouteContext): Promise<void> {
     rejectRequest(ctx, { action: "compose-raw", containerId: null, containerName: null }, parsedBody.rejection);
     return;
   }
-  const { name, content, ...confirmations } = parsedBody.value;
-  const own = locationFor(name, composeBasePath);
-  if (!own) {
-    send(response, 400, { error: rawReason("name-not-usable-as-directory") });
-    return;
-  }
-  // A new stack never lies under a self-managed path — it is checked anyway,
-  // because the name comes from the request.
-  if (forcedManagement(own.projectDir) === "read-only") {
-    send(response, 403, { error: rawReason("self-management-locked"), projectDir: own.projectDir });
-    return;
-  }
-  // Occupancy check (6.2): an existing directory is never claimed. That is
-  // the alternative to random ids in the path.
-  if (directoryOccupied(own.projectDir)) {
-    audit.write({
-      action: "compose-raw",
-      containerId: null,
-      containerName: name,
-      actor,
-      networkTier: tier,
-      outcome: "denied",
-      reason: "directory-taken"
-    });
-    send(response, 409, { error: rawReason("directory-taken"), projectDir: own.projectDir });
-    return;
-  }
-
-  // The directory must exist before the draft can be stored in it for
-  // checking. It is created as uid 1000 (= codex on the host), so that the
-  // bind sources do not belong to root later (6.3.2).
-  ensureProjectDir(own.projectDir, composeBasePath);
-
-  // The central point (checkTier) has already confirmed this route as
-  // intern-only — without a usable tier nothing arrives here. The branch is
-  // there anyway: a type guarantee that consists of an assumption is none.
+  // The route table binds this route intern-only; the branch keeps the type.
   if (!parsedTier) {
     send(response, 400, { error: rawReason("tier-missing") });
     return;
   }
-  const result = await executeRaw({
-    location: {
-      projectDir: own.projectDir,
-      composeFileName: COMPOSE_FILE_NAME,
-      projectName: name
-    },
+  const { name, content, confirmExternalSources, ...confirmations } = parsedBody.value;
+  const result = await createProject({
+    name,
     content,
-    // null means: there must not be a file here yet.
-    expectedHash: null,
-    currentServices: [],
     confirmations,
+    confirmExternalSources,
     actor,
-    tier: parsedTier,
-    containerId: null,
-    stackName: name
+    tier: parsedTier
   });
+  send(response, result.status, result.body);
+  return;
+}
+
+// The dry run of a new project (#128). Intern-only like the create itself,
+// because the answer names host paths.
+export async function handleStackRawPreview(ctx: RouteContext): Promise<void> {
+  const { request, response, actor, parsedTier } = ctx;
+  // The dry run creates and removes a directory under the base path.
+  if (config.readOnly) {
+    send(response, 503, { error: rawReason("agent-read-only") });
+    return;
+  }
+  const parsedBody = parseRequest(stackRawPreviewRequestSchema, await readJsonBody(request));
+  if (!parsedBody.ok) {
+    rejectRequest(ctx, { action: "compose-raw-preview", containerId: null, containerName: null }, parsedBody.rejection);
+    return;
+  }
+  if (!parsedTier) {
+    send(response, 400, { error: rawReason("tier-missing") });
+    return;
+  }
+  const result = await previewProject({ ...parsedBody.value, actor, tier: parsedTier });
   send(response, result.status, result.body);
   return;
 }

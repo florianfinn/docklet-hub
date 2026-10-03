@@ -207,5 +207,52 @@ export const deCompose = {
   composeSelectionClose: "Schließen",
   composeSelectionSkipped: "Für diese Container fand der Arm keine eigene Datei:",
   composeSelectionInvalid:
-    "Der Arm hat diese Datei nicht angenommen. Sie steht nicht mehr in seiner Liste; die Liste wird neu geladen."
+    "Der Arm hat diese Datei nicht angenommen. Sie steht nicht mehr in seiner Liste; die Liste wird neu geladen.",
+
+  // ── Neues Hub-eigenes Projekt (#3) ────────────────────────────────────────
+  //
+  composeQuestionExternalSources:
+    "Das Projekt bindet Verzeichnisse außerhalb seines Projektordners ein. Der Arm verlangt, dass jede Quelle bestätigt wird: {list}",
+  projectNewAction: "Neues Projekt",
+  projectNewTitle: "Neues Projekt auf {host}",
+  projectNewDescription:
+    "Das Projekt bekommt einen eigenen Ordner unter dem Basispfad des Arms und eine eigene Compose-Datei. Mehrere Dienste teilen diesen Ordner.",
+  projectNameLabel: "Name",
+  projectNameHint:
+    "Name des Projekts und seines Ordners: 2 bis 63 Zeichen aus Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich, am Anfang ein Buchstabe oder eine Ziffer.",
+  projectCheck: "Prüfen",
+  projectPreviewStale: "Name oder Entwurf haben sich seit der Prüfung geändert.",
+  projectDirectory: "Projektordner:",
+  projectConfirmServices: "Diese Dienste entstehen neu",
+  projectSources: "Datenquellen",
+  projectSourceProject: "Projektordner",
+  projectSourceExternal: "extern",
+  projectSourceVolume: "Volume",
+  projectSourceAnonymous: "anonym",
+  projectSourceReadOnly: "nur lesen",
+  projectSourceShared: "geteilt",
+  projectConfirmExternal: "Externe Quellen bestätigen",
+  projectConfirmExternalNote:
+    "Diese Verzeichnisse liegen außerhalb des Projektordners. Der Container erhält Zugriff darauf; Entfernen und Dateizugriff behandeln sie gesondert.",
+  projectCreate: "Projekt anlegen",
+  projectCreating:
+    "Der Arm legt das Projekt an und startet es. Das kann mit dem Ziehen der Images einige Minuten dauern; Schließen hält den Vorgang nicht an.",
+  projectCreated: "Das Projekt ist angelegt.",
+  projectRestartLooping: "{count, plural, one {# Dienst startet} other {# Dienste starten}} wiederholt neu.",
+  projectMarkerMissing:
+    "Der Arm konnte die Eigentumsmarke nicht schreiben. Das Projekt läuft, gilt aber nicht als Hub-eigen.",
+  projectResyncWarning:
+    "Die Allowlist des Arms ist noch nicht abgeglichen. Bis zum nächsten Abgleich lehnt er Aktionen an den neuen Containern ab.",
+  projectDirectoryLeft:
+    "Im Projektordner liegen Dateien, die ein Container geschrieben hat. Der Ordner bleibt deshalb stehen und belegt den Namen.",
+  projectAnswerAndRetry: "Bestätigen und erneut anlegen",
+  projectBlockerStale:
+    "Die Bestätigungen passen nicht mehr zur Prüfung. Erneut prüfen setzt sie zurück.",
+  projectBlockerName: "Zuerst einen Namen eintragen.",
+  projectBlockerCheck: "Zuerst prüfen lassen.",
+  projectBlockerExternal:
+    "{count, plural, one {# externe Quelle ist} other {# externe Quellen sind}} noch nicht bestätigt.",
+  projectErrorDirectoryTaken: "Ein Ordner mit diesem Namen ist schon belegt.",
+  projectErrorNameInvalid: "Dieser Name taugt nicht als Projekt- und Ordnername.",
+  projectErrorLocked: "Dieser Ordner ist gegen Selbstverwaltung gesperrt."
 };

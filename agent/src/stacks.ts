@@ -52,6 +52,8 @@ export type DiscoveredStack = {
   // Whether the compose file actually lies at its location. false means: the
   // containers are running, their definition is gone.
   filePresent: boolean;
+  // The agent's project marker lies in the directory (#128).
+  hubOwned: boolean;
   services: StackService[];
 };
 
@@ -84,6 +86,7 @@ export type DiscoveryInput = {
     labels: Record<string, string>;
   }>;
   basePath: string;
+  isHubOwned: (projectDir: string) => boolean;
   // Returns true if the project directory including the compose file exists.
   directoryHasFile: (projectDir: string, composeFileName: string) => boolean;
   // All directories directly below the base path that contain a compose file
@@ -117,6 +120,7 @@ export function discoverStacks(input: DiscoveryInput): DiscoveryResult {
         composeFileName: context.composeFileName,
         management: forcedManagement(context.projectDir),
         filePresent: fileExists,
+        hubOwned: input.isHubOwned(context.projectDir),
         services: []
       };
       stacks.set(context.projectDir, stack);

@@ -35,7 +35,7 @@ function host(id: string, overrides: Partial<HostRecord> = {}): HostRecord {
   };
 }
 
-const ONLINE: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 8, readOnly: false, entries: null };
+const ONLINE: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 9, readOnly: false, entries: null };
 
 function container(id: string, image = "ghcr.io/example/app:1"): HostInventoryContainer {
   return { id, name: `c-${id}`, image, externalManagement: null };

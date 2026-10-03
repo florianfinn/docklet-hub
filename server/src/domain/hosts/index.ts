@@ -43,10 +43,14 @@ export { ARM_AGENT_IMAGE } from "./arm-agent-image.js";
 export { probeAgent, resolveProbeHost, type AgentHealth } from "./health.js";
 export {
   openContainerAccess,
+  openHostAccess,
   type ContainerAccess,
   type ContainerAccessDeps,
   type ContainerAccessRequest,
   type ContainerAccessResult,
+  type HostRouteAccess,
+  type HostRouteAccessResult,
+  type HostRouteRequest,
   type RouteWriting
 } from "./container-access.js";
 export type { HostInfo } from "./host-info.js";

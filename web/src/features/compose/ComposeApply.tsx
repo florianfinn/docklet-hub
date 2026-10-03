@@ -13,6 +13,8 @@ import { Button } from "../../platform/ui/shadcn/button";
 import { Card } from "../../platform/ui/shadcn/card";
 import { composeErrorKey } from "./compose-errors";
 import { composeStepKey } from "./compose-steps";
+import { ConfirmList } from "./ConfirmList";
+import { questionText } from "./compose-question-text";
 import {
   NO_CONFIRMATIONS,
   answered,
@@ -278,41 +280,6 @@ export function ComposeApply(props: ComposeApplyProps) {
 
 // ---------------------------------------------------------------------------
 
-function ConfirmList({
-  title,
-  note,
-  entries,
-  checked,
-  onToggle,
-  testId
-}: {
-  title: string;
-  note?: string;
-  entries: readonly string[];
-  checked: ReadonlySet<string>;
-  onToggle: (value: string) => void;
-  testId: string;
-}) {
-  if (entries.length === 0) return null;
-  return (
-    <div className="flex flex-col gap-1">
-      <p className="text-[13px] font-medium">{title}</p>
-      {note ? <p className="text-[12px] text-muted-foreground">{note}</p> : null}
-      {entries.map((entry) => (
-        <label key={entry} className="flex items-center gap-2 text-[13px]">
-          <input
-            type="checkbox"
-            data-testid={`${testId}-${entry}`}
-            checked={checked.has(entry)}
-            onChange={() => onToggle(entry)}
-          />
-          <span className="font-mono text-[12.5px]">{entry}</span>
-        </label>
-      ))}
-    </div>
-  );
-}
-
 function PreviewCard({
   preview,
   changed,
@@ -509,30 +476,4 @@ function QuestionCard({
       </div>
     </Card>
   );
-}
-
-function questionText(t: ReturnType<typeof useTranslations>, question: ComposeQuestion): string {
-  switch (question.kind) {
-    case "services":
-      return t("composeQuestionServices", {
-        added: question.added.join(", ") || "—",
-        removed: question.removed.join(", ") || "—"
-      });
-    case "images":
-      return t("composeQuestionImages", { list: question.missing.join(", ") });
-    case "hardening":
-      return t("composeQuestionHardening", { list: question.newViolations.join(", ") });
-    case "changed-elsewhere":
-      return t("composeQuestionChangedElsewhere");
-    case "start-failed":
-      return t("composeQuestionStartFailed", { detail: question.detail });
-    case "container-missing":
-      return t("composeQuestionContainerMissing", { detail: question.detail });
-    case "anchor-stale":
-      return t("composeQuestionAnchorStale");
-    case "image-ref-unreadable":
-      return t("composeQuestionImageRefUnreadable", { ref: question.ref });
-    default:
-      return t("composeQuestionInvalidDraft", { detail: question.detail });
-  }
 }

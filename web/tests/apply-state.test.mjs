@@ -157,8 +157,8 @@ test("jeder Abgleichsstatus des Hubs ist entschieden", () => {
   assert.ok(declaration, "HostCycleStatus nicht gefunden");
   const cycle = [...declaration[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
   assert.ok(cycle.length > 0);
-  const service = readFileSync(new URL("../../server/src/features/compose/service.ts", import.meta.url), "utf8");
-  assert.ok(service.includes('status: "skipped"'), "skipped kommt nicht mehr aus features/compose/service.ts");
+  const service = readFileSync(new URL("../../server/src/features/compose/resync.ts", import.meta.url), "utf8");
+  assert.ok(service.includes('status: "skipped"'), "skipped kommt nicht mehr aus features/compose/resync.ts");
 
   assert.deepEqual(Object.keys(RESYNC_SETTLED).sort(), [...cycle, "skipped"].sort());
 });

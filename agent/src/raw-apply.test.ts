@@ -234,6 +234,30 @@ test("the finding names the missing images and the existing hardening state", as
   assert.equal(planFromInspection(inspection).ok, true);
 });
 
+test("the finding and the plan name the mount sources of the draft", async () => {
+  const place = tempBase();
+  const { ops } = fakeOps({
+    configResult: {
+      services: {
+        web: {
+          image: "nginx:1.27",
+          volumes: [
+            { type: "bind", source: `${place.project}/html`, target: "/usr/share/nginx/html" },
+            { type: "bind", source: "/mnt/user/media", target: "/media", read_only: true }
+          ]
+        }
+      }
+    }
+  });
+  const inspection = await inspectFor(place, ops, []);
+  assert.deepEqual(
+    inspection.mountSources.map((entry) => [entry.kind, entry.target]),
+    [["project", "/usr/share/nginx/html"], ["external", "/media"]]
+  );
+  const plan = planFromInspection(inspection);
+  assert.equal(plan.ok && plan.mountSources.length, 2);
+});
+
 test("preview and apply reach the same verdict on the same draft", async () => {
   // The point of the whole split: `planRawApply` is nothing other than
   // `planFromInspection` on the same finding. If one deviates from the other,

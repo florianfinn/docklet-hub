@@ -32,7 +32,7 @@
 import { MAX_ENTRIES, MAX_TEXT_BYTES } from "contract";
 import fs from "node:fs";
 import path from "node:path";
-import { isInsideBase } from "./compose.js";
+import { isInsideBase, PROJECT_MARKER_FILE_NAME } from "./compose.js";
 import { hashOf } from "./compose-store.js";
 import { normalizePath } from "./hardening.js";
 import { ENV_FILE_NAME } from "./env-file.js";
@@ -57,6 +57,7 @@ export function isBlockedName(name: string): boolean {
   return (
     name === ENV_FILE_NAME ||
     name.startsWith(`${ENV_FILE_NAME}.`) ||
+    name === PROJECT_MARKER_FILE_NAME ||
     BLOCKED_FILES.has(name.toLowerCase())
   );
 }

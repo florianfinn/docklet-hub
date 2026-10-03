@@ -4,6 +4,7 @@ import type { Pool } from "pg";
 import {
   createHostAccess,
   openContainerAccess,
+  openHostAccess,
   resolveProbeHost,
   type AgentHealth,
   type HostCycleOutcome,
@@ -19,6 +20,7 @@ import { relayAgentStream } from "../../platform/streams/agent-stream-relay.js";
 import { HUB_STREAM_BROKEN } from "contract";
 import { describeComposeRejection } from "./reasons.js";
 import { createComposeService, type ContainerRef } from "./service.js";
+import { createProjectService } from "./project-service.js";
 
 // The HTTP side of the feature `compose` (#264): the four routes, and nothing
 // else. They read parameters, set the status and write the answer; the chain to
@@ -83,12 +85,32 @@ function writeRejection(error: AgentError, response: Response, selectionSupporte
   response.status(rejection.status).json(rejection.body);
 }
 
+/**
+ * A refused create also says whether the agent removed the project directory
+ * again; `false` means a container left data in it.
+ */
+function writeProjectRejection(error: AgentError, response: Response): void {
+  const rejection = describeComposeRejection(error);
+  const detail = error.detail;
+  const removed =
+    typeof detail === "object" && detail !== null && !Array.isArray(detail)
+      ? (detail as Record<string, unknown>).projectDirRemoved
+      : undefined;
+  response
+    .status(rejection.status)
+    .json(typeof removed === "boolean" ? { ...rejection.body, projectDirRemoved: removed } : rejection.body);
+}
+
 export function registerComposeRoutes(router: Router, options: ComposeRouteOptions): void {
   const { auth, pool, repository, agentSecret, probeHost, resyncHost } = options;
   const hosts = createHostAccess({ repository, pool, agentSecret });
   const probe = resolveProbeHost({ probeHost });
   const service = createComposeService({
     openContainer: (request, writing) => openContainerAccess({ hosts, probe }, request, writing),
+    ...(resyncHost === undefined ? {} : { resyncHost })
+  });
+  const projects = createProjectService({
+    openHost: (request, writing) => openHostAccess({ hosts, probe }, request, writing),
     ...(resyncHost === undefined ? {} : { resyncHost })
   });
 
@@ -212,6 +234,38 @@ export function registerComposeRoutes(router: Router, options: ComposeRouteOptio
         },
         (stream) => plan.run(stream)
       );
+    })
+  );
+
+  // A new hub-owned project (#3): dry run and create on a host. The create
+  // answers synchronously under `outcome`; a question of the agent is a 200
+  // with the list to confirm, like the line of the apply stream.
+  router.post(
+    "/hosts/:hostId/projects/preview",
+    requireAdmin(auth),
+    withSession(auth, async (request, response, user) => {
+      response.setHeader("Cache-Control", "no-store");
+      const result = await projects.preview({ hostId: String(request.params.hostId), userId: user.id }, request.body);
+      if (!result.ok) {
+        respondWithFailure(response, result.failure, writeRejection);
+        return;
+      }
+      response.json({ preview: result.preview });
+    })
+  );
+
+  router.post(
+    "/hosts/:hostId/projects",
+    requireAdmin(auth),
+    withSession(auth, async (request, response, user) => {
+      // The answer names the project directory of the host.
+      response.setHeader("Cache-Control", "no-store");
+      const result = await projects.create({ hostId: String(request.params.hostId), userId: user.id }, request.body);
+      if (!result.ok) {
+        respondWithFailure(response, result.failure, writeProjectRejection);
+        return;
+      }
+      response.json({ outcome: result.outcome });
     })
   );
 }

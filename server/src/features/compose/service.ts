@@ -15,6 +15,7 @@ import { isExternallyManagedStack } from "./externally-managed-stack.js";
 import { isHubOwnStack } from "./hub-own-stack.js";
 import { dryRunFromLocalPreview } from "./local-preview.js";
 import { isRouteUnknown } from "./reasons.js";
+import { resyncAfterWrite, type ResyncReport } from "./resync.js";
 import * as selectionClient from "./selection-client.js";
 import type { ComposeCandidates } from "./selection-client.js";
 import type {
@@ -216,14 +217,8 @@ export function createComposeService(deps: ComposeServiceDeps): ComposeService {
    * denn ein Arm mit veralteter Allowlist lehnt danach jede weitere Aktion an
    * diesem Stack ab, und die Ursache wäre sonst nicht zu erraten.
    */
-  async function resync(host: HostRecord, actor: Actor): Promise<{ status: string; error: string | null }> {
-    if (!deps.resyncHost) return { status: "skipped", error: null };
-    try {
-      const outcome = await deps.resyncHost(host, actor);
-      return { status: outcome.status, error: outcome.error };
-    } catch (error) {
-      return { status: "failed", error: error instanceof Error ? error.message : String(error) };
-    }
+  function resync(host: HostRecord, actor: Actor): Promise<ResyncReport> {
+    return resyncAfterWrite(deps.resyncHost, host, actor);
   }
 
   /**
