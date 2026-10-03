@@ -1,0 +1,26 @@
+name: Agent review attestation
+# Sets the required agent-review status from the evidence comment that
+# scripts/record-agent-review.mjs posts. Runs the default branch's code only;
+# the PR's code is never checked out.
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+jobs:
+  attest:
+    if: github.event.issue.pull_request && github.event.comment.author_association == 'OWNER' && startsWith(github.event.comment.body, 'Independent review')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - run: node scripts/attest-review-comment.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_URL: ${{ github.event.comment.html_url }}

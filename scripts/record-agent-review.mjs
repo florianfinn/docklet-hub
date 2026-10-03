@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { resolveRepository } from "./github-repository.mjs";
 import { validateReview } from "./review-evidence.mjs";
 
-// A maintainer attests an actual independent review. This script never
-// creates a review verdict or claims to identify an agent cryptographically.
+// A maintainer attests an actual independent review by posting its evidence.
+// This script never creates a review verdict or claims to identify an agent cryptographically.
 const [number, path]=process.argv.slice(2);
 if (!/^\d+$/.test(number??"") || !path) throw new Error("Usage: node scripts/record-agent-review.mjs <PR> <private-report.json>");
 const report=JSON.parse(readFileSync(path,"utf8"));
@@ -19,10 +19,7 @@ try {
   const input=join(dir,"input.json");
   writeFileSync(input,JSON.stringify({body}),"utf8");
   const comment=JSON.parse(gh(["api","repos/"+repo+"/issues/"+number+"/comments","--input",input]));
-  // Check again after writing the evidence, before opening the merge gate.
-  const current=JSON.parse(gh(["api","repos/"+repo+"/pulls/"+number]));
-  validateReview(report,current);
-  writeFileSync(input,JSON.stringify({state:"success",context:"agent-review",description:"PR "+number+" base="+report.baseSha,target_url:comment.html_url}),"utf8");
-  gh(["api","repos/"+repo+"/statuses/"+report.headSha,"--input",input]);
+  // .github/workflows/agent-review.yml checks this comment against the then
+  // current PR state and sets agent-review at the head.
   console.log(comment.html_url);
 } finally {rmSync(dir,{recursive:true,force:true});}
