@@ -15,7 +15,7 @@ import {
 import { formatClock } from "../../platform/i18n/time-format";
 import { queryKeys } from "../../platform/query/query-keys";
 import { Button } from "../../platform/ui/shadcn/button";
-import { HostCard, type HostRole, type RenderHostLoad } from "./HostCard";
+import { HostCard, type HostRole, type RenderHostActions, type RenderHostLoad } from "./HostCard";
 import { HostCreateDialog } from "./HostCreateDialog";
 import { useHostCounters } from "./use-host-counters";
 
@@ -44,7 +44,15 @@ function summariesOf(hosts: DockerHost[], counters: Record<string, HostCounters>
   });
 }
 
-export function HostsView({ role, renderLoad }: { role: HostRole; renderLoad?: RenderHostLoad }) {
+export function HostsView({
+  role,
+  renderLoad,
+  renderActions
+}: {
+  role: HostRole;
+  renderLoad?: RenderHostLoad;
+  renderActions?: RenderHostActions;
+}) {
   const t = useTranslations();
   const language = useLocale();
   const queryClient = useQueryClient();
@@ -170,6 +178,7 @@ export function HostsView({ role, renderLoad }: { role: HostRole; renderLoad?: R
             onRemoved={removeHost}
             onAgentUpdated={refresh}
             renderLoad={renderLoad}
+            renderActions={renderActions}
           />
         ))}
       </div>

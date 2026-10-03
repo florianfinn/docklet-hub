@@ -238,8 +238,8 @@ export function registerComposeRoutes(router: Router, options: ComposeRouteOptio
   );
 
   // A new hub-owned project (#3): dry run and create on a host. The create
-  // answers synchronously; a question of the agent is a 200 with the list to
-  // confirm, like the line of the apply stream.
+  // answers synchronously under `outcome`; a question of the agent is a 200
+  // with the list to confirm, like the line of the apply stream.
   router.post(
     "/hosts/:hostId/projects/preview",
     requireAdmin(auth),
@@ -265,7 +265,7 @@ export function registerComposeRoutes(router: Router, options: ComposeRouteOptio
         respondWithFailure(response, result.failure, writeProjectRejection);
         return;
       }
-      response.json(result.outcome);
+      response.json({ outcome: result.outcome });
     })
   );
 }

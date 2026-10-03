@@ -219,9 +219,11 @@ test("a create reconciles the registry and answers with the project", async () =
     assert.equal(answer.status, 200);
     assert.equal(answer.cache, "no-store");
     assert.deepEqual(answer.json, {
-      kind: "created",
-      project: { ok: true, hubOwned: true },
-      resync: { status: "synced", error: null }
+      outcome: {
+        kind: "created",
+        project: { ok: true, hubOwned: true },
+        resync: { status: "synced", error: null }
+      }
     });
     assert.deepEqual(hub.resyncs, [HOST.id]);
   });
@@ -236,9 +238,11 @@ test("a follow-up question of the agent is a 200 with the list, without reconcil
     const answer = await post(hub, CREATE, "admin", { name: "notes", content: DRAFT });
     assert.equal(answer.status, 200);
     assert.deepEqual(answer.json, {
-      kind: "question",
-      question: { kind: "external-sources", sources: ["/mnt/user/media"] },
-      projectDirRemoved: true
+      outcome: {
+        kind: "question",
+        question: { kind: "external-sources", sources: ["/mnt/user/media"] },
+        projectDirRemoved: true
+      }
     });
     assert.deepEqual(hub.resyncs, []);
   });
