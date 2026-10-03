@@ -11,6 +11,7 @@ import type { RouteFailure } from "../../platform/http/route-failure.js";
 import { HUB_STREAM_BROKEN } from "contract";
 import * as agentClient from "./agent-client.js";
 import { MAX_COMPOSE_BYTES } from "./agent-client.js";
+import { isExternallyManagedStack } from "./externally-managed-stack.js";
 import { isHubOwnStack } from "./hub-own-stack.js";
 import { dryRunFromLocalPreview } from "./local-preview.js";
 import { isRouteUnknown } from "./reasons.js";
@@ -96,6 +97,11 @@ export type ComposeFileWire = Pick<
   // die Schranke selbst steht an der Anwende-Route.
   hubOwnStack: boolean;
   /**
+   * Also the hub's word (#56): a service of this stack is externally managed.
+   * Preview and apply are refused with `403 externally-managed`.
+   */
+  externallyManaged: boolean;
+  /**
    * Also the hub's word (#185): the selection by hand is offered for this
    * container. `false` at the hub's own stack and at an `outdated` arm.
    */
@@ -167,6 +173,16 @@ export function createComposeService(deps: ComposeServiceDeps): ComposeService {
 
   function ownStack(access: ContainerAccess): boolean {
     return isHubOwnStack(access.container, access.containers, deps.ownShortId?.());
+  }
+
+  function externallyManaged(access: ContainerAccess): Failed | null {
+    return isExternallyManagedStack(access.container, access.containers)
+      ? problem(
+          403,
+          "externally-managed",
+          "Ein Dienst dieses Stacks wird fremdverwaltet. Seine Definition bleibt beim Verwalter."
+        )
+      : null;
   }
 
   /** Is the selection by hand offered for this container (#185)? */
@@ -408,6 +424,7 @@ export function createComposeService(deps: ComposeServiceDeps): ComposeService {
         ok: true,
         compose: {
           hubOwnStack: ownStack(access),
+          externallyManaged: isExternallyManagedStack(access.container, access.containers),
           selectionSupported: selectionSupported(access),
           projectDir: file.value.projectDir,
           composeFileName: file.value.composeFileName,
@@ -440,6 +457,8 @@ export function createComposeService(deps: ComposeServiceDeps): ComposeService {
       const opened = await deps.openContainer(ref, "reads");
       if (!opened.ok) return opened;
       const { access } = opened;
+      const managed = externallyManaged(access);
+      if (managed) return managed;
       const draft = textField((body as Record<string, unknown> | undefined)?.content);
       const preview = await asked(() => dryRun(access, draft));
       return preview.ok ? { ok: true, preview: preview.value } : preview;
@@ -466,6 +485,9 @@ export function createComposeService(deps: ComposeServiceDeps): ComposeService {
           "Das ist der Stack, in dem dieser Hub selbst läuft. Ihn von hier anzuwenden ersetzte den Hub mitten im Vorgang."
         );
       }
+      // Before the stream as well; the agent refuses the same on its own (#56).
+      const managed = externallyManaged(access);
+      if (managed) return managed;
       const fields = (body ?? {}) as Record<string, unknown>;
       const content = textField(fields.content);
       const expectedComposeHash = textField(fields.expectedComposeHash);

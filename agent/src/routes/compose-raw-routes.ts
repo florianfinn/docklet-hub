@@ -19,6 +19,7 @@ import {
   type RawLocation
 } from "../raw-apply.js";
 import { rawComposeLocation } from "../raw-compose-location.js";
+import { externallyManagedServices } from "../raw-ownership.js";
 import { sendLine } from "../ndjson-line.js";
 import { config, engine, registry, audit, openStreams } from "../runtime/state.js";
 import { composeBasePath, selectedComposeContext, resolveFullContainerId } from "../runtime/containers.js";
@@ -194,6 +195,26 @@ export async function handleComposeRaw(ctx: ContainerRouteContext): Promise<void
       error: rawReason("stack-service-not-allowlisted"),
       services: notAllowlisted
     });
+    return;
+  }
+
+  // The manager of an externally managed service owns the file's definition.
+  // Preview and apply are refused here with a real status and again under the
+  // project lock (runtime/raw-ops.ts); reading stays open.
+  const managed = writing || previewing
+    ? externallyManagedServices(containerId, running, (id) => registry.isExternallyManaged(id))
+    : null;
+  if (managed !== null) {
+    audit.write({
+      action: previewing ? "compose-raw-preview" : "compose-raw",
+      containerId,
+      containerName: anchorName,
+      actor,
+      networkTier: tier,
+      outcome: "denied",
+      reason: `externally-managed: ${managed.join(",")}`
+    });
+    send(response, 403, { error: rawReason("externally-managed"), services: managed });
     return;
   }
 

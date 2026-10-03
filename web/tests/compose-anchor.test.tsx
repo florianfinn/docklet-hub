@@ -108,7 +108,8 @@ const FILE = {
   fileReadable: true,
   containerIds: {},
   inventoryViolations: [],
-  hubOwnStack: false
+  hubOwnStack: false,
+  externallyManaged: false
 };
 
 /** Wie der Hub die Datei ausliefert — wahlweise als seinen eigenen Stack. */
@@ -236,6 +237,22 @@ test("der eigene Stack des Hubs wird gezeigt, aber nicht zum Bearbeiten angebote
     // Textprüfung und böte trotzdem einen Weg an, den die Route ablehnt.
     const edit = [...document.querySelectorAll("button")].find((button) => button.textContent === en.composeEdit);
     assert.ok(edit === undefined, "der Knopf zum Bearbeiten steht noch da");
+  } finally {
+    fileOverrides = {};
+    server.restore();
+    await unmount();
+  }
+});
+
+test("an externally managed stack is shown, but not offered for editing (#56)", async () => {
+  fileOverrides = { externallyManaged: true };
+  const { server, unmount } = await mount({});
+  try {
+    const text = document.body.textContent ?? "";
+    assert.ok(text.includes("/mnt/cache/docker/minecraft"), "the file is not shown");
+    assert.ok(text.includes(en.composeExternallyManaged), "the reason is missing");
+    const edit = [...document.querySelectorAll("button")].find((button) => button.textContent === en.composeEdit);
+    assert.equal(edit === undefined, true, "the edit button is still offered");
   } finally {
     fileOverrides = {};
     server.restore();

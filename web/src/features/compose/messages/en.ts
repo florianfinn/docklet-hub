@@ -34,6 +34,8 @@ export const enCompose = {
   composeErrorFileMissingSearched: "The arm looked in:",
   composeHubOwnStack:
     "This is the stack this hub itself runs in. It is only shown here: applying it from here would replace the hub in the middle of the operation. Change it on the host.",
+  composeExternallyManaged:
+    "A service of this stack is externally managed. The file is only shown here: its definition stays with its manager, which would reset a change made here on its next update. Start, stop, logs and shell remain available.",
   // The editor and the comparison (#35, stage E6a).
   composeEdit: "Edit",
   composeFileTabs: "Compose project files",

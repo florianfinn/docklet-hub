@@ -25,8 +25,10 @@ import * as z from "zod/mini";
  *   6 — every value hub and agent exchange is English: error keys, stream
  *       kinds, steps, enum values, audit names and the route
  *       `/containers/:id/configuration` (#278)
+ *   7 — the raw compose editor refuses externally managed stacks with
+ *       `403 externally-managed` (#56)
  */
-export const CONTRACT_VERSION = 6;
+export const CONTRACT_VERSION = 7;
 
 /** What a field added after the first numbered contract carries. */
 export type ContractSince = { since: number };

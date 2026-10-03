@@ -34,6 +34,7 @@ import {
   type RawLocation,
   type RawStepSink
 } from "../raw-apply.js";
+import { externallyManagedServices } from "../raw-ownership.js";
 import { engine, registry, audit, stackLocks } from "./state.js";
 import {
   composeBasePath,
@@ -455,6 +456,16 @@ export function rawLockKey(operation: {
   return projectName || `project-dir:${operation.location.projectDir}`;
 }
 
+// The ownership check under the project lock: a container may have changed
+// its manager since the route's front section ran.
+function managedDenial(
+  anchorContainerId: string | null,
+  containers: ReadonlyMap<string, string>
+): { status: 403; body: { error: ComposeRawFailureReason; services: string[] } } | null {
+  const services = externallyManagedServices(anchorContainerId, containers, (id) => registry.isExternallyManaged(id));
+  return services === null ? null : { status: 403, body: { error: rawReason("externally-managed"), services } };
+}
+
 export async function executeRaw(
   operation: RawExecution & {
     // Called as soon as the project lock is held — and only then (#86).
@@ -487,7 +498,21 @@ export async function executeRaw(
     // The route has already read this set for permission/dialog purposes.
     // Under the shared project lock it is surveyed fresh once more, so that a
     // stack apply immediately before does not trigger a stale diff.
-    const currentServices = [...(await rawOps.containerIds(operation.location)).keys()].sort();
+    const containers = await rawOps.containerIds(operation.location);
+    const managed = managedDenial(operation.containerId, containers);
+    if (managed) {
+      audit.write({
+        action: "compose-raw",
+        containerId: operation.containerId,
+        containerName: operation.stackName,
+        actor: operation.actor,
+        networkTier: operation.tier,
+        outcome: "denied",
+        reason: `externally-managed: ${managed.body.services.join(",")}`
+      });
+      return managed;
+    }
+    const currentServices = [...containers.keys()].sort();
     return executeRawWithoutLock({ ...operation, currentServices });
   });
 }
@@ -560,6 +585,19 @@ export async function previewRaw(
     // Fresh under the lock, for the same reason as with the apply: a stack apply
     // that ran immediately before would otherwise make the diff stale.
     const running = await rawOps.containerIds(location);
+    const managed = managedDenial(operation.containerId, running);
+    if (managed) {
+      audit.write({
+        action: "compose-raw-preview",
+        containerId: operation.containerId,
+        containerName: operation.stackName,
+        actor,
+        networkTier: tier,
+        outcome: "denied",
+        reason: `externally-managed: ${managed.body.services.join(",")}`
+      });
+      return managed;
+    }
     const currentServices = [...running.keys()].sort();
     const file = readComposeFile(location.projectDir, location.composeFileName);
 

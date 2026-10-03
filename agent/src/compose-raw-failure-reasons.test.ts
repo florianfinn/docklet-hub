@@ -171,7 +171,9 @@ test("the 24 from the changelog for v0.22.0 can be recounted", () => {
     // The historical number for v0.22.0 does not count these later reasons.
     "compose-anchor-labels-missing",
     "compose-anchor-outside-base-path",
-    "compose-anchor-file-ambiguous"
+    "compose-anchor-file-ambiguous",
+    // Added with the ownership lock (#56), after v0.22.0.
+    "externally-managed"
   ];
   const atTheAnchor = COMPOSE_RAW_FAILURE_REASONS.filter(
     (reason) => !notAtTheAnchor.includes(reason)

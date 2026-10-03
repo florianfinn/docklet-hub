@@ -135,6 +135,9 @@ export function composeErrorKey(error: unknown): keyof Messages {
     // Die Schranke des Hubs vor seinem eigenen Stack (#183).
     case "hub-own-stack":
       return "composeHubOwnStack";
+    // The hub's lock before an externally managed stack (#56).
+    case "externally-managed":
+      return "composeExternallyManaged";
     // The selection by hand (#185): a missing path in the body, and the arm
     // refusing a path, whose reason stands next to `agent-rejected`.
     case "compose-selection-missing":
