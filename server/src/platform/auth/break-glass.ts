@@ -1,4 +1,4 @@
-import { createLocalAccountIssuer, generateId } from "better-auth";
+import { generateId } from "better-auth";
 import { hashPassword } from "better-auth/crypto";
 import "dotenv/config";
 import type { Pool } from "pg";
@@ -77,9 +77,9 @@ async function setPassword(pool: Pool, user: UserRow, password: string): Promise
       // Anmeldeweg. Es bekommt hier eine, statt dass der Befehl behauptet,
       // etwas getan zu haben.
       await client.query(
-        `INSERT INTO "account" ("id", "issuer", "accountId", "providerId", "userId", "password")
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [generateId(), createLocalAccountIssuer(CREDENTIAL_PROVIDER), user.id, CREDENTIAL_PROVIDER, user.id, hash]
+        `INSERT INTO "account" ("id", "accountId", "providerId", "userId", "password")
+         VALUES ($1, $2, $3, $4, $5)`,
+        [generateId(), user.id, CREDENTIAL_PROVIDER, user.id, hash]
       );
     }
     await client.query(`DELETE FROM "session" WHERE "userId" = $1`, [user.id]);
@@ -117,9 +117,9 @@ async function createAdmin(pool: Pool, email: string, name: string): Promise<voi
       [userId, name, email]
     );
     await client.query(
-      `INSERT INTO "account" ("id", "issuer", "accountId", "providerId", "userId", "password")
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [generateId(), createLocalAccountIssuer(CREDENTIAL_PROVIDER), userId, CREDENTIAL_PROVIDER, userId, hash]
+      `INSERT INTO "account" ("id", "accountId", "providerId", "userId", "password")
+       VALUES ($1, $2, $3, $4, $5)`,
+      [generateId(), userId, CREDENTIAL_PROVIDER, userId, hash]
     );
     await client.query("COMMIT");
   } catch (error) {

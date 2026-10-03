@@ -129,6 +129,23 @@ test("die Migration trägt genau die Felder, die better-auth erwartet", () => {
   );
 });
 
+test("direkte INSERTs in Tabellen der Anmeldung nennen nur Spalten der Migrationsfolge", () => {
+  // break-glass.ts writes auth tables with raw SQL and runs on import, so it
+  // cannot be exercised here; this checks its column lists statically.
+  const source = readFileSync(fileURLToPath(new URL("../auth/break-glass.ts", import.meta.url)), "utf8");
+  const findings: string[] = [];
+  let inserts = 0;
+  for (const match of source.matchAll(/INSERT INTO "([A-Za-z]+)" \(([^)]*)\)/g)) {
+    inserts += 1;
+    const columns = columnsOf(match[1]);
+    for (const column of match[2].split(",").map((name) => name.trim().replace(/^"|"$/g, ""))) {
+      if (!columns.has(column)) findings.push(`${match[1]}.${column}`);
+    }
+  }
+  assert.ok(inserts >= 3, `break-glass.ts: nur ${inserts} INSERTs erkannt`);
+  assert.deepEqual(findings, [], "break-glass.ts schreibt Spalten, die die Migrationsfolge nicht anlegt");
+});
+
 test("der Riegel der Erstanmeldung steht in derselben Migration", () => {
   // Er gehört zur Anmeldung und nicht zu den Hosts: ohne ihn wäre die
   // Erstanmeldung eine Prüfung mit einem Fenster (setup-store.ts).
