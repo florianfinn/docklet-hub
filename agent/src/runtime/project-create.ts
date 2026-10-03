@@ -85,17 +85,26 @@ export async function createProject(operation: ProjectCreation): Promise<Outcome
     });
 
     if (result.status === 200) {
-      writeProjectMarker(location.projectDir, composeBasePath);
+      // The stack runs either way; a marker that cannot be written only
+      // withholds the ownership claim.
+      let hubOwned = true;
+      let markerError: string | null = null;
+      try {
+        writeProjectMarker(location.projectDir, composeBasePath);
+      } catch (error) {
+        hubOwned = false;
+        markerError = (error as NodeJS.ErrnoException).code ?? "unknown";
+      }
       audit.write({
         action: "project-marker",
         containerId: null,
         containerName: operation.name,
         actor: operation.actor,
         networkTier: operation.tier,
-        outcome: "allowed",
-        reason: location.projectDir
+        outcome: hubOwned ? "allowed" : "error",
+        reason: hubOwned ? location.projectDir : `${location.projectDir}: ${markerError}`
       });
-      return { status: 200, body: { ...result.body, hubOwned: true } };
+      return { status: 200, body: { ...result.body, hubOwned } };
     }
 
     // A failed rollback may leave containers behind; then nothing is removed.
@@ -127,25 +136,29 @@ export type ProjectPreview = {
 };
 
 // The dry run of a create. It needs the directory for `docker compose config`
-// to resolve relative sources, and removes it again if it created it.
+// to resolve relative sources and removes it again afterwards; an empty
+// directory counts as free, so it may be one that existed before.
 export async function previewProject(operation: ProjectPreview): Promise<Outcome> {
   const located = newProjectLocation(operation.name);
   if (!located.ok) return located.outcome;
   const { location } = located;
 
   return stackLocks.runExclusive(rawLockKey({ location, containerId: null, stackName: operation.name }), async () => {
-    if (directoryOccupied(location.projectDir)) return taken(location.projectDir);
-    const auditEntry = (reason: string): void => {
+    const auditEntry = (reason: string, outcome: "allowed" | "denied" = "allowed"): void => {
       audit.write({
         action: "compose-raw-preview",
         containerId: null,
         containerName: operation.name,
         actor: operation.actor,
         networkTier: operation.tier,
-        outcome: "allowed",
+        outcome,
         reason
       });
     };
+    if (directoryOccupied(location.projectDir)) {
+      auditEntry("directory-taken", "denied");
+      return taken(location.projectDir);
+    }
     const frame = {
       projectDir: location.projectDir,
       composeFileName: location.composeFileName,

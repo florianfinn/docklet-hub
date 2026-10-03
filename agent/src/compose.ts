@@ -29,12 +29,12 @@ export const COMPOSE_FILE_NAME = "compose.yaml";
 // rollback it briefly pins a service to the previous image id.
 export const UPDATE_ROLLBACK_OVERRIDE_FILE_NAME = ".dashboard-update-rollback.yaml";
 
-// The label by which a stack created by the dashboard can be recognized. Not a
-// security feature — the authoritative information is the pointer row in the
-// DB — but it makes the origin visible in `docker ps`.
 // Written by the agent into every project the hub creates (project-marker.ts).
 export const PROJECT_MARKER_FILE_NAME = ".docklet-hub-project";
 
+// The label by which a stack created by the dashboard can be recognized. Not a
+// security feature — the authoritative information is the pointer row in the
+// DB — but it makes the origin visible in `docker ps`.
 export const MANAGED_LABEL = "io.github.florianfinn.docklet-hub.managed";
 
 export type ComposeLocation = {

@@ -6,6 +6,7 @@ import test from "node:test";
 import { AgentRegistry } from "./registry.js";
 import { DEFINITION_ACTIONS } from "./route-policy.js";
 import { createScopeContainerIds, externallyManagedServices } from "./raw-ownership.js";
+import { handlerSource } from "./handler-source-test-support.js";
 
 // The ownership lock of the raw editor, the stack actions (#56), the `.env`
 // write (#121) and the stack `up` of apply and start fallback (#122).
@@ -106,6 +107,8 @@ test("apply and preview check ownership again under the project lock", () => {
     createLock >= 0 && create.indexOf("executeRawLocked(") > createLock,
     "createProject calls the apply outside the lock"
   );
+  // Definition, executeRaw and createProject, across every handler source.
+  assert.equal(handlerSource().match(/executeRawLocked\(/g)?.length, 3);
   assert.equal(rawOps.match(/executeRawLocked\(/g)?.length, 2);
   assert.equal(create.match(/executeRawLocked\(/g)?.length, 1);
 });

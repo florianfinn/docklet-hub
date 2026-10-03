@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { externalSourcesOf, mountSourcesOf } from "./mount-sources.js";
+import { violationKey } from "./compose-raw.js";
+import { selfCheckViolations, type InspectedContainer } from "./hardening.js";
+import { externalSourceAcceptances, externalSourcesOf, mountSourcesOf } from "./mount-sources.js";
 
 const Project = "/home/docker/notes";
 
@@ -67,4 +69,49 @@ test("unreadable or missing volume lists yield no sources", () => {
   assert.deepEqual(mountSourcesOf(null, ["app"], Project), []);
   assert.deepEqual(mountSourcesOf({ services: { app: { volumes: "x" } } }, ["app"], Project), []);
   assert.deepEqual(mountSourcesOf({ services: { app: { volumes: [{ type: "bind", source: "/x" }] } } }, ["app"], Project), []);
+});
+
+test("a confirmed external source accepts exactly its own bind-outside-base finding", () => {
+  const sources = mountSourcesOf(
+    {
+      services: {
+        app: {
+          volumes: [
+            { type: "bind", source: "/mnt/user/media", target: "/media" },
+            { type: "bind", source: "/etc/ssl", target: "/ssl", read_only: true },
+            { type: "bind", source: "/home/docker/notes/data", target: "/data" }
+          ]
+        }
+      }
+    },
+    ["app"],
+    Project
+  );
+  const container: InspectedContainer = {
+    id: "c1",
+    name: "notes-app-1",
+    image: "example/notes:1.0",
+    privileged: false,
+    capAdd: [],
+    capDrop: ["ALL"],
+    securityOpt: ["no-new-privileges:true"],
+    pidMode: "",
+    ipcMode: "",
+    networkMode: "bridge",
+    binds: ["/mnt/user/media:/media", "/etc/ssl:/ssl:ro", "/home/docker/notes/data:/data"],
+    devices: [],
+    memoryLimitBytes: 0,
+    pidsLimit: null,
+    cpuLimited: false,
+    logDriver: "json-file",
+    logOptions: {}
+  };
+  // The key format of rawOps.violationsOf.
+  const findings = selfCheckViolations(container, { bindBasePath: "/home/docker" }).map((violation) =>
+    violationKey("app", `${violation.rule} — ${violation.hostPath ?? violation.detail}`)
+  );
+  const accepted = new Set(externalSourceAcceptances(sources));
+
+  assert.deepEqual(findings.filter((key) => accepted.has(key)), ["app:bind-outside-base — /mnt/user/media"]);
+  assert.deepEqual(findings.filter((key) => !accepted.has(key)), ["app:sensitive-host-path — /etc/ssl"]);
 });

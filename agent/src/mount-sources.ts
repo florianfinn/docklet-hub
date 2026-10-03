@@ -4,6 +4,7 @@
 
 import type { MountSource } from "contract";
 import { isInsideBase } from "./compose.js";
+import { violationKey } from "./compose-raw.js";
 import { normalizePath } from "./hardening.js";
 
 type ConfigVolume = {
@@ -54,6 +55,14 @@ export function mountSourcesOf(config: unknown, services: readonly string[], pro
     }
   }
   return sources;
+}
+
+// The hardening keys a confirmed external source replaces: exactly its own
+// bind-outside-base per service, in the format of `rawOps.violationsOf`.
+export function externalSourceAcceptances(sources: readonly MountSource[]): string[] {
+  return sources
+    .filter((entry) => entry.kind === "external" && entry.source)
+    .map((entry) => violationKey(entry.service, `bind-outside-base — ${entry.source}`));
 }
 
 // The distinct external bind sources that need their own confirmation.

@@ -21,7 +21,6 @@ import type { ComposeConfirmations, ComposeRawFailureReason } from "contract";
 import {
   checkConfirmation,
   validateRawContent,
-  violationKey,
   violationList,
   type ServiceViolations
 } from "../compose-raw.js";
@@ -36,7 +35,7 @@ import {
   type RawStepSink
 } from "../raw-apply.js";
 import { externallyManagedServices } from "../raw-ownership.js";
-import { externalSourcesOf } from "../mount-sources.js";
+import { externalSourceAcceptances, externalSourcesOf } from "../mount-sources.js";
 import { engine, registry, audit, stackLocks } from "./state.js";
 import {
   composeBasePath,
@@ -327,9 +326,7 @@ export async function executeRawWithoutLock(
         }
       };
     }
-    externalAccepted = plan.mountSources
-      .filter((entry) => entry.kind === "external" && entry.source)
-      .map((entry) => violationKey(entry.service, `bind-outside-base — ${entry.source}`));
+    externalAccepted = externalSourceAcceptances(plan.mountSources);
   }
 
   // Missing images. The `--pull never` bolt would make the `up` fail anyway;

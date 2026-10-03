@@ -263,6 +263,11 @@ export async function handleStackRaw(ctx: RouteContext): Promise<void> {
 // because the answer names host paths.
 export async function handleStackRawPreview(ctx: RouteContext): Promise<void> {
   const { request, response, actor, parsedTier } = ctx;
+  // The dry run creates and removes a directory under the base path.
+  if (config.readOnly) {
+    send(response, 503, { error: rawReason("agent-read-only") });
+    return;
+  }
   const parsedBody = parseRequest(stackRawPreviewRequestSchema, await readJsonBody(request));
   if (!parsedBody.ok) {
     rejectRequest(ctx, { action: "compose-raw-preview", containerId: null, containerName: null }, parsedBody.rejection);
