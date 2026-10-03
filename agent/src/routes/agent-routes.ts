@@ -11,16 +11,16 @@ import {
 } from "../engine.js";
 import {
   composeLabelsOf,
-  foreignManagementOf,
   toContainerSummary,
   type ContainerSummary
 } from "../redact.js";
+import { foreignManagementOf } from "../external-management.js";
 import { mapLimit } from "../concurrency.js";
 import { fromLegacyForms } from "../registry.js";
 import { toMonitorStatus } from "../monitor.js";
 import { sendLine } from "../ndjson-line.js";
 import { config, engine, registry, monitors, audit, statsHistory, monitorStreams } from "../runtime/state.js";
-import { hardeningOptionsFor, volumeBindsOf } from "../runtime/containers.js";
+import { hardeningOptionsFor, imageManagerLabelOf, volumeBindsOf } from "../runtime/containers.js";
 import { send, readJsonBody, parseRequest, rejectRequest, RouteContext } from "../runtime/http.js";
 
 export async function handleContract(ctx: RouteContext): Promise<void> {
@@ -89,14 +89,18 @@ export async function handleRegistrySync(ctx: RouteContext): Promise<void> {
 // see composeLabelsOf().
 export async function handleHostContainers(ctx: RouteContext): Promise<void> {
   const { response, actor, tier } = ctx;
-  const containers = (await engine.listWithComposeLabels()).map((container) => ({
+  const listed = await engine.listWithComposeLabels();
+  // The hub derives the registry's `externallyManaged` from this field.
+  const containers = await mapLimit(listed, 6, async (container) => ({
     id: container.id,
     name: container.name,
     image: container.image,
     status: container.status,
     compose: composeLabelsOf(container.labels),
-    // S23: only the explanation, never the gate — see foreignManagementOf.
-    externalManagement: foreignManagementOf(container.labels)
+    externalManagement: foreignManagementOf(
+      container.labels,
+      await imageManagerLabelOf(container.labels, container.imageId)
+    )
   }));
   audit.write({
     action: "host-discovery",
@@ -128,7 +132,8 @@ export async function handleContainerList(ctx: RouteContext): Promise<void> {
           ...hardeningOptionsFor(id),
           volumeBinds: volumeResolution.binds,
           unresolvedVolumes: volumeResolution.unresolved,
-          stats: statsHistory.snapshot(id)
+          stats: statsHistory.snapshot(id),
+          imageManagerLabel: await imageManagerLabelOf(inspect.Config?.Labels, inspect.Image)
         });
       } catch (error) {
         if (error instanceof EngineError && error.status === 404) return null;

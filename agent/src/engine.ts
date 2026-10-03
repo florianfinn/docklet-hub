@@ -3,6 +3,7 @@ import type { Socket } from "node:net";
 import type { ParsedImageRef } from "./image-ref.js";
 import { LogDemuxer, renderDemuxedLines, type DemuxedLine } from "./log-demux.js";
 import { resolveLogTail } from "./log-tail.js";
+import { UNRAID_MANAGED_LABEL } from "./external-management.js";
 import { EngineError, EnginePullError, EngineAbortError } from "./engine-errors.js";
 import {
   type EngineRegistryAuth,
@@ -372,19 +373,19 @@ export class DockerEngine {
 
   // Host list for stack discovery (stage 5d).
   //
-  // Like listAll, but with the four Compose labels — without them it could not
-  // be recognised which containers belong to which project.
+  // Like listAll, but with the four Compose labels and Unraid's manager label —
+  // without them neither the project assignment nor the manager is known.
   //
-  // ⚠️ EXPLICITLY only these four labels are passed through, not the whole
+  // ⚠️ EXPLICITLY only these five labels are passed through, not the whole
   // label map. Labels are set freely by the image author and in practice carry
-  // descriptions, Traefik rules and occasionally credentials. The reason for
-  // this endpoint is the project assignment; everything else would be bycatch.
-  // The same discipline as in toContainerSummary.
+  // descriptions, Traefik rules and occasionally credentials. The same
+  // discipline as in toContainerSummary.
   async listWithComposeLabels(): Promise<
     Array<{
       id: string;
       name: string;
       image: string;
+      imageId: string;
       status: string;
       labels: Record<string, string>;
     }>
@@ -394,16 +395,20 @@ export class DockerEngine {
         Id: string;
         Names?: string[];
         Image?: string;
+        ImageID?: string;
         State?: string;
         Labels?: Record<string, string>;
       }>
     >({ method: "GET", path: "/containers/json?all=1" });
 
+    // The manager label feeds the registry's `externallyManaged` via host
+    // discovery; without it every Unraid container would look hub-owned.
     const PASSED_THROUGH = [
       "com.docker.compose.project",
       "com.docker.compose.service",
       "com.docker.compose.project.working_dir",
-      "com.docker.compose.project.config_files"
+      "com.docker.compose.project.config_files",
+      UNRAID_MANAGED_LABEL
     ];
 
     return list.map((entry) => {
@@ -416,6 +421,7 @@ export class DockerEngine {
         id: entry.Id,
         name: (entry.Names?.[0] ?? "").replace(/^\//, ""),
         image: entry.Image ?? "",
+        imageId: entry.ImageID ?? "",
         status: entry.State ?? "unknown",
         labels
       };

@@ -62,12 +62,9 @@ function parseExternalManagement(value: unknown): ExternalManagement | null {
   // HINWEIS an der Zeile und nicht die Zeile selbst, deshalb wird ein Feld,
   // das nicht passt, gekürzt und nicht zum Abbruch.
   //
-  // ⚠️ `manager` ist eine ZEICHENKETTE und keine Aufzählung, obwohl der Agent
-  // heute genau einen Wert kennt (`"unraid"`, aus dem Label
-  // `net.unraid.docker.managed`, `src/redact.ts:59` und `foreignManagementOf`,
-  // Z. 163-169 in v0.19.1). Ein Agent, der morgen einen zweiten Verwalter
-  // meldet, darf hier nicht die ganze Liste umwerfen — und schon gar nicht an
-  // dieser Route: an ihr hängt, wer überhaupt in die Allowlist kommt.
+  // ⚠️ `manager` is a string, not an enumeration (agent:
+  // `external-management.ts`). Any non-empty value locks the definition via
+  // `externallyManaged`; an unknown one must not drop the whole list.
   if (typeof value !== "object" || value === null) return null;
   const record = value as Record<string, unknown>;
   const manager = record.manager;

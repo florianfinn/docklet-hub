@@ -452,10 +452,53 @@ test("die Übersicht nennt den Verwalter und was nur er darf", async () => {
     const shown = note.textContent ?? "";
     assert.ok(
       [de.containerExternalDefinition, en.containerExternalDefinition]
-        .map((text) => text.replaceAll("{manager}", "unraid"))
+        .map((text) => text.replaceAll("{manager}", "Unraid"))
         .some((text) => shown.includes(text)),
       `der Hinweis nennt nicht, was gesperrt ist: ${JSON.stringify(shown)}`
     );
+  } finally {
+    await mounted.unmount();
+    server.restore();
+  }
+});
+
+test("eine unsichere Zuordnung nennt keinen Verwalter, aber die Sperre (#5)", async () => {
+  const container = containerOf({
+    id: "c1",
+    name: "claimed-web-1",
+    externalManagement: { manager: "unknown" }
+  });
+  const server = stubHub(hostWith([container]));
+  const mounted = await mountAt(containerPath(HOST_ID, container.name));
+  await settle();
+
+  try {
+    const shown = at("container-external-note")?.textContent ?? "";
+    assert.ok(
+      [de.containerExternalUnknownDefinition, en.containerExternalUnknownDefinition].some((text) => shown.includes(text)),
+      `der Hinweis erklärt die unsichere Zuordnung nicht: ${JSON.stringify(shown)}`
+    );
+    assert.equal(shown.includes("unknown"), false, "der Rohwert erscheint nicht als Name");
+  } finally {
+    await mounted.unmount();
+    server.restore();
+  }
+});
+
+test("der Compose Manager erscheint mit seinem Produktnamen (#5)", async () => {
+  const container = containerOf({
+    id: "c1",
+    name: "media-web-1",
+    externalManagement: { manager: "unraid-compose" }
+  });
+  const server = stubHub(hostWith([container]));
+  const mounted = await mountAt(containerPath(HOST_ID, container.name));
+  await settle();
+
+  try {
+    const shown = at("container-external-note")?.textContent ?? "";
+    assert.equal(shown.includes("Unraid Compose Manager"), true, JSON.stringify(shown));
+    assert.equal(shown.includes("unraid-compose"), false, "der Rohwert erscheint nicht als Name");
   } finally {
     await mounted.unmount();
     server.restore();

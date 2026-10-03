@@ -27,6 +27,7 @@ import {
 import { mapLimit } from "../concurrency.js";
 import { containerStatsOf } from "../stats.js";
 import { composeCandidates } from "../compose-selection.js";
+import { createImageManagerLabelLookup } from "../external-management.js";
 import { config, engine, registry, composeSelections, statsHistory, hardeningOptions } from "./state.js";
 
 // Stage 5c: the same path is also the root of the compose directories. A
@@ -153,6 +154,8 @@ export async function violationKey(raw: RawInspect, containerId: string): Promis
     hardeningOptionsFor(containerId)
   ).map((violation) => `${violation.rule} — ${violation.hostPath ?? violation.detail}`);
 }
+
+export const imageManagerLabelOf = createImageManagerLabelLookup((imageId) => engine.inspectImage(imageId));
 
 // CPU/RAM sampling (S13) — best effort. A failed stats call (container is
 // stopping, Docker refuses instrumentation for a non-running one) must topple

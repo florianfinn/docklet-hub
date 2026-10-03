@@ -27,8 +27,10 @@ import * as z from "zod/mini";
  *       `/containers/:id/configuration` (#278)
  *   7 — the raw compose editor refuses externally managed stacks with
  *       `403 externally-managed` (#56)
+ *   8 — host discovery reports `externalManagement` with the managers
+ *       `unraid`, `unraid-compose` and `unknown` (#5)
  */
-export const CONTRACT_VERSION = 7;
+export const CONTRACT_VERSION = 8;
 
 /** What a field added after the first numbered contract carries. */
 export type ContractSince = { since: number };

@@ -1,6 +1,7 @@
 import { toInspectedContainer, type RawInspect } from "./engine.js";
 import { hardeningRuleNames, type HardeningRule } from "./hardening.js";
 import { mutabilityOfRef, type Mutability } from "./image-ref.js";
+import { foreignManagementOf, type ExternalManagement } from "./external-management.js";
 import type { ContainerStats } from "./stats.js";
 
 // Secret visibility (stage plan 3.9).
@@ -57,10 +58,9 @@ export type ContainerSummary = {
   // descriptions, Traefik rules and occasionally credentials. The same
   // discipline as in engine.listWithComposeLabels().
   compose: { project: string; service: string } | null;
-  // Is this container operated by a FOREIGN management (S23)?
-  // Today only Unraid (net.unraid.docker.managed). See foreignManagementOf:
-  // EXPLANATION, not a gate — gating happens on the missing Compose anchor.
-  externalManagement: { manager: "unraid" } | null;
+  // Who manages the definition when it is not this hub; see
+  // external-management.ts. The gate is the registry's `externallyManaged`.
+  externalManagement: ExternalManagement | null;
   // Does this container run from a ref whose content can change under the
   // same name (R1, security review 2026-08)?
   //
@@ -133,6 +133,9 @@ export type SummaryOptions = {
   // them needs a second engine call and this module is meant to stay pure —
   // the same separation as for volumeBinds.
   stats?: ContainerStats | null;
+  // Unraid's manager label on the image (imageManagerLabelOf). Missing counts
+  // as unreadable and reports a claimed manager as `unknown`.
+  imageManagerLabel?: string | null;
 };
 
 // Only `project` and `service`, and only if BOTH are present: a half-filled
@@ -145,29 +148,6 @@ export function composeLabelsOf(
   if (typeof project !== "string" || !project.trim()) return null;
   if (typeof service !== "string" || !service.trim()) return null;
   return { project: project.trim(), service: service.trim() };
-}
-
-// Is this container operated by a FOREIGN management (S23)?
-//
-// Today exactly one case: Unraid creates its containers through its own UI and
-// marks them with `net.unraid.docker.managed`. Whoever recreates them from the
-// dashboard detaches them from Unraid's template — and at the next
-// "Apply Update" there, the container is rebuilt from the template and
-// overwrites what the dashboard did. Two managements overwriting each other
-// are worse than a missing feature.
-//
-// ⚠️ This value is an EXPLANATION, not a gate. Gating happens on the MISSING
-// Compose anchor: without a Compose file there is structurally nothing to
-// apply, edit or adopt, no matter who created the container. That matters
-// because `Config.Labels` mixes image AND container labels (the T6 lesson): a
-// foreign image could claim this label. At most it can trigger a wrong
-// explanation text with it — never unlock anything.
-export function foreignManagementOf(
-  labels: Record<string, string> | null | undefined
-): { manager: "unraid" } | null {
-  const unraid = labels?.["net.unraid.docker.managed"];
-  if (typeof unraid === "string" && unraid.trim()) return { manager: "unraid" };
-  return null;
 }
 
 export function toContainerSummary(raw: RawInspect, options: SummaryOptions = {}): ContainerSummary {
@@ -195,7 +175,7 @@ export function toContainerSummary(raw: RawInspect, options: SummaryOptions = {}
     }),
     stats: options.stats ?? null,
     compose: composeLabelsOf(raw.Config?.Labels),
-    externalManagement: foreignManagementOf(raw.Config?.Labels),
+    externalManagement: foreignManagementOf(raw.Config?.Labels, options.imageManagerLabel),
     imageMutability: mutabilityOfRef(raw.Config?.Image ?? raw.Image)
   };
 

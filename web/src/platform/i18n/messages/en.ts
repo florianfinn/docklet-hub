@@ -73,6 +73,9 @@ export const en = {
   containerStack: "Stack",
 
   containerExternalTitle: "{manager} manages this container.",
+  containerExternalUnknownTitle: "The manager of this container cannot be determined with certainty.",
+  containerExternalUnknownDefinition:
+    "It carries an Unraid manager label that does not match its other labels, already comes with the image or could not be checked against the image. The hub therefore treats it as externally managed: logs, files, shell, start and stop work, while the agent refuses updates, recreation and removal.",
   containerExternalDefinition:
     "Logs, files, shell, start and stop work as for any other container. {manager} handles updates, recreation and removal itself: the agent refuses them from the hub, because {manager} would rebuild the container from its template on the next update.",
 

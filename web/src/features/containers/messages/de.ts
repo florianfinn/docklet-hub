@@ -60,6 +60,10 @@ export const deContainers = {
   overviewExternallyManaged: "fremdverwaltet",
   externalManagedByUnraid:
     "Diese Container legt Unraid aus seinen Vorlagen an. Der Hub zeigt und steuert sie; Update und Neuerstellen macht Unraid.",
+  externalManagedByUnraidCompose:
+    "Diese Container startet das Compose-Manager-Plugin von Unraid aus seinen Projekten. Der Hub zeigt und steuert sie; Update, Neuerstellen und Compose-Änderungen macht das Plugin.",
+  externalManagedUnknown:
+    "Diese Container tragen ein Verwaltermerkmal, das der Agent keinem Verwalter sicher zuordnen kann. Der Hub zeigt und steuert sie; Update, Neuerstellen und Entfernen bleiben gesperrt.",
   externalManagedByOther: "Diese Container verwaltet {manager}. Der Hub zeigt und steuert sie; Update und Neuerstellen macht {manager}.",
   // Das „›" am Ende einer Stack-Zeile trägt kein Wort — dieser Text sagt einem
   // Screenreader, wohin es führt.

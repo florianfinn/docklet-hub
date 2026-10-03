@@ -40,6 +40,7 @@ import { engine, registry, audit, statsHistory, openStreams } from "../runtime/s
 import {
   composeBasePath,
   hardeningOptionsFor,
+  imageManagerLabelOf,
   volumeBindsOf,
   inspectedContainer
 } from "../runtime/containers.js";
@@ -77,7 +78,8 @@ export async function handleContainerDetail(ctx: ContainerContext): Promise<void
       ...hardeningOptionsFor(containerId),
       volumeBinds: volumeResolution.binds,
       unresolvedVolumes: volumeResolution.unresolved,
-      stats: statsHistory.snapshot(containerId)
+      stats: statsHistory.snapshot(containerId),
+      imageManagerLabel: await imageManagerLabelOf(result.inspect.Config?.Labels, result.inspect.Image)
     })
   );
   return;

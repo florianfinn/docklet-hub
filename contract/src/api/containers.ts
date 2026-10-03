@@ -47,9 +47,8 @@ export type ContainerStats = z.infer<typeof containerStatsSchema>;
 
 // Who manages a container when it is not this hub (#20, D6b).
 //
-// ⚠️ `manager` is a STRING and not an enumeration, although the agent knows
-// one value today (`unraid`). An agent that reports a second manager tomorrow
-// must show up with its name, not fail the list.
+// The agent reports `unraid`, `unraid-compose` or `unknown`. `manager` stays a
+// string so that a manager added later shows up instead of failing the list.
 export const externalManagementSchema = z.object({
   manager: z.string()
 });
