@@ -111,3 +111,47 @@ test("unter .claude ist nur die geteilte Projekteinstellung öffentlich", () => 
     assert.equal(findings.some(f=>f.path===".claude/settings.local.json"&&f.category==="private-artifact"),true);
   } finally {rmSync(directory,{recursive:true,force:true});}
 });
+
+test("Adress- und Hostnamenprüfung finden Grenzfälle und behalten ihre Kategorien", () => {
+  const email=local=>inspectText(local).map(f=>f.category);
+  const corp=["x","corp.de"].join("@");
+  assert.deepEqual(email(corp),["non-example-email"]);
+  assert.deepEqual(email(`(${corp}), ${corp.toUpperCase()}\n${corp}`),["non-example-email","non-example-email","non-example-email"]);
+  assert.deepEqual(email(["a","b.c.example.com"].join("@")),[]);
+  assert.deepEqual(email(["a.b-c_d+e","sub.Example.ORG"].join("@")),[]);
+  assert.deepEqual(email(["x","a.b.corp.de."].join("@")),["non-example-email"]);
+  assert.deepEqual(email(["a","example.com_x"].join("@")+"@corp.de"),["non-example-email"]);
+  const [lan,arpa,internal]=["l"+"an","home"+".arpa","inter"+"nal"];
+  const host=text=>inspectText(text).map(f=>f.category);
+  assert.deepEqual(host(`nas.${lan}`),["private-hostname"]);
+  assert.deepEqual(host(`(nas.${lan.toUpperCase()}) a.b.${arpa}, x-y.${internal}`),["private-hostname","private-hostname","private-hostname"]);
+  assert.deepEqual(host(`host-.${lan}`),["private-hostname"]);
+  assert.deepEqual(host(`a-b.${lan} -nas.${lan}
+x.nas.${lan}`),["private-hostname","private-hostname","private-hostname"]);
+  assert.deepEqual(host(`nas.${lan}ding nas.${lan}-x`),["private-hostname"]);
+  assert.equal(inspectText(`a
+b
+nas.${lan}`)[0].line,3);
+});
+
+test("Adress- und Hostnamenprüfung bleiben bei feindlicher Eingabe linear", () => {
+  // Synchronous code cannot be interrupted by a test timeout; measure so a regression fails.
+  const size=100000;
+  const cases=new Map([
+    ["ein langes Wort","a".repeat(size)],
+    ["Bindestrichkette","a-".repeat(size/2)],
+    ["Punktkette aus Ziffern","1.".repeat(size/2)],
+    ["langer lokaler Teil vor @","a".repeat(size)+"@"],
+    ["Labelkette vor Hostendung","a.".repeat(size/2)+"l"+"an"],
+    ["Labelkette nach @","x@"+"1.".repeat(size/2)],
+    ["viele @ ohne Domain","a@".repeat(size/2)],
+    ["Bindestrichkette vor Hostendung","a-".repeat(size/2)+".l"+"an"],
+    ["viele Hostendungen",(".l"+"an").repeat(size/4)]
+  ]);
+  for (const [name,text] of cases) {
+    const started=performance.now();
+    inspectText(text);
+    const elapsed=performance.now()-started;
+    assert.ok(elapsed<100,`${name}: ${Math.round(elapsed)} ms, nicht linear`);
+  }
+});
