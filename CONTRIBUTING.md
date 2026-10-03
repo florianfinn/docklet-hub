@@ -54,6 +54,13 @@ acceptance is distinct from implementation completion.
 
 Keep files below 1,000 lines; adopted files must be split when imported.
 Keep provenance headers and license notices. Tests run without real services.
+Keep comments short and focused on current contracts, constraints or subtle
+behavior, usually one to three lines. Do not narrate obvious code or embed
+change history, past fixes, previous names or discussions of rejected alternatives.
+Use Git and issues for change history, and indexed design documents for detailed
+rationale when it remains useful. Apply this when editing existing code.
+Preserve license and provenance notices and required tool directives.
+
 Shared API and agent schemas live in contract/. Protocol breaks change the
 contract version; necessary agent changes raise MIN_AGENT_VERSION.
 The hub and agent share one release version. Future supported versions retain

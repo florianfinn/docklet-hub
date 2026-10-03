@@ -13,6 +13,18 @@ in docs/design/ und sind dort im Index verlinkt.
   Installationspakete sind englisch.
 - Neue und angefasste Codekommentare sind englisch. Bestehende Kommentare
   werden bei fachlichen Änderungen angepasst, nicht in eigener Übersetzungsrunde.
+- Codekommentare sind knapp und erklären nur den aktuellen Code: relevante
+  Verträge, Randbedingungen oder nicht offensichtliche Zusammenhänge. Meist
+  reichen ein bis drei Zeilen. Offensichtlichen Code nicht nacherzählen.
+- Keine Blocktexte mit Änderungshistorie, alten Fehlerbehebungen, früheren
+  Namen oder Abläufen, „behoben in X“, „war früher so“ oder Diskussionen
+  verworfener Alternativen im Code. Änderungshistorie gehört in Git und Issues;
+  ausführliche Begründungen und Alternativen bei Bedarf in docs/design/ mit
+  Indexeintrag. Historische Pläne gehören nach docs/history/. Inhalte nur
+  auslagern, wenn sie weiterhin relevant und belegt sind.
+- Bestehende Kommentare werden bei fachlichen Änderungen nach diesen Regeln
+  gekürzt oder entfernt. Lizenz- und Herkunftsnachweise sowie notwendige
+  Werkzeugdirektiven bleiben erhalten.
 - UI-Texte stehen in den Sprachdateien des jeweiligen Features bzw. der
   Plattform. Deutsch ist die erste Sprache. ICU-Apostrophe werden verdoppelt.
 - Umlaute und ß werden richtig geschrieben. Texte mit Umlauten kommen über
