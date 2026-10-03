@@ -30,6 +30,7 @@ import { composeBasePath, availableComposeCandidates } from "../runtime/containe
 import { checkEnvAccess } from "../runtime/access.js";
 import { send, readJsonBody, parseRequest, rejectRequest, ContainerRouteContext } from "../runtime/http.js";
 import { gate } from "../runtime/gate.js";
+import { externallyManagedServices } from "../raw-ownership.js";
 
 // --- Read the Compose file (stage 5c) ---------------------------------
 //
@@ -313,6 +314,24 @@ export async function handleEnv(ctx: ContainerRouteContext): Promise<void> {
     return;
   }
   const { expectedEnvHash: expectedHash, set, remove } = write.value;
+
+  // The `.env` is part of the stack's definition, so an externally managed
+  // anchor or service locks writing it like the raw editor (#121). Checked
+  // synchronously right before the write; reading stays allowed.
+  const managed = externallyManagedServices(containerId, before.serviceIds, (id) => registry.isExternallyManaged(id));
+  if (managed !== null) {
+    audit.write({
+      action: "env-write",
+      containerId,
+      containerName,
+      actor,
+      networkTier: tier,
+      outcome: "denied",
+      reason: `externally-managed: ${managed.join(",")}`
+    });
+    send(response, 403, { error: "externally-managed", services: managed });
+    return;
+  }
 
   const change: EnvChange = { set, remove };
   let result;
