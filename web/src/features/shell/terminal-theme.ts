@@ -17,14 +17,15 @@ import type { TerminalPalette } from "./terminal-look";
 //     `oklch(0.7 0.1 265 / 0.45)`. Die 48 ANSI-Werte in `tokens.css` sind Hex,
 //     die Flächen, der Vordergrund, der Cursor und die Auswahl sind oklch.
 //
-// (2) `@xterm` 5.5.0 parst eine Farbe über eine 2D-LEINWAND. In Chromium
+// (2) `@xterm` 6.0.0 parst eine Farbe über eine 2D-LEINWAND. In Chromium
 //     kommen deshalb auch die oklch-Werte an — gemessen gegen die innere
 //     Farbtafel (`_core._themeService.colors`, Feld `rgba`):
 //     `oklch(0.165 0.008 265)` wird zu `0x0d0e12ff`, genau dem Wert, den auch
 //     der Umrechner hier liefert. MIT EINER AUSNAHME: die Auswahl,
 //     `oklch(0.7 0.1 265 / 0.45)`, kommt NICHT an — dort steht danach
 //     `0xffffff4d`, `@xterm`s eigene Vorgabe. Eine oklch-Farbe mit Deckung
-//     verliert es.
+//     verliert es. Zuerst gemessen mit 5.5.0, am 2026-10-03 mit 6.0.0
+//     wiederholt: dieselben vier Werte.
 //
 // (3) Ohne 2D-Leinwand fällt `@xterm` für JEDEN nicht-Hex-Wert auf seine
 //     Vorgabepalette zurück (gemessen unter happy-dom, das für

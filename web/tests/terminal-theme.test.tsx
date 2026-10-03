@@ -43,7 +43,7 @@ import {
 //      `theme` baut, ist gültiger Code und ein grüner Lauf.
 //   2. DER WERT WIRD ABGELESEN UND KOMMT NICHT AN. Gemessen in Chromium
 //      (siehe den Kopf von `terminal-theme.ts`): die AUSWAHL, in `tokens.css`
-//      ein oklch-Wert MIT Deckung, kommt bei `@xterm` 5.5.0 nicht an — dort
+//      ein oklch-Wert MIT Deckung, kommt bei `@xterm` 6.0.0 nicht an — dort
 //      steht danach dessen eigene weiße Vorgabe über dem Text. Ein Umrechner,
 //      der einen Wert nicht versteht, darf ihn deshalb WEGLASSEN statt ihn
 //      durchzureichen: ein fehlender Eintrag lässt `@xterm` bei seiner
@@ -153,7 +153,7 @@ test("ein Wert, den der Umrechner verwirft, FEHLT in der Palette", () => {
   // ⚠️ DER FALL, DER IM BROWSER WIRKLICH EINTRITT. `--terminal-selection` ist
   // in `tokens.css` ein oklch-Wert MIT Deckung; `getComputedStyle` gibt ihn
   // als `oklch(0.7 0.1 265 / 0.45)` zurück, und gemessen in Chromium kommt er
-  // bei `@xterm` 5.5.0 NICHT an — dort steht danach dessen weiße Vorgabe.
+  // bei `@xterm` 6.0.0 NICHT an — dort steht danach dessen weiße Vorgabe.
   // Was der Umrechner nicht umrechnen kann, darf deshalb nicht durchgereicht
   // werden: ein fehlender Eintrag lässt `@xterm` bei seiner Vorgabe, ein
   // unverständlicher kann daraus Schwarz machen.

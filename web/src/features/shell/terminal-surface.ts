@@ -12,15 +12,14 @@ import type { TerminalLook, TerminalSize, TerminalSurface } from "./terminal-loo
 //
 // AGENTS.md: eine Abhängigkeit wird BEGRÜNDET, nicht bemerkt.
 //
-//   * `@xterm/xterm` (5.5.0) — der Terminal-Emulator selbst. Ein Terminal ist
+//   * `@xterm/xterm` (6.0.0) — der Terminal-Emulator selbst. Ein Terminal ist
 //     kein Textfeld: es sind Steuersequenzen, ein Zellenraster, ein
 //     Zeilenpuffer, eine Cursorstellung, Auswahl und Rollverlauf. Das von Hand
 //     zu bauen hieße, den VT100-Zeichensatz nachzubilden — die Sorte Arbeit,
-//     bei der jedes fehlende Prozent als Zeichensalat im Bild landet. Es ist
-//     zudem die Fassung, die der Entwurf des Hubs nennt, und die, gegen die
-//     `tokens.css` (Hex statt oklch) und `presets.ts` (Zahl statt „13px")
-//     schon gebaut sind.
-//   * `@xterm/addon-fit` (0.10.0) — rechnet aus der Pixelgröße des Knotens die
+//     bei der jedes fehlende Prozent als Zeichensalat im Bild landet. Gegen
+//     diese Fassung sind `tokens.css` (Hex statt oklch) und `presets.ts`
+//     (Zahl statt „13px") gebaut.
+//   * `@xterm/addon-fit` (0.11.0) — rechnet aus der Pixelgröße des Knotens die
 //     Zellengröße. Ohne es müsste der Reiter Zeichenbreite und Zeilenhöhe
 //     selbst messen; das ist genau die Rechnung, die bei jeder Schriftart und
 //     jeder Zoomstufe anders ausgeht.
@@ -33,7 +32,7 @@ import type { TerminalLook, TerminalSize, TerminalSurface } from "./terminal-loo
 // ⚠️ DIE FASSUNGEN STEHEN OHNE BEREICHSZEICHEN IN `web/package.json`, und das
 // hält KEIN Wächter: `web/tests/vendored-origin.test.mjs:463` prüft nur die
 // Ritus-Pakete, und seine Importsperre gilt nur unter `web/src/platform/ui`. Ein
-// `^5.5.0` bliebe grün und holte beim nächsten Install eine Fassung, gegen die
+// `^6.0.0` bliebe grün und holte beim nächsten Install eine Fassung, gegen die
 // die 48 ANSI-Werte nicht gemessen sind.
 //
 // ── DIE CSS STEHT HIER UND NICHT IN `web/src/styles.css` ────────────────────
@@ -48,7 +47,9 @@ import type { TerminalLook, TerminalSize, TerminalSurface } from "./terminal-loo
 // ── WIE `@xterm` FARBEN LIEST, GEMESSEN STATT VERMUTET ─────────────────────
 //
 // Diese Fassung parst eine Farbe über eine 2D-LEINWAND, wenn es eine gibt.
-// Das hat zwei Folgen, und beide sind am 2026-09-08 gemessen — gegen die
+// Das hat zwei Folgen, und beide sind am 2026-09-08 gemessen (5.5.0; für
+// 6.0.0 am 2026-10-03 in Chromium über eine Vite-Messseite mit denselben
+// vier Werten aus (1) wiederholt) — gegen die
 // INNERE Farbtafel (`_core._themeService.colors`, Feld `rgba`) und nicht
 // gegen das Echo von `terminal.options.theme`, das nur zurückgibt, was man
 // hineingelegt hat.

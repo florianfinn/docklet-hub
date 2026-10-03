@@ -67,7 +67,7 @@ import { record, reset } from "./xterm-double.mjs";
 //
 //   (a) OB `@xterm` DIE WERTE ANNIMMT UND ZEICHNET. Das Doppel nimmt jede
 //       Option entgegen, auch eine erfundene. Der letzte Fall hält deshalb die
-//       NAMEN gegen die echte Bibliothek (5.5.0, unter happy-dom gebaut) —
+//       NAMEN gegen die echte Bibliothek (6.0.0, unter happy-dom gebaut) —
 //       aber ob das Bild danach stimmt, sagt auch er nicht. Das hat die
 //       Playwright-Messung aus Baustein 5 einmal gesehen; sie läuft in keiner
 //       Kette mit (#96).
@@ -318,7 +318,7 @@ test("write, onData, focus und dispose reichen durch, und das Terminal bleibt dr
   );
 });
 
-test("die Optionsnamen sind die von @xterm 5.5.0 und nicht erfunden", () => {
+test("die Optionsnamen sind die von @xterm 6.0.0 und nicht erfunden", () => {
   // ⚠️ DER EINZIGE FALL DIESER DATEI, DER DIE ECHTE BIBLIOTHEK ANFASST — und
   // er ist nötig, weil ein Doppel jede Option entgegennimmt, auch eine
   // erfundene. Ein `fontSizes` statt `fontSize` bestünde jeden Fall oben und
