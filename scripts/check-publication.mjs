@@ -10,10 +10,28 @@ const SECRET = /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----|\b(?:gh[pousr]_[A-Za-z0-
 const LOCAL_PATH = /[A-Z]:[\\/](?:Users|Documents and Settings)[\\/][^\s"'\x60]+/gi;
 const PRIVATE_HOST = /\b[a-z0-9-]+\.(?:lan|home\.arpa|internal)\b/gi;
 // AI tools may be named in plain text, never as a co-author linked to an account.
-// The name must be the tool itself (optionally with model words), so people named Claude still pass.
-const CO_AUTHOR = /^[ \t]*Co-authored-by:[ \t]*([^<\n]*?)[ \t]*<([^>\n]*)>/gim;
-const AI_NAME = /^(?:GitHub\s+)?(?:Claude|Copilot|Codex|ChatGPT|OpenAI|Gemini|Cursor|Devin)(?:[\s-]+(?:AI|Agent|Code|Bot|\[bot\]|Opus|Sonnet|Haiku|Fable|Pro|Flash|[\w.-]*\d[\w.-]*))*(?:\[bot\])?$/i;
-const AI_EMAIL = /@(?:[\w-]+\.)*(?:anthropic\.com|openai\.com|cursor\.(?:com|sh)|devin\.ai|cognition\.ai)$|^(?:\d+\+)?(?:copilot|claude|codex|cursor|devin-ai-integration)(?:\[bot\])?@users\.noreply\.github\.com$/i;
+// Token checks instead of nested patterns keep the scan linear on hostile input.
+const CO_AUTHOR = /^[ \t]*Co-authored-by:([^<\n]*)<([^>\n]*)>/gim;
+const AI_TOOLS = new Set(["claude","copilot","codex","chatgpt","openai","gemini","cursor","devin"]);
+const AI_QUALIFIERS = new Set(["ai","agent","code","assist","bot","[bot]","opus","sonnet","haiku","fable","pro","flash"]);
+const AI_BOT_WORDS = [...AI_TOOLS,"jules"];
+const AI_DOMAINS = ["anthropic.com","openai.com","cursor.com","cursor.sh","devin.ai","cognition.ai"];
+const GITHUB_NOREPLY = "@users.noreply.github.com";
+
+// Names people also carry (Claude Martin) pass; only the tool name with model words fails.
+function isAiName(name) {
+  const tokens=name.trim().toLowerCase().replace(/\[bot\]$/,"").split(/[\s-]+/).filter(Boolean);
+  if(tokens[0]==="github")tokens.shift();
+  return tokens.length>0 && AI_TOOLS.has(tokens[0]) && tokens.slice(1).every(t=>AI_QUALIFIERS.has(t) || /\d/.test(t));
+}
+function isAiEmail(email) {
+  const address=email.trim().toLowerCase();
+  if(AI_DOMAINS.some(d=>address.endsWith("@"+d) || address.endsWith("."+d)))return true;
+  if(!address.endsWith(GITHUB_NOREPLY))return false;
+  const login=address.slice(0,-GITHUB_NOREPLY.length).replace(/^\d+\+/,"");
+  if(login.endsWith("[bot]"))return AI_BOT_WORDS.some(w=>login.includes(w));
+  return AI_TOOLS.has(login);
+}
 const EXAMPLE_EMAIL = /@(?:users\.noreply\.github\.com|(?:[a-z0-9-]+\.)*example\.(?:com|org|net)|(?:[a-z0-9-]+\.)*(?:test|invalid))$/i;
 // Public GitHub automation contacts are not private operator identities.
 const PUBLIC_AUTOMATION_EMAILS = new Set(["noreply@github.com","support@github.com"]);
@@ -40,7 +58,7 @@ export function inspectText(text, path = "text") {
   for (const match of text.matchAll(SECRET)) report("credential-pattern", match.index);
   for (const match of text.matchAll(LOCAL_PATH)) report("workstation-path", match.index);
   for (const match of text.matchAll(PRIVATE_HOST)) report("private-hostname", match.index);
-  for (const match of text.matchAll(CO_AUTHOR)) if (AI_NAME.test(match[1]) || AI_EMAIL.test(match[2])) report("ai-co-author", match.index);
+  for (const match of text.matchAll(CO_AUTHOR)) if (isAiName(match[1]) || isAiEmail(match[2])) report("ai-co-author", match.index);
   for (const match of text.matchAll(PRIVATE_ADDRESS)) {
     if (!ADDRESS_FIXTURES.get(path)?.has(match[0]) && !PRODUCT_NETWORK.test(match[0])) report("private-network-address", match.index);
   }
