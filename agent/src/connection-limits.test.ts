@@ -222,9 +222,25 @@ test("createServer leaves server.timeout off", () => {
 // --- The cap on simultaneous connections ------------------------------------
 
 test("maxConnections rejects the excess connection instead of holding it", async () => {
+  // The admitted responses stay open until both excess connections have ended.
+  // A cap that queued instead of rejecting could never end them first, however
+  // slow the machine; the fallback only bounds the test's duration.
+  const held: http.ServerResponse[] = [];
+  const events: string[] = [];
+  let released = false;
+  const release = (cause: string) => {
+    if (released) return;
+    released = true;
+    events.push(`released:${cause}`);
+    for (const response of held) response.end("ok");
+  };
+  const fallback = setTimeout(() => release("fallback"), 1_500);
+  fallback.unref();
+  let rejectedSoFar = 0;
   await withServer(
     (request, response) => {
-      setTimeout(() => response.end("ok"), 200).unref();
+      if (released) response.end("ok");
+      else held.push(response);
     },
     { maxConnections: 2, requestTimeout: 2_000, headersTimeout: 2_000 },
     async (port) => {
@@ -232,18 +248,23 @@ test("maxConnections rejects the excess connection instead of holding it", async
         [0, 1, 2, 3].map(() =>
           rawRequest(port, (socket) =>
             socket.write("GET /health HTTP/1.1\r\nHost: agent\r\nconnection: close\r\n\r\n")
-          )
+          ).then((outcome) => {
+            if (!outcome.first.startsWith("HTTP/1.1 200")) {
+              events.push("rejected");
+              rejectedSoFar += 1;
+              if (rejectedSoFar === 2) release("rejections");
+            }
+            return outcome;
+          })
         )
       );
+      clearTimeout(fallback);
       const served = outcomes.filter((outcome) => outcome.first.startsWith("HTTP/1.1 200")).length;
-      const rejectedCount = outcomes.length - served;
       assert.equal(served, 2, `served=${served}: ${JSON.stringify(outcomes)}`);
-      assert.equal(rejectedCount, 2);
-      // Rejected immediately, not held in an invisible queue —
-      // the same promise as with the stream cap from R3.
-      for (const outcome of outcomes.filter((a) => !a.first.startsWith("HTTP/1.1 200"))) {
-        assert.ok(outcome.afterMs < 200, `was held instead of rejected: ${outcome.afterMs} ms`);
-      }
+      assert.equal(outcomes.length - served, 2);
+      // Rejected while both slots were still occupied, not held in an
+      // invisible queue — the same promise as with the stream cap from R3.
+      assert.deepEqual(events, ["rejected", "rejected", "released:rejections"], JSON.stringify(outcomes));
     }
   );
 });
