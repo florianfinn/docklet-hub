@@ -1,7 +1,7 @@
 // ⚠️ Die Reihenfolge der Importe ist BEDEUTUNG und keine Formatierung: der DOM
 // muss stehen, bevor React geladen wird (siehe `dom-harness.tsx`). Wer hier
 // alphabetisch sortiert, bekommt „document is not defined".
-import { renderInDom, settle } from "./dom-harness.js";
+import { renderInDom, settle, waitFor } from "./dom-harness.js";
 
 // ⚠️ React steht hier NAMENTLICH, obwohl keine Zeile es aufruft — `tsx`
 // übersetzt das JSX dieser Datei mit dem alten Laufzeitmodell
@@ -238,6 +238,7 @@ test("die Adresse mit /logs zeigt nach einem Neuladen das Protokoll", async () =
   const server = stubHub(hostWith([container]));
   const mounted = await mountAt(containerPath(HOST_ID, container.name, "logs"));
   await settle();
+  await waitFor(() => at("log-view") !== null);
 
   try {
     assert.ok(at("log-view") !== null, "unter der Adresse mit /logs steht das Protokoll");
@@ -271,6 +272,7 @@ test("das Protokoll füllt das Fenster und scrollt in sich, statt die Seite zu v
   const server = stubHub(hostWith([container]));
   const mounted = await mountAt(containerPath(HOST_ID, container.name, "logs"));
   await settle();
+  await waitFor(() => at("log-lines") !== null);
 
   try {
     const field = at("log-lines");
@@ -421,6 +423,7 @@ test("bei einem fremdverwalteten Container öffnet das Protokoll seinen Strom", 
   const server = stubHub(hostWith([container]));
   const mounted = await mountAt(containerPath(HOST_ID, container.name, "logs"));
   await settle();
+  await waitFor(() => at("log-view") !== null);
 
   try {
     assert.ok(logCalls(server.calls).length > 0, "der Strom geht hinaus");
@@ -575,6 +578,7 @@ test("die Adresse mit /shell zeigt nach einem Neuladen das Terminal", async () =
   const server = stubHub(hostWith([container]));
   const mounted = await mountAt(containerPath(HOST_ID, container.name, "shell"));
   await settle();
+  await waitFor(() => at("shell-view") !== null);
 
   try {
     assert.ok(at("shell-view"), "unter der Shell-Adresse steht kein Terminal");
@@ -599,6 +603,7 @@ test("ein fremdverwalteter Container bekommt ein Terminal wie jeder andere", asy
   const server = stubHub(hostWith([container]));
   const mounted = await mountAt(containerPath(HOST_ID, container.name, "shell"));
   await settle();
+  await waitFor(() => at("shell-view") !== null);
 
   try {
     assert.equal(at("container-external-note"), null, "an Stelle des Terminals steht ein Hinweis");

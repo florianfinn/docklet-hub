@@ -130,6 +130,19 @@ export async function settle(): Promise<void> {
 }
 
 /**
+ * Polls `condition` through `settle()` until it holds or `timeoutMs` ends.
+ * Returns whether it held; the caller asserts, so a timeout fails the test.
+ */
+export async function waitFor(condition: () => boolean, timeoutMs = 2000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (condition()) return true;
+    if (Date.now() >= deadline) return false;
+    await settle();
+  }
+}
+
+/**
  * Settles until no query of the tree is in flight, twice in a row (#271).
  *
  * ⚠️ A FIXED NUMBER OF `settle()` COUNTS THE LOADING STEPS OF A SCREEN. A
