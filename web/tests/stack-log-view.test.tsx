@@ -1,6 +1,6 @@
 // ⚠️ Die Reihenfolge der Importe ist BEDEUTUNG: der DOM muss stehen, bevor
 // React geladen wird (siehe `dom-harness.tsx`).
-import { renderInDom, settle } from "./dom-harness.js";
+import { renderInDom, settle, waitFor } from "./dom-harness.js";
 
 import React from "react";
 
@@ -173,6 +173,7 @@ async function mount(tab: "overview" | "logs", containers: ReturnType<typeof con
     </AppLanguageProvider>
   );
   await settle();
+  if (tab === "logs") await waitFor(() => document.querySelector('[data-testid="stack-log-view"]') !== null);
   await settle();
   return { server, ...mounted };
 }
