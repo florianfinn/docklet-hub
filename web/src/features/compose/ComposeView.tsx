@@ -185,7 +185,7 @@ export function ComposeView({
 
   if (containerIds.length === 0) {
     return (
-      <Card className="p-4">
+      <Card className="p-4" data-testid="compose-no-container">
         <p className="text-[13px] text-muted-foreground">{t("composeNoContainer")}</p>
       </Card>
     );
@@ -238,7 +238,7 @@ export function ComposeView({
     );
   }
 
-  if (file === null || anchorId === null) return <p className="text-muted-foreground">{t("loading")}</p>;
+  if (file === null || anchorId === null) return <p className="text-muted-foreground" data-testid="compose-loading">{t("loading")}</p>;
   const skipped = lookup.data?.skipped ?? [];
 
   const beginEdit = (): void => {
@@ -268,7 +268,7 @@ export function ComposeView({
   const singleFilePane = activeFile === "env" || pane === "file" || pane === "edit";
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3" data-testid="compose-view">
       {applied === null ? null : <AppliedNotice resync={applied} />}
       <div className={cn("flex flex-col gap-3", singleFilePane && "compose-single-file")}>
         <Card className="gap-0 overflow-hidden border-accent-line py-0 text-[13px]">

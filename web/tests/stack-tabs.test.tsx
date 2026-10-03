@@ -1,6 +1,7 @@
 // ⚠️ Die Reihenfolge der Importe ist BEDEUTUNG: der DOM muss stehen, bevor
 // React geladen wird (siehe `dom-harness.tsx`).
 import { renderInDom, settle, settleQueries } from "./dom-harness.js";
+import { composeSettled } from "./compose-harness.js";
 
 import React from "react";
 
@@ -240,6 +241,10 @@ async function mount(tab: "overview" | "compose", role: Role = "admin", scripted
   // The overview comes through Query since #271, the compose file only after
   // it: settled until no query is in flight, not by a counted `settle()`.
   await settleQueries(mounted.queryClient);
+  if (tab === "compose" && role === "admin") {
+    assert.ok(await composeSettled(), "ComposeView did not settle");
+    await settleQueries(mounted.queryClient);
+  }
   return { server, ...mounted };
 }
 

@@ -1,6 +1,7 @@
 // ⚠️ Die Reihenfolge der Importe ist BEDEUTUNG: der DOM muss stehen, bevor
 // React geladen wird (siehe `dom-harness.tsx`).
 import { renderInDom, settle, settleQueries } from "./dom-harness.js";
+import { composeSettled } from "./compose-harness.js";
 
 import React from "react";
 
@@ -157,6 +158,7 @@ test("ein Compose-Entwurf bleibt beim Wechsel in einen anderen Stack nicht stehe
   );
   try {
     await settleQueries(mounted.queryClient);
+    assert.ok(await composeSettled(), "ComposeView of stack alpha did not settle");
     const editButton = [...document.querySelectorAll("button")].find((button) => button.textContent === en.composeEdit);
     assert.ok(editButton, "the edit button of stack alpha is missing");
     editButton.click();
@@ -170,6 +172,7 @@ test("ein Compose-Entwurf bleibt beim Wechsel in einen anderen Stack nicht stehe
     navigate(`/stack/${HOST_ID}/beta/compose`);
     await settle();
     await settleQueries(mounted.queryClient);
+    assert.ok(await composeSettled(), "ComposeView of stack beta did not settle");
 
     assert.ok(editorField()?.value.includes("DRAFT-FROM-ALPHA") !== true, "the editor of beta does not hold alpha's draft");
     assert.ok(document.querySelector('[data-testid="compose-dirty"]') === null, "beta starts without a draft");
