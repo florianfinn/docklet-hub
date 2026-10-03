@@ -42,7 +42,7 @@ const HOST: HostRecord = {
 
 const ROLE_HEADER = "x-test-role";
 const CONTAINER_ID = "c0ffee";
-const CURRENT: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 6, readOnly: false, entries: null };
+const CURRENT: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 7, readOnly: false, entries: null };
 const OUTDATED: AgentHealth = { reachable: true, version: "0.31.0", contractVersion: 5, readOnly: false, entries: null };
 
 /** What the agent answers on `compose-candidates` (`handleComposeCandidates`). */

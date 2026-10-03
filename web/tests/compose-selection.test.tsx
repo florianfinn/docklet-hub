@@ -103,6 +103,7 @@ const FILE = {
   containerIds: {},
   inventoryViolations: [],
   hubOwnStack: false,
+  externallyManaged: false,
   selectionSupported: true
 };
 

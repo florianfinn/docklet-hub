@@ -222,7 +222,7 @@ async function stack({ withAgent = false }: { withAgent?: boolean } = {}): Promi
               Promise.resolve({
                 reachable: true as const,
                 version: "0.32.0",
-                contractVersion: 6,
+                contractVersion: 7,
                 readOnly: false,
                 entries: null
               })

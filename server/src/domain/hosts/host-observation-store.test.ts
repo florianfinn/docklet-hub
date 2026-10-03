@@ -9,8 +9,8 @@ import { createHostObservationStore, createObservedProbe, staleAfterMs } from ".
 
 // Der Halter und seine Leseseite — ohne Uhr, ohne Netz.
 
-const ONLINE: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 6, readOnly: false, entries: null };
-const PROBED: AgentHealth = { reachable: true, version: "0.32.1", contractVersion: 6, readOnly: false, entries: null };
+const ONLINE: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 7, readOnly: false, entries: null };
+const PROBED: AgentHealth = { reachable: true, version: "0.32.1", contractVersion: 7, readOnly: false, entries: null };
 
 function host(id: string, overrides: Partial<HostRecord> = {}): HostRecord {
   return {

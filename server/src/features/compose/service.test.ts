@@ -111,6 +111,8 @@ function fixture(
     own?: boolean;
     /** The arm is `outdated`: writes are locked by the chain. */
     outdated?: boolean;
+    /** Which container carries an external manager (#56). */
+    managed?: "anchor" | "neighbour" | "other-project";
     replies?: Replies;
     resync?: (record: HostRecord, actor: Actor) => Promise<HostCycleOutcome>;
   } = {}
@@ -158,6 +160,14 @@ function fixture(
       opened.push(writing);
       if (options.chain) return { ok: false, failure: options.chain };
       const anchor = entry(request.containerId, "medien");
+      const unraid = { manager: "unraid" };
+      if (options.managed === "anchor") anchor.externalManagement = unraid;
+      const containers = options.own === true ? [anchor, entry(`${OWN_ID}${"a".repeat(52)}`, "medien")] : [anchor];
+      if (options.managed === "neighbour" || options.managed === "other-project") {
+        const other = entry("radarr0", options.managed === "neighbour" ? "medien" : "spiele");
+        other.externalManagement = unraid;
+        containers.push(other);
+      }
       return {
         ok: true,
         access: {
@@ -165,7 +175,7 @@ function fixture(
           target: TARGET,
           container: anchor,
           options: { actor: { kind: "user", id: request.userId } },
-          containers: options.own === true ? [anchor, entry(`${OWN_ID}${"a".repeat(52)}`, "medien")] : [anchor],
+          containers,
           writable: options.outdated !== true
         }
       };
@@ -679,4 +689,43 @@ test("selection: the read says where the selection is offered", async () => {
   }).service.read(REF);
   assert.ok(!missing.ok);
   assert.equal(missing.selectionSupported, true);
+});
+
+// ── External management (#56) ───────────────────────────────────────────────
+
+const MANAGED_FAILURE = {
+  kind: "problem",
+  status: 403,
+  error: "externally-managed",
+  message: "Ein Dienst dieses Stacks wird fremdverwaltet. Seine Definition bleibt beim Verwalter."
+};
+
+test("external management: preview and apply are refused before the arm is asked", async () => {
+  for (const managed of ["anchor", "neighbour"] as const) {
+    const f = fixture({ managed });
+    const preview = await f.service.preview(REF, BODY);
+    assert.deepEqual(preview, { ok: false, failure: MANAGED_FAILURE }, managed);
+    const plan = await f.service.planApply(REF, BODY);
+    assert.deepEqual(plan, { ok: false, failure: MANAGED_FAILURE }, managed);
+    assert.deepEqual(f.calls, [], managed);
+  }
+});
+
+test("external management: reading stays open and reports the lock", async () => {
+  const read = await fixture({ managed: "neighbour" }).service.read(REF);
+  assert.ok(read.ok);
+  assert.equal(read.compose.externallyManaged, true);
+  assert.equal(read.compose.content, FILE.content);
+});
+
+test("external management: a managed container of another project does not lock this stack", async () => {
+  const f = fixture({ managed: "other-project" });
+  const read = await f.service.read(REF);
+  assert.ok(read.ok);
+  assert.equal(read.compose.externallyManaged, false);
+  assert.ok((await f.service.preview(REF, BODY)).ok);
+  const plan = await planned(f);
+  const { stream, lines } = recordingStream();
+  await plan.run(stream);
+  assert.equal(lines.at(-1)?.kind, "result");
 });

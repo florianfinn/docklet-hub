@@ -59,6 +59,9 @@ import * as z from "zod/mini";
 // table binds all three routes intern-only, the branch only exists for the
 // type guarantee. A key that CAN occur still belongs in the list — the caller
 // translates responses, not probabilities.
+//
+// `externally-managed` is checked again under the lock; a manager that
+// changed in between reaches a streaming caller in the final line.
 export const COMPOSE_RAW_GATE_FAILURE_REASONS = [
   "agent-read-only",
   "not-allowlisted",
@@ -74,6 +77,7 @@ export const COMPOSE_RAW_GATE_FAILURE_REASONS = [
   "compose-anchor-file-ambiguous",
   "directory-taken",
   "stack-service-not-allowlisted",
+  "externally-managed",
   "compose-hash-missing",
   "confirmation-missing",
   "too-many-streams",

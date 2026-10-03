@@ -453,7 +453,7 @@ test("das Entfernen ist wiederholbar und der lokale Host bleibt", async () => {
 // ── Die Gegenprobe am Agenten (Bedingung 9) ───────────────────────────────
 
 function health(version: string | null): AgentHealth {
-  return { reachable: true, version, contractVersion: 6, readOnly: false, entries: null };
+  return { reachable: true, version, contractVersion: 7, readOnly: false, entries: null };
 }
 
 test("die Gegenprobe verlangt einen erreichbaren Agenten ab der Mindestversion", async () => {

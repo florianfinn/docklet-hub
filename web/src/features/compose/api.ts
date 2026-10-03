@@ -74,6 +74,11 @@ export type ComposeFile = {
    */
   hubOwnStack: boolean;
   /**
+   * Also the hub's word (#56): a service of this stack is externally managed.
+   * Preview and apply answer `403 externally-managed`.
+   */
+  externallyManaged: boolean;
+  /**
    * Also the hub's word (#185): the selection by hand is offered for this
    * container. Without it the surface does not offer it.
    */

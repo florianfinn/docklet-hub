@@ -228,10 +228,21 @@ export const INTERNAL_ONLY_ACTIONS: ReadonlySet<string> = new Set([
 // (#78). "recreate" also covers the read-only preview — a preview of something
 // that may not be executed would show a route that does not exist. "pull-stream"
 // replaces the image just like "pull" and is therefore locked alongside it.
+// "stack-apply" recreates and "stack-down" removes every container of a stack;
+// one externally managed service locks the whole stack action (#56). The raw
+// editor does not run through gate() and checks the same flag itself.
 //
 // Lives here and not in runtime/http.ts so that a test can reach it: the
 // runtime modules load the agent configuration on import.
-export const DEFINITION_ACTIONS: ReadonlySet<string> = new Set(["pull", "pull-stream", "recreate", "apply-spec", "remove"]);
+export const DEFINITION_ACTIONS: ReadonlySet<string> = new Set([
+  "pull",
+  "pull-stream",
+  "recreate",
+  "apply-spec",
+  "remove",
+  "stack-apply",
+  "stack-down"
+]);
 
 function matches(pattern: string, pathname: string): boolean {
   const patternParts = pattern.split("/");

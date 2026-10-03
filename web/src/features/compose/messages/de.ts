@@ -57,6 +57,8 @@ export const deCompose = {
   // fehlendes Recht.
   composeHubOwnStack:
     "Das ist der Stack, in dem dieser Hub selbst läuft. Er wird hier nur angezeigt: ein Anwenden von hier ersetzte den Hub mitten im Vorgang. Geändert wird er auf dem Host.",
+  composeExternallyManaged:
+    "Ein Dienst dieses Stacks wird fremdverwaltet. Die Datei wird hier nur angezeigt: seine Definition bleibt beim Verwalter, der eine Änderung von hier beim nächsten Update zurücksetzen würde. Start, Stopp, Logs und Shell bleiben verfügbar.",
   // Der Editor und der Vergleich (#35, Etappe E6a).
   composeEdit: "Bearbeiten",
   composeFileTabs: "Dateien des Compose-Projekts",

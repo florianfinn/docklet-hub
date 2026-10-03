@@ -79,6 +79,9 @@ export const COMPOSE_REASONS: Readonly<Record<ComposeRawFailureReason, ReasonEnt
   "stack-service-not-allowlisted": {
     message: "Nicht jeder Dienst dieses Stacks steht auf der Allowlist des Arms. Solange das so ist, bearbeitet er die Datei nicht."
   },
+  "externally-managed": {
+    message: "Ein Dienst dieses Stacks wird fremdverwaltet. Seine Definition bleibt beim Verwalter; der Arm schreibt die Datei nicht."
+  },
   "compose-hash-missing": { message: "Zum Anwenden gehört der Hash des Standes, auf dem bearbeitet wurde." },
   "confirmation-missing": { message: "Der Arm verlangt den Namen des Stacks als Bestätigung." },
   "too-many-streams": {

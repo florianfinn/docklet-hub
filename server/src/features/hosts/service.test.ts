@@ -15,7 +15,7 @@ import { createHostsService, type HostsAgent, type HostsServiceDeps } from "./se
 // `app/enrollment-integration.test.ts`.
 
 const TARGET: AgentTarget = { baseUrl: "http://agent.test", secret: "s".repeat(32) };
-const REACHABLE: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 6, readOnly: false, entries: 3 };
+const REACHABLE: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 7, readOnly: false, entries: 3 };
 const UNREACHABLE: AgentHealth = { reachable: false, error: "Der Agent antwortet nicht." };
 
 function host(overrides: Partial<HostRecord> = {}): HostRecord {
