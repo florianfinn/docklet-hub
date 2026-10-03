@@ -16,12 +16,6 @@ export function isTextOnly(paths) {
 const git=args=>execFileSync("git",args,{cwd:ROOT,encoding:"utf8"});
 const changedPaths=(base,head)=>git(["diff","--name-only","--no-renames",base+"..."+head]).split("\n").filter(Boolean);
 
-/** PR files from the REST API, including the old side of renames. */
-export function pullRequestFiles(gh,repo,number) {
-  const pages=JSON.parse(gh(["api","--paginate","--slurp","repos/"+repo+"/pulls/"+number+"/files?per_page=100"]));
-  return pages.flat().flatMap(file=>file.previous_filename?[file.filename,file.previous_filename]:[file.filename]);
-}
-
 // Pull requests use the event SHAs; pushes to main always take the full chain.
 function ciScope() {
   if(process.env.GITHUB_EVENT_NAME!=="pull_request")return "full";

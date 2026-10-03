@@ -150,10 +150,12 @@ in docs/design/ und sind dort im Index verlinkt.
 
 - Vor jedem Push laufen lokal pnpm run lint, pnpm run test und pnpm run build.
   Die Veröffentlichungskontrolle ist Teil der Tests und Git-Hooks.
-- Reine Textänderungen nach scripts/change-scope.mjs (nur .md, LICENSE oder
-  NOTICE außerhalb ausgeführter Pfade) prüfen pre-push und checks ohne
-  Installation, Lint, Tests und Build: nur Veröffentlichung, Commit-Texte und
-  die Node-Tests für Texte. Der unabhängige Review bleibt Pflicht.
+- Reine Textänderungen nach scripts/change-scope.mjs (nur .md außerhalb
+  ausgeführter Pfade sowie LICENSE oder NOTICE im Wurzelverzeichnis) prüfen
+  pre-push und checks ohne Installation, Lint, Tests und Build: nur
+  Veröffentlichung, Commit-Texte und die Node-Tests für Texte. pre-push misst
+  gegen origin/main; Zweige von Feature-Branches laufen dort voll. Der
+  unabhängige Review bleibt Pflicht.
 - GitHub-PR-Prüfungen laufen zusätzlich auf Feature-Branches und main für
   Veröffentlichung, Lint, Tests und Build mit minimalen Rechten, ohne
   Produktionsgeheimnisse. Sie ersetzen weder Prüfung vor Push noch Review.
