@@ -31,6 +31,9 @@ pnpm run build
 Git hooks inspect the staged content and commit metadata before publication.
 The publication guard intentionally reports paths and categories, not values.
 GitHub checks run additionally; they cannot undo a leak after a public push.
+Text-only changes as defined by scripts/change-scope.mjs (only .md, LICENSE or
+NOTICE outside executed paths) skip install, lint, the full suite and build in
+pre-push and checks; publication, commit and prose tests still run.
 
 ## Features and reviews
 
