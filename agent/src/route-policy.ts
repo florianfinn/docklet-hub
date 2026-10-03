@@ -160,6 +160,7 @@ export const ROUTES: readonly Route[] = [
   { methods: ["GET"], pattern: "/stacks", tier: "intern-only", mutating: false, audit: "stack-discovery" },
   { methods: ["POST"], pattern: "/stacks/adopt", tier: "intern-only", mutating: true, audit: "stack-adopt" },
   { methods: ["POST"], pattern: "/stacks/raw", tier: "intern-only", mutating: true, audit: "compose-raw" },
+  { methods: ["POST"], pattern: "/stacks/raw-preview", tier: "intern-only", mutating: false, audit: "compose-raw-preview" },
 
   // --- Lists the agent receives from the main API -------------------------
   //

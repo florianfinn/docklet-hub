@@ -6,7 +6,7 @@ Zielbild und Begründungen. Arbeitsstand steht in GitHub Issues und Meilensteine
 | --- | --- |
 | [authentication-modes.md](authentication-modes.md) | Anmeldemodi und Wiederherstellung |
 | [concept-and-plan.md](concept-and-plan.md) | Zielbild von docklet hub |
-| [container-lifecycle.md](container-lifecycle.md) | Projektpfade und Container-Lebenszyklus |
+| [container-lifecycle.md](container-lifecycle.md) | Projektpfade, Anlegen Hub-eigener Projekte und Container-Lebenszyklus |
 | [feature-architecture.md](feature-architecture.md) | Architektur nach Features |
 | [game-console.md](game-console.md) | Games-Konsole |
 | [hub-color-and-structure.md](hub-color-and-structure.md) | Farbsystem und Gliederung der Oberfläche |

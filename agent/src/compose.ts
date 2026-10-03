@@ -32,6 +32,9 @@ export const UPDATE_ROLLBACK_OVERRIDE_FILE_NAME = ".dashboard-update-rollback.ya
 // The label by which a stack created by the dashboard can be recognized. Not a
 // security feature — the authoritative information is the pointer row in the
 // DB — but it makes the origin visible in `docker ps`.
+// Written by the agent into every project the hub creates (project-marker.ts).
+export const PROJECT_MARKER_FILE_NAME = ".docklet-hub-project";
+
 export const MANAGED_LABEL = "io.github.florianfinn.docklet-hub.managed";
 
 export type ComposeLocation = {
@@ -54,7 +57,7 @@ export function isValidProjectName(name: unknown): name is string {
 export function isValidComposeFileName(name: string): boolean {
   if (!name || name.length > 255) return false;
   if (name.includes("/") || name.includes("\\")) return false;
-  if (name === "." || name === "..") return false;
+  if (name === "." || name === ".." || name === PROJECT_MARKER_FILE_NAME) return false;
   // No control characters. Checked via character codes instead of a regex: a
   // literal range in the source would itself be a control character in the
   // file again.

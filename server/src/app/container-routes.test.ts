@@ -181,7 +181,7 @@ type Hub = { port: number; close: () => Promise<void> };
 const CURRENT_HEALTH: AgentHealth = {
   reachable: true,
   version: "0.32.0",
-  contractVersion: 8,
+  contractVersion: 9,
   readOnly: false,
   entries: null
 };

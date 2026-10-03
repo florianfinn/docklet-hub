@@ -326,6 +326,7 @@ export {
   recreateRequestSchema,
   stackActionRequestSchema,
   stackAdoptRequestSchema,
+  stackRawPreviewRequestSchema,
   stackRawRequestSchema
 } from "./agent/compose-requests.js";
 export type {
@@ -339,8 +340,11 @@ export type {
   RecreateRequest,
   StackActionRequest,
   StackAdoptRequest,
+  StackRawPreviewRequest,
   StackRawRequest
 } from "./agent/compose-requests.js";
+export { MOUNT_SOURCE_KINDS, mountSourceSchema } from "./agent/projects.js";
+export type { MountSource, MountSourceKind } from "./agent/projects.js";
 export {
   CONTAINER_NAME_PATTERN,
   containerSpecSchema,

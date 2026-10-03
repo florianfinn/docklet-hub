@@ -118,6 +118,7 @@ export const COMPOSE_RAW_CHECK_FAILURE_REASONS = [
   ...COMPOSE_RAW_PREVIEW_FAILURE_REASONS,
   "stack-anchor-stale",
   "service-confirmation-missing",
+  "external-source-confirmation-missing",
   "image-not-local",
   "image-ref-unreadable"
 ] as const;
@@ -166,9 +167,9 @@ export const COMPOSE_RAW_STREAM_FAILURE_REASONS = ["compose-raw-failed"] as cons
 
 // --- The whole set ---------------------------------------------------------
 
-// Everything the four raw branches (`compose-raw`, `compose-raw-stream`,
-// `compose-raw-preview`, `POST /stacks/raw`) themselves answer as a named
-// failure.
+// Everything the raw branches (`compose-raw`, `compose-raw-stream`,
+// `compose-raw-preview`, `POST /stacks/raw`, `POST /stacks/raw-preview`)
+// themselves answer as a named failure.
 //
 // ⚠️ Where this list ends, and why exactly there: the shared front matter
 // before the dispatch answers the same on EVERY route — `checkTier` with

@@ -41,7 +41,7 @@ import {
 import fs from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import path from "node:path";
-import { isInsideBase } from "./compose.js";
+import { isInsideBase, PROJECT_MARKER_FILE_NAME } from "./compose.js";
 import { normalizePath } from "./hardening.js";
 import { ENV_FILE_NAME } from "./env-file.js";
 
@@ -66,7 +66,12 @@ const BLOCKED_COMPOSE_FILES = new Set([
 // This is a backstop, not a boundary: the boundary is the self-management lock
 // and the fact that only an internal manager sets up paths.
 function isBlockedName(name: string): boolean {
-  return name === ENV_FILE_NAME || name.startsWith(`${ENV_FILE_NAME}.`) || BLOCKED_COMPOSE_FILES.has(name);
+  return (
+    name === ENV_FILE_NAME ||
+    name.startsWith(`${ENV_FILE_NAME}.`) ||
+    name === PROJECT_MARKER_FILE_NAME ||
+    BLOCKED_COMPOSE_FILES.has(name)
+  );
 }
 
 export type PathValidation =
