@@ -35,6 +35,7 @@ import {
   type RawStepSink
 } from "../raw-apply.js";
 import { externallyManagedServices } from "../raw-ownership.js";
+import { externalSourceAcceptances, externalSourcesOf } from "../mount-sources.js";
 import { engine, registry, audit, stackLocks } from "./state.js";
 import {
   composeBasePath,
@@ -233,6 +234,9 @@ export type RawExecution = {
   // Who is listening in (#86). The synchronous path does not set it and thus
   // runs character for character as before.
   onStep?: RawStepSink;
+  // Only on create (#128): the external bind sources named back. Each one
+  // replaces the generic hardening acknowledgement for its bind-outside-base.
+  confirmExternalSources?: readonly string[];
 };
 
 export async function executeRawWithoutLock(
@@ -306,6 +310,25 @@ export async function executeRawWithoutLock(
     };
   }
 
+  const externalSources = externalSourcesOf(plan.mountSources);
+  let externalAccepted: string[] = [];
+  if (operation.confirmExternalSources !== undefined) {
+    const externalChecked = checkConfirmation(externalSources, operation.confirmExternalSources);
+    if (!externalChecked.ok) {
+      auditEntry("denied", `external-source-confirmation-missing: ${externalSources.join(",")}`);
+      return {
+        status: 409,
+        body: {
+          error: rawReason("external-source-confirmation-missing"),
+          externalSources,
+          external: externalChecked,
+          mountSources: plan.mountSources
+        }
+      };
+    }
+    externalAccepted = externalSourceAcceptances(plan.mountSources);
+  }
+
   // Missing images. The `--pull never` bolt would make the `up` fail anyway;
   // here that becomes a named decision instead of an opaque Compose error
   // message.
@@ -361,7 +384,7 @@ export async function executeRawWithoutLock(
     basePath: composeBasePath,
     expectedHash: operation.expectedHash,
     plan,
-    acceptedViolations: confirmations.acknowledgeHardening,
+    acceptedViolations: [...confirmations.acknowledgeHardening, ...externalAccepted],
     onStep: operation.onStep
   });
 
@@ -432,7 +455,8 @@ export async function executeRawWithoutLock(
       // Named honestly: created does not mean running (lesson from 5c).
       running: result.running,
       restartLooping: result.restartLooping,
-      imagesByService: plan.imagesByService
+      imagesByService: plan.imagesByService,
+      mountSources: plan.mountSources
     }
   };
 }
@@ -483,38 +507,45 @@ export async function executeRaw(
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   return stackLocks.runExclusive(rawLockKey(operation), async () => {
     operation.onLocked?.();
-    if (operation.containerId && !registry.isAllowed(operation.containerId)) {
-      audit.write({
-        action: "compose-raw",
-        containerId: operation.containerId,
-        containerName: operation.stackName,
-        actor: operation.actor,
-        networkTier: operation.tier,
-        outcome: "denied",
-        reason: "stack-anchor-stale"
-      });
-      return { status: 409, body: { error: rawReason("stack-anchor-stale") } };
-    }
-    // The route has already read this set for permission/dialog purposes.
-    // Under the shared project lock it is surveyed fresh once more, so that a
-    // stack apply immediately before does not trigger a stale diff.
-    const containers = await rawOps.containerIds(operation.location);
-    const managed = managedDenial(operation.containerId, containers);
-    if (managed) {
-      audit.write({
-        action: "compose-raw",
-        containerId: operation.containerId,
-        containerName: operation.stackName,
-        actor: operation.actor,
-        networkTier: operation.tier,
-        outcome: "denied",
-        reason: `externally-managed: ${managed.body.services.join(",")}`
-      });
-      return managed;
-    }
-    const currentServices = [...containers.keys()].sort();
-    return executeRawWithoutLock({ ...operation, currentServices });
+    return executeRawLocked(operation);
   });
+}
+
+// The body of `executeRaw` for callers that already hold the project lock.
+export async function executeRawLocked(
+  operation: RawExecution
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  if (operation.containerId && !registry.isAllowed(operation.containerId)) {
+    audit.write({
+      action: "compose-raw",
+      containerId: operation.containerId,
+      containerName: operation.stackName,
+      actor: operation.actor,
+      networkTier: operation.tier,
+      outcome: "denied",
+      reason: "stack-anchor-stale"
+    });
+    return { status: 409, body: { error: rawReason("stack-anchor-stale") } };
+  }
+  // The route has already read this set for permission/dialog purposes.
+  // Under the shared project lock it is surveyed fresh once more, so that a
+  // stack apply immediately before does not trigger a stale diff.
+  const containers = await rawOps.containerIds(operation.location);
+  const managed = managedDenial(operation.containerId, containers);
+  if (managed) {
+    audit.write({
+      action: "compose-raw",
+      containerId: operation.containerId,
+      containerName: operation.stackName,
+      actor: operation.actor,
+      networkTier: operation.tier,
+      outcome: "denied",
+      reason: `externally-managed: ${managed.body.services.join(",")}`
+    });
+    return managed;
+  }
+  const currentServices = [...containers.keys()].sort();
+  return executeRawWithoutLock({ ...operation, currentServices });
 }
 
 // What is already violated on the RUNNING containers of a stack right now.
@@ -651,6 +682,7 @@ export async function previewRaw(
           imagesByService: {},
           missingImages: null,
           servicesWithoutImage: [],
+          mountSources: [],
           // The inventory does not depend on the draft. An empty field here would
           // mean "nothing violated" — and that would be wrong, just because the
           // caller sent an unusable text.
@@ -692,6 +724,7 @@ export async function previewRaw(
         // exactly these refs belong in `acknowledgeImagePull`.
         missingImages: inspection.missingImages,
         servicesWithoutImage: inspection.servicesWithoutImage,
+        mountSources: inspection.mountSources,
         // What is ALREADY violated now. Not the violations this edit would
         // introduce — those are only measurable after the `up` (see above) and
         // are safeguarded there with a rollback.

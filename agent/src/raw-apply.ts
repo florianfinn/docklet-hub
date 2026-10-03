@@ -23,7 +23,8 @@
 import type { ComposeApplyStep } from "contract";
 import type {
   ComposeRawApplyFailureReason,
-  ComposeRawPlanFailureReason
+  ComposeRawPlanFailureReason,
+  MountSource
 } from "contract";
 import {
   CANDIDATE_FILE_NAME,
@@ -39,6 +40,7 @@ import {
   writeCandidateFile,
   writeRawComposeFile
 } from "./compose-store.js";
+import { mountSourcesOf } from "./mount-sources.js";
 
 export type RawLocation = {
   projectDir: string;
@@ -146,6 +148,7 @@ export type RawInspection = {
   diff: ServiceDiff | null;
   missingImages: string[] | null;
   violationsBefore: ServiceViolations[];
+  mountSources: MountSource[];
 };
 
 export async function inspectRawApply(
@@ -194,6 +197,7 @@ export async function inspectRawApply(
   // and is therefore present even if the draft is refused right away — the
   // preview can show it without anyone paying for it.
   const diff = services ? diffServices(options.currentServices, services) : null;
+  const mountSources = services ? mountSourcesOf(normalized, services, location.projectDir) : [];
 
   // ⚠️ From here on calls go against Compose and the engine, and from here on
   // the finding stops exactly where the verdict no longer needs it.
@@ -215,7 +219,8 @@ export async function inspectRawApply(
       // Not collected because the draft already fails before — not "none".
       // What it fails on is said by the verdict (planFromInspection).
       missingImages: null,
-      violationsBefore: []
+      violationsBefore: [],
+      mountSources
     };
   }
 
@@ -233,7 +238,8 @@ export async function inspectRawApply(
     servicesWithoutImage,
     diff,
     missingImages,
-    violationsBefore
+    violationsBefore,
+    mountSources
   };
 }
 
@@ -245,6 +251,7 @@ export type RawPlan =
       imagesByService: Record<string, string>;
       missingImages: string[];
       violationsBefore: ServiceViolations[];
+      mountSources: MountSource[];
     }
   // The reasons are listed as a set in contract/src/agent/compose-reasons.ts (#89):
   // they are contract — the caller translates each one into a follow-up
@@ -288,7 +295,8 @@ export function planFromInspection(inspection: RawInspection): RawPlan {
     diff: inspection.diff,
     imagesByService: inspection.imagesByService,
     missingImages: inspection.missingImages,
-    violationsBefore: inspection.violationsBefore
+    violationsBefore: inspection.violationsBefore,
+    mountSources: inspection.mountSources
   };
 }
 

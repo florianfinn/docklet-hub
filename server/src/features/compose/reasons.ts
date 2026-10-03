@@ -112,6 +112,10 @@ export const COMPOSE_REASONS: Readonly<Record<ComposeRawFailureReason, ReasonEnt
     message: "Die Datei fügt Services hinzu oder entfernt welche. Der Arm verlangt, dass das bestätigt wird.",
     question: (body) => ({ kind: "services", added: asTextList(body.new), removed: asTextList(body.removed) })
   },
+  // Only on creation (`POST /stacks/raw`), like `directory-taken`.
+  "external-source-confirmation-missing": {
+    message: "Das neue Projekt bindet Verzeichnisse außerhalb seines Projektordners ein. Der Arm verlangt, dass jede Quelle bestätigt wird."
+  },
   "image-not-local": {
     message: "Für diese Datei fehlen Images auf dem Host. Der Arm verlangt, dass das Ziehen bestätigt wird.",
     question: (body) => ({ kind: "images", missing: asTextList(body.missingImages) })

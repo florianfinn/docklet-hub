@@ -36,9 +36,17 @@ test("preview and apply take the same lock key", () => {
       `${name} does not lock via rawLockKey`
     );
   }
+  // A new project locks under the key its later stack will carry.
+  for (const name of ["createProject", "previewProject"]) {
+    assert.match(
+      bodyOf(name),
+      /stackLocks\.runExclusive\(rawLockKey\(\{ location, containerId: null, stackName: operation\.name \}\)/,
+      `${name} does not lock via rawLockKey`
+    );
+  }
   // And from ONE computation. Two places that each assemble the key themselves
   // are two locks — and two locks are none.
-  assert.equal(source.match(/stackLocks\.runExclusive\(rawLockKey\(/g)?.length, 2);
+  assert.equal(source.match(/stackLocks\.runExclusive\(rawLockKey\(/g)?.length, 4);
   assert.equal(source.match(/^(?:export )?function rawLockKey\(/gm)?.length, 1);
 });
 

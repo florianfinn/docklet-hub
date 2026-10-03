@@ -47,6 +47,7 @@ import {
   handleStackList,
   handleStackAdopt,
   handleStackRaw,
+  handleStackRawPreview,
   handleContainerCreate,
   handleStackContext,
   handleStackAction
@@ -281,6 +282,11 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
 
     if (request.method === "POST" && url.pathname === "/stacks/raw") {
       await handleStackRaw(ctx);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/stacks/raw-preview") {
+      await handleStackRawPreview(ctx);
       return;
     }
 

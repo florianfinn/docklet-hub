@@ -57,9 +57,12 @@ test("there is no second apply lane next to the stream", () => {
   assert.equal(source.match(/await executeRawApply\(/g)?.length, 1);
   assert.equal(source.match(/^(?:export )?async function executeRawWithoutLock\(/gm)?.length, 1);
   assert.equal(source.match(/^(?:export )?async function executeRaw\(/gm)?.length, 1);
-  // And the stream takes it: three callers share this one lane — the
-  // new stack (/stacks/raw), the apply on the anchor and the stream.
-  assert.equal(source.match(/await executeRaw\(/g)?.length, 3);
+  // And the stream takes it: the apply on the anchor and the stream share
+  // executeRaw; the new project (/stacks/raw) holds the lock itself and calls
+  // the same locked body.
+  assert.equal(source.match(/await executeRaw\(/g)?.length, 2);
+  assert.equal(source.match(/await executeRawLocked\(/g)?.length, 1);
+  assert.equal(source.match(/return executeRawLocked\(operation\)/g)?.length, 1);
   assert.match(streamBranch(), /result = await executeRaw\(\{\s*\.\.\.execution,/);
 });
 
@@ -79,7 +82,7 @@ test("the first line only goes out once the project lock is held", () => {
   // And before every check inside it: everything that comes after belongs in
   // the final line and no longer in a status.
   assert.ok(
-    locked < body.indexOf("registry.isAllowed("),
+    locked < body.indexOf("executeRawLocked("),
     "between the lock and the first line there is a check whose status would be lost"
   );
 
