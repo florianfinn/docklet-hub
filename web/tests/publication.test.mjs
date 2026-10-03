@@ -146,7 +146,9 @@ test("Adress- und Hostnamenprüfung bleiben bei feindlicher Eingabe linear", () 
     ["Labelkette nach @","x@"+"1.".repeat(size/2)],
     ["viele @ ohne Domain","a@".repeat(size/2)],
     ["Bindestrichkette vor Hostendung","a-".repeat(size/2)+".l"+"an"],
-    ["viele Hostendungen",(".l"+"an").repeat(size/4)]
+    ["viele Hostendungen",(".l"+"an").repeat(size/4)],
+    ["viele Hostnamen auf eigenen Zeilen",("n.l"+"an\n").repeat(size/6)],
+    ["viele Adressen auf eigenen Zeilen",(["x","corp.de"].join("@")+"\n").repeat(size/10)]
   ]);
   for (const [name,text] of cases) {
     const started=performance.now();

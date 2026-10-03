@@ -89,9 +89,24 @@ function privateHostIndexes(text) {
   return indexes;
 }
 
+// Line starts are collected once; slicing the text per finding would be quadratic in findings.
+function lineLocator(text) {
+  const starts = [0];
+  for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) starts.push(i + 1);
+  return index => {
+    let low = 0, high = starts.length - 1;
+    while (low < high) {
+      const mid = (low + high + 1) >> 1;
+      if (starts[mid] <= index) low = mid; else high = mid - 1;
+    }
+    return low + 1;
+  };
+}
+
 export function inspectText(text, path = "text") {
   const findings = [];
-  const report = (category, index) => findings.push({ path, line: text.slice(0,index).split("\n").length, category });
+  const lineOf = lineLocator(text);
+  const report = (category, index) => findings.push({ path, line: lineOf(index), category });
   for (const match of emailMatches(text)) if (!EXAMPLE_EMAIL.test(match[0]) && !PUBLIC_AUTOMATION_EMAILS.has(match[0].toLowerCase())) report("non-example-email", match.index);
   for (const match of text.matchAll(SECRET)) report("credential-pattern", match.index);
   for (const match of text.matchAll(LOCAL_PATH)) report("workstation-path", match.index);

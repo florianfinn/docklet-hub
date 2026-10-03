@@ -173,7 +173,9 @@ async function mount(tab: "overview" | "logs", containers: ReturnType<typeof con
     </AppLanguageProvider>
   );
   await settle();
-  if (tab === "logs") await waitFor(() => document.querySelector('[data-testid="stack-log-view"]') !== null);
+  if (tab === "logs") {
+    assert.ok(await waitFor(() => document.querySelector('[data-testid="stack-log-view"]') !== null), "stack-log-view erscheint nicht");
+  }
   await settle();
   return { server, ...mounted };
 }
