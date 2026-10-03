@@ -76,7 +76,10 @@ test("KI-Werkzeuge erscheinen nicht als verknüpfte Co-Autoren", () => {
   const trailer=(name,email)=>["Co-authored-by",": "+name+" <"+email+">"].join("");
   assert.ok(inspectText(trailer("Claude","bot@users.noreply.github.com")).some(f=>f.category==="ai-co-author"));
   assert.ok(inspectText("fix: x\n\n"+trailer("Copilot","bot@users.noreply.github.com").toLowerCase()).some(f=>f.category==="ai-co-author"));
+  assert.ok(inspectText(trailer("Claude Opus 5","bot@users.noreply.github.com")).some(f=>f.category==="ai-co-author"));
+  assert.ok(inspectText(trailer("Helper",["noreply","anthropic.com"].join("@"))).some(f=>f.category==="ai-co-author"));
   assert.deepEqual(inspectText(trailer("Erika Muster","erika@users.noreply.github.com")),[]);
+  assert.deepEqual(inspectText(trailer("Claude Martin","claude-martin@users.noreply.github.com")).filter(f=>f.category==="ai-co-author"),[]);
   assert.deepEqual(inspectText("Assisted-by: Claude Code"),[]);
 });
 
