@@ -23,6 +23,11 @@ in docs/design/ und sind dort im Index verlinkt.
   SHADCNBLOCKS_API_KEY, nachfragen. Nur wenn das keinen Baustein liefert,
   die freie Registry verwenden. Jede Kopie erhält einen Herkunftskopf.
 
+- Keine automatisch eingefügten Autoren- oder Maintainerzuschreibungen an
+  KI-Werkzeuge und keine Co-Authored-By-Trailer für solche Werkzeuge in Code,
+  Dokumentation, Commit-Texten, Issues oder PRs. Echte Lizenz- und
+  Herkunftsnachweise übernommener Komponenten bleiben erhalten.
+
 ## Öffentliche Daten
 
 - Das Repo und alle seine Issues, PRs, Commit-Texte, Screenshots und
