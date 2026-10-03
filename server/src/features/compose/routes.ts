@@ -85,6 +85,22 @@ function writeRejection(error: AgentError, response: Response, selectionSupporte
   response.status(rejection.status).json(rejection.body);
 }
 
+/**
+ * A refused create also says whether the agent removed the project directory
+ * again; `false` means a container left data in it.
+ */
+function writeProjectRejection(error: AgentError, response: Response): void {
+  const rejection = describeComposeRejection(error);
+  const detail = error.detail;
+  const removed =
+    typeof detail === "object" && detail !== null && !Array.isArray(detail)
+      ? (detail as Record<string, unknown>).projectDirRemoved
+      : undefined;
+  response
+    .status(rejection.status)
+    .json(typeof removed === "boolean" ? { ...rejection.body, projectDirRemoved: removed } : rejection.body);
+}
+
 export function registerComposeRoutes(router: Router, options: ComposeRouteOptions): void {
   const { auth, pool, repository, agentSecret, probeHost, resyncHost } = options;
   const hosts = createHostAccess({ repository, pool, agentSecret });
@@ -242,9 +258,11 @@ export function registerComposeRoutes(router: Router, options: ComposeRouteOptio
     "/hosts/:hostId/projects",
     requireAdmin(auth),
     withSession(auth, async (request, response, user) => {
+      // The answer names the project directory of the host.
+      response.setHeader("Cache-Control", "no-store");
       const result = await projects.create({ hostId: String(request.params.hostId), userId: user.id }, request.body);
       if (!result.ok) {
-        respondWithFailure(response, result.failure, writeRejection);
+        respondWithFailure(response, result.failure, writeProjectRejection);
         return;
       }
       response.json(result.outcome);

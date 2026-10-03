@@ -1,15 +1,10 @@
-import type {
-  HostCycleOutcome,
-  HostRecord,
-  HostRouteAccessResult,
-  HostRouteRequest,
-  RouteWriting
-} from "../../domain/hosts/index.js";
-import { AgentError, type Actor } from "../../platform/agent-transport/protocol.js";
+import type { HostRouteAccessResult, HostRouteRequest, RouteWriting } from "../../domain/hosts/index.js";
+import { AgentError } from "../../platform/agent-transport/protocol.js";
 import type { RouteFailure } from "../../platform/http/route-failure.js";
 import { MAX_COMPOSE_BYTES } from "./agent-client.js";
 import * as projectClient from "./project-client.js";
 import type { ProjectPreview } from "./project-client.js";
+import { resyncAfterWrite, type ResyncHost, type ResyncReport } from "./resync.js";
 import type { ComposeQuestion } from "./types.js";
 
 // Creating a hub-owned project (#3, decisions in #128): the dry run and the
@@ -22,14 +17,14 @@ export type ProjectAgent = Pick<typeof projectClient, "previewProjectOnAgent" | 
 export type ProjectServiceDeps = {
   openHost: (request: HostRouteRequest, writing: RouteWriting) => Promise<HostRouteAccessResult>;
   /** The reconciliation after a create; absent means "not wired", and the answer says so. */
-  resyncHost?: (record: HostRecord, actor: Actor) => Promise<HostCycleOutcome>;
+  resyncHost?: ResyncHost;
   agent?: ProjectAgent;
 };
 
 type Failed = { ok: false; failure: RouteFailure };
 
 export type ProjectCreateOutcome =
-  | { kind: "created"; project: Record<string, unknown>; resync: { status: string; error: string | null } }
+  | { kind: "created"; project: Record<string, unknown>; resync: ResyncReport }
   | { kind: "question"; question: ComposeQuestion; projectDirRemoved: boolean | null };
 
 export type ProjectService = {
@@ -72,18 +67,6 @@ export function createProjectService(deps: ProjectServiceDeps): ProjectService {
     } catch (error) {
       if (!(error instanceof AgentError)) throw error;
       return { ok: false, failure: { kind: "agent-error", error } };
-    }
-  }
-
-  // A failed reconciliation does not undo a create; it is reported next to it,
-  // because the new containers stay unreachable until the registry knows them.
-  async function resync(host: HostRecord, actor: Actor): Promise<{ status: string; error: string | null }> {
-    if (!deps.resyncHost) return { status: "skipped", error: null };
-    try {
-      const outcome = await deps.resyncHost(host, actor);
-      return { status: outcome.status, error: outcome.error };
-    } catch (error) {
-      return { status: "failed", error: error instanceof Error ? error.message : String(error) };
     }
   }
 
@@ -136,7 +119,7 @@ export function createProjectService(deps: ProjectServiceDeps): ProjectService {
       }
       // Awaited before answering: the surface reloads right after, and the new
       // containers must already be in the agent's registry by then.
-      const resynced = await resync(access.host, access.options.actor);
+      const resynced = await resyncAfterWrite(deps.resyncHost, access.host, access.options.actor);
       return { ok: true, outcome: { kind: "created", project: created.value.body, resync: resynced } };
     }
   };
