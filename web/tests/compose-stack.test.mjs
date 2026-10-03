@@ -320,21 +320,29 @@ test("jede Umgebungsvariable, die der Hub liest, wird ihm auch übergeben", () =
   );
 });
 
-test("das Image läuft auf derselben Node-Fassung wie die Arbeitskopie", () => {
+test("die Images laufen auf derselben Node-Fassung wie die Arbeitskopie", () => {
   // The local Node version and the container build must match.
   // Otherwise the local check verifies a different runtime than deployment.
   const nvmrc = readFileSync(new URL(".nvmrc", `file://${ROOT}`), "utf8").trim();
-  const dockerfile = readFileSync(new URL("server/Dockerfile", `file://${ROOT}`), "utf8");
+  for (const path of ["server/Dockerfile", "agent/Dockerfile"]) {
+    const dockerfile = readFileSync(new URL(path, `file://${ROOT}`), "utf8");
+    const bases = [...dockerfile.matchAll(/^FROM\s+(node:\S+)/gm)].map((found) => found[1]);
+    assert.ok(bases.length > 0, `${path} nennt kein node-Basisimage`);
+    for (const base of bases) {
+      assert.match(base, /^node:\d+-alpine@sha256:[0-9a-f]{64}$/, `${path}: „${base}" ist nicht auf Tag und Digest gepinnt`);
+      assert.equal(base.match(/^node:(\d+)-/)[1], nvmrc, `.nvmrc sagt Node ${nvmrc}, ${path} baut auf „${base}"`);
+    }
+  }
+});
 
-  const baseImages = [...dockerfile.matchAll(/^FROM\s+node:(\d+)-/gm)].map((findings) => findings[1]);
-  assert.ok(baseImages.length > 0, "server/Dockerfile nennt kein node-Basisimage");
-
-  const differing = [...new Set(baseImages)].filter((version) => version !== nvmrc);
-  assert.deepEqual(
-    differing,
-    [],
-    `.nvmrc sagt Node ${nvmrc}, das Dockerfile baut auf Node ${differing.join(", ")}`
-  );
+test("@types/node beschreibt dieselbe Node-Fassung wie .nvmrc", () => {
+  // Newer types let tsc accept APIs that the Node runtime does not have.
+  const nvmrc = readFileSync(new URL(".nvmrc", `file://${ROOT}`), "utf8").trim();
+  for (const pkg of ["agent", "server", "web"]) {
+    const manifest = JSON.parse(readFileSync(new URL(`${pkg}/package.json`, `file://${ROOT}`), "utf8"));
+    const range = manifest.dependencies?.["@types/node"] ?? manifest.devDependencies?.["@types/node"];
+    assert.equal(range?.match(/^\^(\d+)\./)?.[1], nvmrc, `${pkg}: @types/node „${range}" passt nicht zu Node ${nvmrc}`);
+  }
 });
 
 test("das Image bekommt die Migrationen mitkopiert", () => {

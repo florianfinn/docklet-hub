@@ -3,17 +3,11 @@
 #
 #   docker build -f agent/Dockerfile .
 #
-# ⚠️ The base follows the Node release series (`24-alpine`, like the hub) and
-# is not nailed to a digest: the agent is the component with root-equivalent
-# access, and there a rebuilt image with current Alpine and Node patches is
-# worth more than a reproducible old one. Whether the agent gets a digest
-# after all is decided with the release workflow (#279).
+# The base is pinned to tag and digest like the hub; Dependabot moves the
+# digest within the `24-alpine` series, so patched bases still arrive.
 #
-# ⚠️ WHOEVER RAISES THE NODE SERIES HERE raises `@types/node` in
-# `agent/package.json` in the SAME change: both stages and the types describe
-# the same runtime, and a type jump without a base jump lets `tsc` accept an
-# API that does not exist on the target host.
-FROM node:24-alpine AS build
+# Node series, `.nvmrc` and `@types/node` change together; a test enforces it.
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
 # The version stands here AND in the `packageManager` field of the root
 # package.json, so image and tool do not drift apart. Installed through npm
 # rather than corepack: the corepack bundled with the base image is older than
@@ -52,7 +46,7 @@ RUN mkdir -p /out/node_modules/contract \
  && cp -r contract/dist /out/node_modules/contract/dist \
  && cd /out && node --input-type=module -e "await import('contract')"
 
-FROM node:24-alpine
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1
 WORKDIR /app
 ENV NODE_ENV=production
 # No install in the runtime layer, and no pnpm: the runtime dependencies are
