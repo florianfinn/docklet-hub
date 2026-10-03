@@ -1,6 +1,7 @@
 // ⚠️ Die Reihenfolge der Importe ist BEDEUTUNG: der DOM muss stehen, bevor
 // React geladen wird (siehe `dom-harness.tsx`).
 import { renderInDom, settle } from "./dom-harness.js";
+import { composeSettled } from "./compose-harness.js";
 
 import React from "react";
 
@@ -160,7 +161,7 @@ async function mount(answers: Record<string, Answer>) {
       </TooltipProvider>
     </AppLanguageProvider>
   );
-  await settle();
+  assert.ok(await composeSettled(), "ComposeView did not settle");
   await settle();
   return { server, ...mounted };
 }
