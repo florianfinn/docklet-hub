@@ -48,10 +48,13 @@ Merge only through scripts/merge-reviewed-pr.mjs with the current private
 review report and UTF-8 merge payload. It verifies the newest successful
 Actions run for exactly the reviewed integration and rechecks the PR SHAs.
 
-Use fresh issues with explicit scope, dependencies and acceptance criteria.
-Issues belong to feature/intermediate milestones; release:first-public joins
-the release scope. Decisions have their own issues. Practical release
-acceptance is distinct from implementation completion.
+Open issues only for feature work, product or architecture decisions and
+findings that are not fixed in the current session. Small self-contained
+fixes, maintenance, dependency updates and rule or documentation changes go
+straight to a pull request without an issue or milestone. Feature and release
+issues state scope, dependencies and acceptance criteria and belong to
+feature/intermediate milestones; release:first-public joins the release scope.
+Practical release acceptance is distinct from implementation completion.
 
 ## Code and protocol
 

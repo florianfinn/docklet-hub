@@ -8,8 +8,8 @@ Das gemeinsame Protokoll liegt in contract/.
 Die erste öffentliche Produktversion umfasst Logs, Shell, Compose- und
 Dateibearbeitung, Laufzeitaktionen, Updates, Rollback, Metriken, Live-Stand,
 Speicherübersicht, Aufräumen, Volume-/Netzlisten und Stack-Abhängigkeiten.
-Eine neue Installation entsteht ohne alte Betriebsdaten. Arbeit und Abnahme
-werden ausschließlich in GitHub Issues und Meilensteinen dokumentiert.
+Eine neue Installation entsteht ohne alte Betriebsdaten. Arbeitsstand und
+Abnahme stehen in GitHub Issues, Meilensteinen und Pull Requests.
 
 Hub-eigene Projekte erhalten je ein Verzeichnis und eine Compose-Datei
 unter dem Setup-Basispfad. Mehrere Services teilen ein Projekt. Bind-Mounts

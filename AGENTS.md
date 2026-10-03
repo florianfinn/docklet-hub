@@ -71,11 +71,21 @@ in docs/design/ und sind dort im Index verlinkt.
   Meilensteine vor ihrem Beginn. Neue track-Sammel-Issues werden nicht angelegt.
 - Jeder Meilenstein nennt Ziel, Umfang, Abhängigkeiten, Zielbranch und
   Abnahmekriterium. Ein Abschluss-Issue trägt den Nachweis.
-- Ein Issue gehört einem konkreten Meilenstein. Feature-Meilensteine
-  verlinken ihre Zwischenziele; Release-Meilensteine verlinken Pflichtfeatures.
-  release:first-public ermöglicht die vollständige Abfrage ohne doppelte Issues.
-- Entscheidungen tragen eigene Issues und werden in docs/design/ begründet.
-  Widersprüche zu Arbeitsaufträgen werden vor der Umsetzung aufgelöst.
+- Issues entstehen nur für Feature-Arbeit, Produkt- und
+  Architekturentscheidungen und Befunde, die nicht in der laufenden Sitzung
+  erledigt werden. Kleine eigenständige Aufgaben wie Korrekturen, Wartung,
+  Abhängigkeitspflege oder Regel- und Doku-Anpassungen werden direkt per PR
+  umgesetzt, ohne vorheriges Issue und ohne Meilenstein. Issues zu Befunden
+  und Entscheidungen bekommen einen Meilenstein, wenn sie zu einem Feature
+  oder Release gehören.
+- Feature- und Release-Issues gehören einem konkreten Meilenstein.
+  Feature-Meilensteine verlinken ihre Zwischenziele; Release-Meilensteine
+  verlinken Pflichtfeatures. release:first-public ermöglicht die vollständige
+  Abfrage ohne doppelte Issues.
+- Produkt- und Architekturentscheidungen tragen eigene Issues und werden in
+  docs/design/ begründet. Vorgaben des Maintainers zu Arbeitsweise und Regeln
+  werden ohne eigenes Issue direkt per PR umgesetzt. Widersprüche zu Arbeitsaufträgen werden vor der
+  Umsetzung aufgelöst.
 - Eine Aufgabe schließt erst nach Merge in ihren Zielbranch, grünen Prüfungen
   und unabhängigem Review. Auf Feature-Branches geschieht der Abschluss
   manuell mit PR, Merge-SHA, Review und Prüfergebnissen im Kommentar.

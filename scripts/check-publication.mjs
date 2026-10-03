@@ -4,11 +4,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
-const EMAIL = /[A-Z0-9._%+-]+@(?:[A-Z0-9-]+\.)+[A-Z][A-Z0-9-]*/gi;
+const EMAIL = /[A-Z0-9._%+-]+@(?:[A-Z0-9-]+\.)+[A-Z][A-Z0-9-]*/giy;
 const PRIVATE_ADDRESS = /\b(?:192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3})\b/g;
 const SECRET = /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----|\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[0-9A-Z]{16})\b/g;
 const LOCAL_PATH = /[A-Z]:[\\/](?:Users|Documents and Settings)[\\/][^\s"'\x60]+/gi;
 const PRIVATE_HOST = /\b[a-z0-9-]+\.(?:lan|home\.arpa|internal)\b/gi;
+const PRIVATE_HOST_SUFFIX = /\.(?:lan|home\.arpa|internal)\b/gi;
 // AI tools may be named in plain text, never as a co-author linked to an account.
 // Token checks instead of nested patterns keep the scan linear on hostile input.
 const CO_AUTHOR = /^[ \t]*Co-authored-by:([^<\n]*)<([^>\n]*)>/gim;
@@ -51,13 +52,65 @@ const ADDRESS_FIXTURES = new Map([
   ["scripts/check-publication.mjs",new Set(["192.168.77.0","192.168.77.1","192.168.77.31","10.0.0.5","172.16.0.1","172.31.255.254","100.64.0.1","10.99.0.1","10.9.9.9","192.168.1.5","192.168.77.10","172.20.0.3","10.0.0.2","172.20.0.5"])]
 ]);
 
+// Same matches as EMAIL, tried once per "@" at the start of its local part; a scan from every
+// position of a long word would be quadratic.
+function emailMatches(text) {
+  const found = [];
+  let consumed = 0;
+  for (let at = text.indexOf("@"); at !== -1; at = text.indexOf("@", at + 1)) {
+    if (at < consumed) continue;
+    let start = at;
+    while (start > consumed && /[A-Z0-9._%+-]/i.test(text[start - 1])) start--;
+    EMAIL.lastIndex = start;
+    const match = EMAIL.exec(text);
+    if (!match) continue;
+    found.push(match);
+    consumed = match.index + match[0].length;
+  }
+  return found;
+}
+
+// Same matches as PRIVATE_HOST, found per suffix hit so a long label is scanned once instead of once per start.
+function privateHostIndexes(text) {
+  const indexes = [];
+  let consumed = 0;
+  for (const hit of text.matchAll(PRIVATE_HOST_SUFFIX)) {
+    if (hit.index < consumed) continue;
+    let start = hit.index;
+    while (start > consumed && /[a-z0-9-]/i.test(text[start - 1])) start--;
+    const from = start > 0 ? start - 1 : 0;
+    const window = text.slice(from, hit.index + hit[0].length);
+    PRIVATE_HOST.lastIndex = start - from;
+    const match = PRIVATE_HOST.exec(window);
+    if (!match) continue;
+    indexes.push(from + match.index);
+    consumed = hit.index + hit[0].length;
+  }
+  return indexes;
+}
+
+// Line starts are collected once; slicing the text per finding would be quadratic in findings.
+function lineLocator(text) {
+  const starts = [0];
+  for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) starts.push(i + 1);
+  return index => {
+    let low = 0, high = starts.length - 1;
+    while (low < high) {
+      const mid = (low + high + 1) >> 1;
+      if (starts[mid] <= index) low = mid; else high = mid - 1;
+    }
+    return low + 1;
+  };
+}
+
 export function inspectText(text, path = "text") {
   const findings = [];
-  const report = (category, index) => findings.push({ path, line: text.slice(0,index).split("\n").length, category });
-  for (const match of text.matchAll(EMAIL)) if (!EXAMPLE_EMAIL.test(match[0]) && !PUBLIC_AUTOMATION_EMAILS.has(match[0].toLowerCase())) report("non-example-email", match.index);
+  const lineOf = lineLocator(text);
+  const report = (category, index) => findings.push({ path, line: lineOf(index), category });
+  for (const match of emailMatches(text)) if (!EXAMPLE_EMAIL.test(match[0]) && !PUBLIC_AUTOMATION_EMAILS.has(match[0].toLowerCase())) report("non-example-email", match.index);
   for (const match of text.matchAll(SECRET)) report("credential-pattern", match.index);
   for (const match of text.matchAll(LOCAL_PATH)) report("workstation-path", match.index);
-  for (const match of text.matchAll(PRIVATE_HOST)) report("private-hostname", match.index);
+  for (const index of privateHostIndexes(text)) report("private-hostname", index);
   for (const match of text.matchAll(CO_AUTHOR)) if (isAiName(match[1]) || isAiEmail(match[2])) report("ai-co-author", match.index);
   for (const match of text.matchAll(PRIVATE_ADDRESS)) {
     if (!ADDRESS_FIXTURES.get(path)?.has(match[0]) && !PRODUCT_NETWORK.test(match[0])) report("private-network-address", match.index);
