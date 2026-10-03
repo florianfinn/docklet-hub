@@ -1,5 +1,5 @@
 import { FolderPlus } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Messages } from "use-intl";
 import { useTranslations } from "use-intl";
@@ -73,8 +73,16 @@ export function NewProjectDialog({ hostId, hostName }: { hostId: string; hostNam
   const [phase, setPhase] = useState<Phase>({ kind: "editing" });
   const [failure, setFailure] = useState<Failure | null>(null);
 
+  const blockerId = useId();
   const previewed = previewedFor !== null && previewedFor.name === name.trim() && previewedFor.content === content;
   const blocker = projectBlockerOf(name, preview, previewed, confirmations);
+
+  // An open question belongs to the checked draft; editing ends it, so it can
+  // never be answered for a draft the dry run did not see.
+  const edited = (apply: () => void): void => {
+    apply();
+    if (phase.kind === "question") setPhase({ kind: "editing" });
+  };
 
   const reset = (): void => {
     setName("");
@@ -89,6 +97,7 @@ export function NewProjectDialog({ hostId, hostName }: { hostId: string; hostNam
   const check = async (): Promise<void> => {
     setChecking(true);
     setFailure(null);
+    setPhase({ kind: "editing" });
     try {
       const next = await previewProject(hostId, name.trim(), content);
       setPreview(next);
@@ -121,7 +130,7 @@ export function NewProjectDialog({ hostId, hostName }: { hostId: string; hostNam
 
   const answer = (question: ComposeQuestion): void => {
     const next = projectAnswered(confirmations, question);
-    if (next === null) return;
+    if (next === null || !previewed) return;
     setConfirmations(next);
     void create(next);
   };
@@ -156,7 +165,10 @@ export function NewProjectDialog({ hostId, hostName }: { hostId: string; hostNam
               <Input
                 id={`project-name-${hostId}`}
                 value={name}
-                onChange={(event) => setName(event.target.value)}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  edited(() => setName(value));
+                }}
                 disabled={phase.kind === "creating"}
                 autoComplete="off"
                 spellCheck={false}
@@ -166,7 +178,11 @@ export function NewProjectDialog({ hostId, hostName }: { hostId: string; hostNam
             </div>
 
             <div className="overflow-hidden rounded-md border border-border">
-              <ComposeEditor value={content} onChange={setContent} disabled={phase.kind === "creating"} />
+              <ComposeEditor
+                value={content}
+                onChange={(value) => edited(() => setContent(value))}
+                disabled={phase.kind === "creating"}
+              />
             </div>
 
             <div className="flex items-center gap-3">
@@ -200,7 +216,7 @@ export function NewProjectDialog({ hostId, hostName }: { hostId: string; hostNam
             ) : null}
 
             {phase.kind === "creating" ? (
-              <p className="text-[13px]" data-testid="project-creating">
+              <p className="text-[13px]" role="status" data-testid="project-creating">
                 {t("projectCreating")}
               </p>
             ) : null}
@@ -211,12 +227,13 @@ export function NewProjectDialog({ hostId, hostName }: { hostId: string; hostNam
                 size="sm"
                 disabled={blocker !== null || phase.kind === "creating"}
                 onClick={() => void create(confirmations)}
+                aria-describedby={blocker !== null ? blockerId : undefined}
                 data-testid="project-create"
               >
                 {t("projectCreate")}
               </Button>
               {blocker !== null ? (
-                <span className="text-[12px] text-muted-foreground" data-testid="project-blocker">
+                <span id={blockerId} className="text-[12px] text-muted-foreground" data-testid="project-blocker">
                   {blockerText(t, blocker)}
                 </span>
               ) : null}
@@ -325,7 +342,7 @@ function QuestionNote({
       ) : null}
       {answerable ? (
         <Button type="button" size="sm" className="self-start" onClick={onAnswer} data-testid="project-answer">
-          {t("composeAnswerAndRetry")}
+          {t("projectAnswerAndRetry")}
         </Button>
       ) : null}
     </div>
@@ -391,6 +408,6 @@ function blockerText(t: ReturnType<typeof useTranslations>, blocker: ProjectBloc
     case "unconfirmed-external":
       return t("projectBlockerExternal", { count: blocker.missing.length });
     default:
-      return t("composeBlockerStale");
+      return t("projectBlockerStale");
   }
 }

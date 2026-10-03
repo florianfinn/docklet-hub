@@ -242,6 +242,7 @@ export function HostCard({ host, role, counters, onRemoved, onAgentUpdated, rend
   // Ton und Farbeinsatz kommen aus der Ablage (D7a) und nicht mehr aus der
   // Kennung. Ein Arm ohne vergebene Farbe steht auf „neutral".
   const display = hostDisplay(host);
+  const actions = role === "admin" ? (renderActions?.(host) ?? null) : null;
 
   return (
     <Card
@@ -308,9 +309,9 @@ export function HostCard({ host, role, counters, onRemoved, onAgentUpdated, rend
       {/* Die Aktionen tragen alle `requireAdmin`-Routen aus Phase 4a. Die Rolle
           verbirgt sie hier nur — der Server weist sie ohnehin ab, und das ist
           die Stelle, die zählt (§4, „Rolle nur zum Verbergen"). */}
-      {role === "admin" && (host.kind !== "local" || renderActions !== undefined) ? (
+      {role === "admin" && (host.kind !== "local" || actions !== null) ? (
         <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-2.5">
-          {renderActions?.(host)}
+          {actions}
           {host.kind !== "local" ? (
             <>
               <AgentUpdate host={host} onFinished={onAgentUpdated} />

@@ -201,6 +201,8 @@ export const enCompose = {
     "The arm''s allowlist is not reconciled yet. Until the next reconciliation it refuses actions on the new containers.",
   projectDirectoryLeft:
     "A container wrote files into the project folder. The folder therefore stays and keeps the name taken.",
+  projectAnswerAndRetry: "Confirm and create again",
+  projectBlockerStale: "The confirmations no longer match the check. Checking again resets them.",
   projectBlockerName: "Enter a name first.",
   projectBlockerCheck: "Run the check first.",
   projectBlockerExternal:

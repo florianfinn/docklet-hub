@@ -245,6 +245,9 @@ export const deCompose = {
     "Die Allowlist des Arms ist noch nicht abgeglichen. Bis zum nächsten Abgleich lehnt er Aktionen an den neuen Containern ab.",
   projectDirectoryLeft:
     "Im Projektordner liegen Dateien, die ein Container geschrieben hat. Der Ordner bleibt deshalb stehen und belegt den Namen.",
+  projectAnswerAndRetry: "Bestätigen und erneut anlegen",
+  projectBlockerStale:
+    "Die Bestätigungen passen nicht mehr zur Prüfung. Erneut prüfen setzt sie zurück.",
   projectBlockerName: "Zuerst einen Namen eintragen.",
   projectBlockerCheck: "Zuerst prüfen lassen.",
   projectBlockerExternal:

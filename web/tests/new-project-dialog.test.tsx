@@ -171,3 +171,44 @@ test("a refused create says when data stayed in the folder", async () => {
     await done();
   }
 });
+
+test("editing after a question ends it, and a new check is needed before creating", async () => {
+  const { hub, done } = await mount([
+    {
+      status: 200,
+      body: { outcome: { kind: "question", question: { kind: "external-sources", sources: ["/mnt/user/media"] }, projectDirRemoved: true } }
+    }
+  ]);
+  try {
+    await openAndCheck();
+    await click("project-confirm-service-app");
+    await click("project-create");
+    assert.equal(await waitFor(() => byTestId("project-question") !== null), true, "the question is shown");
+
+    await typeName("notes2");
+    assert.equal(byTestId("project-question"), null, "the question ended with the edit");
+    assert.equal(createDisabled(), true, "creating waits for a new check");
+    assert.equal(hub.bodies.length, 1, "nothing was sent for the edited draft");
+  } finally {
+    await done();
+  }
+});
+
+test("checking again clears an open question", async () => {
+  const { done } = await mount([
+    {
+      status: 200,
+      body: { outcome: { kind: "question", question: { kind: "external-sources", sources: ["/mnt/user/media"] }, projectDirRemoved: true } }
+    }
+  ]);
+  try {
+    await openAndCheck();
+    await click("project-confirm-service-app");
+    await click("project-create");
+    assert.equal(await waitFor(() => byTestId("project-question") !== null), true);
+    await click("project-check");
+    assert.equal(await waitFor(() => byTestId("project-question") === null), true, "the old question is gone");
+  } finally {
+    await done();
+  }
+});
