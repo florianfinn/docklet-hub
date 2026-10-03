@@ -1,0 +1,291 @@
+# One tag `v<semver>` builds, signs and publishes two images:
+#
+#   ghcr.io/<owner>/docklet-hub         the hub      (server/Dockerfile)
+#   ghcr.io/<owner>/docklet-hub-agent   the agent    (agent/Dockerfile)
+#
+# Both carry the same version (`web/tests/release-versions.test.mjs`).
+#
+# Release publication follows successful local checks, GitHub PR checks,
+# independent review and practical acceptance of the release candidate.
+# Creating this repository does not trigger a product release.
+#
+# `vX.Y.Z-rc.N` is a test tag: it publishes and signs like a release, never
+# moves `:latest` and is marked as a pre-release. The first run of this
+# workflow is done by hand with such a tag before the first real release, on a
+# throwaway commit whose two `package.json` files carry the test version
+# (`0.32.0-rc.1`); the tag must equal both.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+"
+
+env:
+  # The same version that stands in the README's "Verify the signature": the
+  # target host verifies with exactly the tool that signs here. The proof step
+  # below uses the same image — if the two drift apart, it shows at the
+  # release and not on the host.
+  COSIGN: ghcr.io/sigstore/cosign/cosign:v3.1.3
+  # The expected signature identity. It stands here once because the proof
+  # needs it three times: once right, twice deliberately wrong.
+  IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/tags/${{ github.ref_name }}
+  ISSUER: https://token.actions.githubusercontent.com
+
+# Nothing by default; every job asks for what it needs.
+permissions: {}
+
+jobs:
+  versions:
+    name: Check versions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the source
+        # Pinned to the commit. A movable tag would decide which code runs
+        # here, next to the jobs that publish.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Tag, hub version and agent version are one string
+        # The same guard that runs with `pnpm run test`, plus the tag itself,
+        # which only exists here. Needs no install: the guard uses `node:`
+        # modules only.
+        run: |
+          test "v$(node --print "require('./package.json').version")" = "$GITHUB_REF_NAME"
+          test "v$(node --print "require('./agent/package.json').version")" = "$GITHUB_REF_NAME"
+          node --test web/tests/release-versions.test.mjs
+
+  publish:
+    name: Publish ${{ matrix.name }}
+    needs: versions
+    runs-on: ubuntu-latest
+    # No `fail-fast`: when one image fails after the other one has already been
+    # signed and pushed, the run must still finish that one cleanly instead of
+    # being cut off between the push and the signature.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: hub
+            image: docklet-hub
+            dockerfile: server/Dockerfile
+            description: "Docker hub: manage the containers of several hosts from one dashboard"
+          - name: agent
+            image: docklet-hub-agent
+            dockerfile: agent/Dockerfile
+            description: "Docker agent for homelab hosts: the only process with docker.sock access, reachable over WireGuard only"
+    permissions:
+      contents: read
+      packages: write
+      # Keyless signature. cosign gets the OIDC token of THIS run through it
+      # and has Fulcio issue a certificate for the identity
+      #
+      #   https://github.com/<repo>/.github/workflows/release.yml@refs/tags/<tag>
+      #
+      # That very string is what the target host names when it verifies; it is
+      # the only reason the signature says more than "somebody signed".
+      id-token: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+    steps:
+      - name: Check out the source
+        # Pinned to the commit. This job runs with `packages: write` and logs in
+        # to GHCR with the GITHUB_TOKEN: what is checked out here sits next to
+        # the credentials that publish the release image.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history with tags. The step "Decide the moving `latest` tag"
+          # must see every release tag to judge whether this one is the
+          # highest. The default checkout fetches the one commit only, and
+          # then every release would be the highest.
+          fetch-depth: 0
+
+      - name: Decide the moving `latest` tag
+        # `:latest` may only move along if this release is also the highest one.
+        # The workflow fires on EVERY matching tag, including a straggler of an
+        # older line (v0.9.1 while v0.10.1 is long out). Without this check
+        # `:latest` would point at the OLDER code afterwards, and every host that
+        # follows it would pick that up on its next update with nothing turning
+        # red anywhere.
+        #
+        # `--sort=-v:refname` sorts by version parts, not alphabetically: the
+        # alphabetical order puts `v0.9.0` above `v0.10.0`. Test tags (`-rc.N`)
+        # are left out of the comparison and never move `latest` themselves.
+        run: |
+          HIGHEST="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -v -- '-' | head -n1)"
+          if [ "$HIGHEST" = "$GITHUB_REF_NAME" ]; then
+            echo "MOVE_LATEST=yes" >> "$GITHUB_ENV"
+            echo "$GITHUB_REF_NAME is the highest release tag: :latest moves along."
+          else
+            echo "MOVE_LATEST=no" >> "$GITHUB_ENV"
+            echo "$GITHUB_REF_NAME does not exceed ${HIGHEST:-any release}: :latest stays."
+          fi
+
+      - name: Log in to GHCR
+        run: printf '%s' "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Protect the release tag from being overwritten
+        # The flip side of signing and proving AFTER the push: when one of those
+        # steps fails, the image is already in GHCR and this guard blocks the
+        # second attempt with the same tag. Then either delete the package
+        # version in GHCR or raise the version — an unsigned image under a
+        # release tag is exactly what the signature is there to prevent, and
+        # must not stay.
+        run: |
+          if docker manifest inspect "${IMAGE}:${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "${IMAGE}:${GITHUB_REF_NAME} exists already and is not overwritten."
+            exit 1
+          fi
+
+      - name: Set up the Buildx builder
+        # Provenance and SBOM are written as manifests NEXT TO the image. The
+        # default `docker` driver cannot do that; it takes the
+        # `docker-container` driver.
+        #
+        # A `run:` step instead of `docker/setup-buildx-action` on purpose: this
+        # job runs with `packages: write`, and every further third-party action
+        # is one more place that decides what runs next to the GHCR token.
+        # `docker buildx` is on the runner anyway.
+        #
+        # BuildKit and the SBOM generator run INSIDE the build and see the same
+        # credentials; both are nailed to one version. Dependabot does not see
+        # these two values (they stand in `run:` lines, not in a Dockerfile) and
+        # they are raised by hand.
+        run: |
+          docker buildx create \
+            --name release \
+            --driver docker-container \
+            --driver-opt image=moby/buildkit:v0.32.2 \
+            --use
+
+      - name: Build, attest and publish the image
+        # `--provenance=mode=max` instead of `=true`: `min` records WHAT was
+        # built, `max` also HOW — steps, source, digests of the base. That is
+        # the half that makes a provenance verifiable at all. No secret lands in
+        # the attestation: neither Dockerfile takes an ARG or a build secret.
+        #
+        # Pushed straight from buildx instead of a following `docker push`: the
+        # `docker-container` driver stores nothing in the local image store, and
+        # the attestations only exist in the registry index anyway.
+        #
+        # The build context is the repository root for both images: the lockfile
+        # and the workspace list live there.
+        run: |
+          # An array on purpose: with an assembled string the word splitting of
+          # the shell would decide what an argument is.
+          TAGS=(--tag "${IMAGE}:${GITHUB_REF_NAME}" --tag "${IMAGE}:sha-${GITHUB_SHA}")
+          if [ "$MOVE_LATEST" = "yes" ]; then
+            TAGS+=(--tag "${IMAGE}:latest")
+          fi
+          docker buildx build \
+            --file "${{ matrix.dockerfile }}" \
+            --provenance=mode=max \
+            --sbom=generator=docker/buildkit-syft-scanner:1.12.0 \
+            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            --label "org.opencontainers.image.version=${GITHUB_REF_NAME}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.description=${{ matrix.description }}" \
+            --label "org.opencontainers.image.licenses=Apache-2.0" \
+            "${TAGS[@]}" \
+            --metadata-file metadata.json \
+            --push \
+            .
+          # The digest from the build, not from a second question to the
+          # registry: what gets signed is what this run has just pushed.
+          echo "DIGEST=${IMAGE}@$(jq -r '."containerimage.digest"' metadata.json)" >> "$GITHUB_ENV"
+
+      - name: Prove provenance and SBOM
+        # Looked at instead of assumed. A build that silently did not write the
+        # attestations runs through green and shows only when somebody needs
+        # them.
+        run: |
+          docker buildx imagetools inspect "$DIGEST" --format '{{ json .Provenance }}' | grep -q '"buildType"'
+          docker buildx imagetools inspect "$DIGEST" --format '{{ json .SBOM }}' | grep -q '"spdxVersion"'
+
+      - name: Sign the image (keyless)
+        # The DIGEST is signed, never a tag — a tag is a string that can be
+        # moved, and that is what the signature is there to protect against.
+        # All tags point at the same digest, so one signature covers them.
+        #
+        # cosign runs as a container instead of an installed binary: it is the
+        # same way the target host takes (nothing to install there), and one
+        # version less that can drift apart.
+        #
+        # `--user 0`, because the cosign image runs as 65532 but the mounted
+        # Docker configuration belongs to its owner. The mount is `:ro`.
+        #
+        # The two ACTIONS_ID_TOKEN_* variables are the way to the OIDC token of
+        # this run; without them cosign falls back to a browser flow and waits
+        # until the job runs into its limit.
+        run: |
+          docker run --rm --user 0 \
+            -e COSIGN_YES=true \
+            -e ACTIONS_ID_TOKEN_REQUEST_URL \
+            -e ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -e DOCKER_CONFIG=/dockercfg \
+            -v "${HOME}/.docker:/dockercfg:ro" \
+            "$COSIGN" sign "$DIGEST"
+
+      - name: Prove the signature check
+        # The core: a signature is decoration until somebody has shown that the
+        # check also FAILS. It is checked with exactly the command of the agent
+        # README ("Verify the signature") — the same cosign version, the same
+        # two flags — and the agent's watcher builds the same identity
+        # (`agent/src/watcher.ts`, `STANDARD_IDENTITY`).
+        run: |
+          verify() {
+            docker run --rm --user 0 \
+              -e DOCKER_CONFIG=/dockercfg \
+              -v "${HOME}/.docker:/dockercfg:ro" \
+              "$COSIGN" verify \
+                --certificate-oidc-issuer "$ISSUER" \
+                --certificate-identity "$1" \
+                "$2"
+          }
+
+          # 1. The image just published against the expected identity: must pass.
+          verify "$IDENTITY" "$DIGEST" >/dev/null
+
+          # 2. The same image against a foreign identity from the SAME
+          #    repository (another workflow file): must fail. If it passed, the
+          #    host would in truth only check "somebody at GitHub". The file
+          #    does not have to exist; the identity only has to differ.
+          if verify "${IDENTITY/release.yml/other.yml}" "$DIGEST" >/dev/null 2>&1; then
+            echo "A foreign identity passed the check."
+            exit 1
+          fi
+
+          # 3. A foreign, properly signed image (cosign itself) against our
+          #    identity: must fail. That is the case "signed by somebody else" —
+          #    a valid signature, just not ours. The case "tampered with" is the
+          #    easier one: a changed image has another digest, for which there
+          #    is no signature at all.
+          if verify "$IDENTITY" "$COSIGN" >/dev/null 2>&1; then
+            echo "A foreign signed image passed the check."
+            exit 1
+          fi
+
+  release:
+    name: GitHub release
+    # Only when both images are out and signed.
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Bundle the agent's deploy files
+        run: zip -r "docklet-hub-agent-${GITHUB_REF_NAME}-deploy.zip" agent/deploy agent/README.md agent/CHANGELOG.md
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FLAGS=()
+          case "$GITHUB_REF_NAME" in *-rc.*) FLAGS+=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" "docklet-hub-agent-${GITHUB_REF_NAME}-deploy.zip" \
+            --title "$GITHUB_REF_NAME" --generate-notes "${FLAGS[@]}"

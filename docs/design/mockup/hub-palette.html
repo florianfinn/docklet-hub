@@ -1,0 +1,999 @@
+<!doctype html>
+<!--
+  Herkunft: kein Artboard des Design-Canvas, sondern in der Design-Etappe D0 (#62) am
+  2026-09-05 als Entscheidungsvorlage entstanden. Farbmechanik und Grundfarben sind wörtlich
+  aus color-system.html übernommen (Z. 19-31 und Z. 36-46); ergänzt sind zwei kräftigere
+  Deckungsstufen (--accent-firm, --accent-strong), weil 13 % keine Fläche tragen.
+  Abweichung gegenüber der veröffentlichten Fassung: Begründung und Folgerungen stehen in
+  docs/design/hub-color-and-structure.md statt auf der Seite. Externe Ressource: nur die
+  Schriftfamilie IBM Plex von fonts.googleapis.com — ohne Netz fällt sie auf system-ui zurück.
+  Referenz für die Oberfläche (Konzept §2, UI-Design-Basis), kein Code des Hubs.
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html { color-scheme: dark; }
+  body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<title>Palettenachse des Hubs</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Grundfarben wörtlich aus docs/design/mockup/color-system.html, Z. 19–31. */
+  :root {
+    --bg: oklch(0.165 0.008 265);
+    --card: oklch(0.205 0.009 265);
+    --card2: oklch(0.245 0.010 265);
+    --sunk: oklch(0.185 0.008 265);
+    --fg: oklch(0.945 0.005 265);
+    --fg2: oklch(0.735 0.012 265);
+    --fg3: oklch(0.585 0.012 265);
+    --line: oklch(1 0 0 / 9%);
+    --line2: oklch(1 0 0 / 17%);
+    --state-ok: oklch(0.78 0.14 160);
+    --state-warn: oklch(0.81 0.14 85);
+    --state-down: oklch(0.70 0.19 22);
+    --sans: 'IBM Plex Sans', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+  }
+
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: var(--sans); font-size: 15px; line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1120px; margin: 0 auto; padding: 32px 20px 56px; display: flex; flex-direction: column; gap: 24px; }
+
+  /* --- Kopf --- */
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--fg3); margin: 0 0 8px;
+  }
+  h1 { font-size: 27px; font-weight: 600; line-height: 1.2; margin: 0 0 10px; text-wrap: balance; }
+  h2.section { font-size: 17px; font-weight: 600; margin: 8px 0 0; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .lede { margin: 0; max-width: 64ch; color: var(--fg2); text-wrap: pretty; }
+  .lede code { font-family: var(--mono); font-size: 0.92em; color: var(--fg); }
+  .lede strong { color: var(--fg); font-weight: 500; }
+
+  /* --- Schalter --- */
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 20px 32px; padding: 16px 18px;
+    background: var(--sunk); border: 1px solid var(--line); border-radius: 9px;
+  }
+  fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+  legend {
+    float: left; font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg3); padding: 0;
+  }
+  .segmented { display: flex; flex-wrap: wrap; gap: 6px; clear: both; }
+  .segmented button {
+    font-family: inherit; font-size: 13.5px; color: var(--fg2);
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 8px; height: 32px; padding: 0 13px; cursor: pointer;
+    transition: color 120ms, background-color 120ms, border-color 120ms;
+  }
+  .segmented button:hover { color: var(--fg); border-color: var(--line2); }
+  .segmented button[aria-pressed="true"] { background: var(--card2); color: var(--fg); border-color: var(--line2); }
+  .segmented button:focus-visible { outline: 2px solid var(--fg2); outline-offset: 2px; }
+
+  /* --- Ableitung: Z. 36–46 des Artboards, plus zwei kräftigere Deckungen --- */
+  .pal {
+    --h: 265;
+    --c: var(--sat-c);
+    --primary: oklch(0.78 var(--c) var(--h));
+    --primary-fg: oklch(0.22 0.05 var(--h));
+    --accent: oklch(0.78 var(--c) var(--h) / 0.13);
+    --accent-firm: oklch(0.78 var(--c) var(--h) / 0.22);
+    --accent-strong: oklch(0.78 var(--c) var(--h) / 0.34);
+    --accent-line: oklch(0.78 var(--c) var(--h) / 0.34);
+    --accent-fg: oklch(0.86 calc(var(--c) * 0.72) var(--h));
+    --ring: oklch(0.78 var(--c) var(--h) / 0.45);
+    --chart-1: oklch(0.78 var(--c) var(--h));
+    --chart-2: oklch(0.70 var(--c) calc(var(--h) + 22));
+  }
+
+  .stage { --sat-c: 0.19; }
+  .stage[data-sat="subtle"] { --sat-c: 0.055; }
+  .stage[data-sat="normal"] { --sat-c: 0.145; }
+  .stage[data-sat="bold"] { --sat-c: 0.19; }
+
+  .side.pal, .topbar.pal { --c: calc(var(--sat-c) * 0.32); }
+  [data-host].pal { --c: min(calc(var(--sat-c) * 1.3), 0.215); }
+  [data-mark].pal { --c: calc(var(--sat-c) * 0.5); }
+
+  [data-area="operations"].pal { --h: 225; }
+  [data-area="management"].pal { --h: 325; }
+  [data-host="local-host"].pal { --h: 300; }
+  [data-host="unraid"].pal { --h: 195; }
+  [data-host="vps"].pal { --h: 62; }
+  [data-mark="media"].pal { --h: 350; }
+  [data-mark="house"].pal { --h: 255; }
+  [data-mark="network"].pal { --h: 130; }
+  [data-mark="backup"].pal { --h: 265; --c: 0.014; }
+
+  /* Farbeinsatz am Host: vier Stufen, im Hub je Host wählbar. */
+  .stage[data-ink="none"] .panel.pal { --head-face: var(--card2); --body-face: var(--card); }
+  .stage[data-ink="edge"] .panel.pal { --head-face: var(--card2); --body-face: var(--card); }
+  .stage[data-ink="head"] .panel.pal { --head-face: var(--accent-firm); --body-face: var(--card); }
+  .stage[data-ink="card"] .panel.pal { --head-face: var(--accent-strong); --body-face: var(--accent); }
+
+  .stage[data-ink="none"] .panel[data-host] { border-left: 1px solid var(--line); border-radius: 11px; }
+  .stage[data-ink="none"] .hostname { color: var(--fg); }
+
+  .stage[data-ink="none"] .navitem.pal[aria-current="page"],
+  .stage[data-ink="none"] .filter.on.pal,
+  .stage[data-ink="none"] .usermenu.pal,
+  .stage[data-ink="edge"] .navitem.pal[aria-current="page"],
+  .stage[data-ink="edge"] .filter.on.pal,
+  .stage[data-ink="edge"] .usermenu.pal { --nav-face: var(--card2); }
+  .stage[data-ink="head"] .navitem.pal[aria-current="page"],
+  .stage[data-ink="head"] .filter.on.pal,
+  .stage[data-ink="head"] .usermenu.pal { --nav-face: var(--accent-firm); }
+  .stage[data-ink="card"] .navitem.pal[aria-current="page"],
+  .stage[data-ink="card"] .filter.on.pal,
+  .stage[data-ink="card"] .usermenu.pal { --nav-face: var(--accent-strong); }
+
+  /* --- Rahmen --- */
+  .stage {
+    display: grid; grid-template-columns: 238px minmax(0, 1fr);
+    background: var(--bg); border: 1px solid var(--line2);
+    border-radius: 13px; overflow: hidden; min-height: 620px;
+  }
+  @media (max-width: 760px) {
+    .stage { grid-template-columns: minmax(0, 1fr); }
+    .side { border-right: 0; border-bottom: 1px solid var(--line); }
+  }
+
+  .side { background: var(--card); border-right: 1px solid var(--line); padding: 14px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .sidehead { display: flex; align-items: center; gap: 9px; padding: 3px 6px 10px; }
+  .avatar {
+    width: 25px; height: 25px; border-radius: 8px;
+    background: var(--fg); color: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 12px; flex: none;
+  }
+  .sidehead .who { font-weight: 500; font-size: 13.5px; }
+  .chip {
+    margin-left: auto; font-family: var(--mono); font-size: 10.5px;
+    color: var(--fg3); border: 1px solid var(--line2); border-radius: 5px; padding: 1px 6px;
+  }
+  .search {
+    display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 11px; margin-bottom: 8px;
+    background: var(--sunk); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--fg3); font-size: 13.5px;
+  }
+  .search .kbd { margin-left: auto; font-family: var(--mono); font-size: 11px; }
+
+  .navgroup { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+  .lbl {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--fg3); padding: 6px 7px 4px;
+  }
+  .navitem {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    padding: 6px 8px; border-radius: 7px; border: 0; background: none; text-align: left;
+    font-family: inherit; font-size: 13.5px; color: var(--fg2);
+    transition: background-color 120ms, color 120ms;
+  }
+  button.navitem { cursor: pointer; }
+  button.navitem:hover { background: var(--card2); color: var(--fg); }
+  button.navitem:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+  .navitem .dotmark { width: 7px; height: 7px; border-radius: 2px; background: var(--primary); flex: none; }
+  .navitem[aria-current="page"] { background: var(--nav-face); color: var(--fg); box-shadow: inset 2px 0 0 var(--primary); }
+
+  .usermenu { margin-top: auto; position: relative; border-top: 1px solid var(--line); }
+  .nameplate {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    padding: 10px 7px; border: 0; border-radius: 7px; background: none; text-align: left;
+    font-family: inherit; cursor: pointer; transition: background-color 120ms;
+  }
+  .nameplate:hover, .nameplate[aria-expanded="true"] { background: var(--card2); }
+  .nameplate[aria-current="page"] { background: var(--nav-face); box-shadow: inset 2px 0 0 var(--primary); }
+  .nameplate:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+  .nameplate .avatar { background: var(--primary); color: var(--primary-fg); }
+  .nameplate .who { font-size: 13.5px; font-weight: 500; color: var(--fg); }
+  .nameplate .role {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--fg3);
+  }
+  .nameplate .caret { margin-left: auto; color: var(--fg3); font-size: 11px; }
+
+  .menu {
+    position: absolute; bottom: calc(100% + 6px); left: 0; right: 0; z-index: 5;
+    background: var(--card2); border: 1px solid var(--line2); border-radius: 9px; padding: 5px;
+    display: flex; flex-direction: column; gap: 2px;
+    box-shadow: 0 12px 28px oklch(0 0 0 / 0.45);
+  }
+  .menu button {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    padding: 6px 8px; border: 0; border-radius: 7px; background: none; text-align: left;
+    font-family: inherit; font-size: 13.5px; color: var(--fg2); cursor: pointer;
+  }
+  .menu button:hover:not(:disabled) { background: var(--accent-firm); color: var(--fg); }
+  .menu button:focus-visible { outline: 2px solid var(--ring); outline-offset: -1px; }
+  .menu button:disabled { color: var(--fg3); cursor: default; }
+  .menu .dotmark { width: 7px; height: 7px; border-radius: 2px; background: var(--primary); flex: none; }
+  .menu hr { border: 0; border-top: 1px solid var(--line); margin: 3px 0; }
+
+  /* --- Inhalt --- */
+  .content { display: flex; flex-direction: column; min-width: 0; }
+  .topbar {
+    display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+    border-bottom: 1px solid var(--line); background: var(--card); flex-wrap: wrap;
+  }
+  .tile {
+    width: 30px; height: 30px; border-radius: 9px;
+    background: var(--accent-firm); border: 1px solid var(--accent-line);
+    display: flex; align-items: center; justify-content: center; flex: none;
+  }
+  .tile span { width: 12px; height: 12px; border: 2px solid var(--primary); border-radius: 3px; }
+  .topbar h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  .topbar .meta { font-family: var(--mono); font-size: 11.5px; color: var(--fg3); margin-left: auto; text-align: right; }
+  .back {
+    font-family: var(--mono); font-size: 11.5px; color: var(--fg3);
+    background: none; border: 0; cursor: pointer; padding: 0;
+  }
+  .back:hover { color: var(--fg2); }
+  .back:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+  .action {
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    color: var(--primary-fg); background: var(--primary);
+    border: 0; border-radius: 8px; height: 30px; padding: 0 13px; cursor: pointer; flex: none;
+  }
+  .action:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+  .tabs { display: flex; gap: 4px; padding: 10px 20px 0; flex-wrap: wrap; background: var(--card); }
+  .tab {
+    font-family: inherit; font-size: 13px; color: var(--fg3);
+    background: none; border: 0; padding: 7px 11px; border-radius: 7px 7px 0 0; cursor: pointer;
+  }
+  .tab:hover { color: var(--fg2); }
+  .tab.on { background: var(--accent-firm); color: var(--fg); box-shadow: inset 0 -2px 0 var(--primary); }
+
+  .filters { display: flex; flex-wrap: wrap; gap: 7px; padding: 14px 20px 12px; }
+  .filter { font-size: 12.5px; color: var(--fg2); background: var(--card); border: 1px solid var(--line); border-radius: 7px; padding: 3px 10px; }
+  .filter .n { font-family: var(--mono); color: var(--fg3); margin-left: 5px; }
+  .filter.on { background: var(--nav-face); border-color: var(--accent-line); color: var(--fg); }
+
+  .screenbody {
+    flex-grow: 1; background: var(--sunk); border-top: 1px solid var(--line);
+    padding: 16px 20px 24px; display: flex; flex-direction: column; gap: 12px;
+  }
+
+  /* --- Karten --- */
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 11px; overflow: hidden; }
+  .panel[data-host] { background: var(--body-face); border-left: 3px solid var(--primary); border-radius: 0 11px 11px 0; }
+  .panelhead {
+    display: flex; align-items: center; gap: 10px; padding: 11px 14px;
+    background: var(--head-face, var(--card2)); border-bottom: 1px solid var(--line);
+    font-size: 14px; font-weight: 600; color: var(--fg); flex-wrap: wrap;
+  }
+  .panel[data-host] .panelhead { border-bottom-color: var(--accent-line); }
+  .hostname { color: var(--accent-fg); font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+  .panelhead .sub { font-family: var(--mono); font-size: 11.5px; font-weight: 400; color: var(--fg3); }
+  .panelhead .right { margin-left: auto; font-family: var(--mono); font-size: 11.5px; font-weight: 400; color: var(--fg3); }
+  .panelhead .spark { margin-left: auto; flex: none; }
+
+  .rows { display: flex; flex-direction: column; }
+  .row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+    font-size: 13.5px; color: var(--fg2); border-top: 1px solid var(--line);
+    width: 100%; background: none; border-left: 0; border-right: 0; border-bottom: 0;
+    font-family: inherit; text-align: left;
+  }
+  .row:first-child { border-top: 0; }
+  button.row { cursor: pointer; }
+  button.row:hover { background: var(--card2); }
+  button.row:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+  .row .name { color: var(--fg); font-weight: 500; }
+  .row.sub .name { color: var(--fg2); font-weight: 400; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot.ok { background: var(--state-ok); }
+  .dot.warn { background: var(--state-warn); }
+  .dot.down { background: var(--state-down); }
+  .row .where { font-family: var(--mono); font-size: 11px; color: var(--fg3); margin-left: auto; white-space: nowrap; }
+  .badges { display: flex; gap: 6px; align-items: center; flex: none; flex-wrap: wrap; }
+  .chevron { color: var(--fg3); font-size: 11px; flex: none; }
+
+  /* Eingerückte Container eines Stacks */
+  .nest { border-top: 1px solid var(--line); }
+  .nest .row { padding-left: 34px; border-top: 1px solid var(--line); }
+  .nest .row:first-child { border-top: 0; }
+  .nest[data-mark] { box-shadow: inset 3px 0 0 var(--primary); background: var(--accent); }
+
+  /* Systemmarken: vergibt der Hub */
+  .sys { font-family: var(--mono); font-size: 10.5px; border-radius: 5px; padding: 0 6px; flex: none; font-weight: 500; }
+  .sys.update { background: var(--state-warn); color: oklch(0.22 0.05 85); }
+  .sys.aged { background: var(--state-down); color: oklch(0.98 0.01 22); }
+  .sys.fresh { border: 1px solid var(--line2); color: var(--fg3); }
+
+  /* Eigene Marken: vergibt der Betreiber */
+  .label {
+    font-family: var(--mono); font-size: 10.5px; border-radius: 5px; padding: 0 6px; flex: none;
+    background: var(--accent-firm); border: 1px solid var(--accent-line); color: var(--accent-fg);
+  }
+  .stage[data-marker="fill"] .row.marked { background: var(--accent); box-shadow: inset 3px 0 0 var(--primary); }
+
+  /* --- Verwaltung und Einstellungen --- */
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 440px; }
+  th {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--fg3); text-align: left;
+    padding: 8px 14px; border-bottom: 1px solid var(--line);
+  }
+  td { padding: 8px 14px; font-size: 13.5px; color: var(--fg2); border-top: 1px solid var(--line); }
+  td.name { color: var(--fg); font-weight: 500; }
+  td.when { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+  tr[data-self="true"] td { background: var(--accent); }
+  .pill {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px;
+    border-radius: 5px; padding: 1px 7px; border: 1px solid var(--line2); color: var(--fg3);
+  }
+  .pill.admin { background: var(--accent-firm); border-color: var(--accent-line); color: var(--accent-fg); }
+
+  .fields { display: grid; gap: 1px; background: var(--line); margin: 0; }
+  .field { display: flex; align-items: baseline; gap: 14px; padding: 10px 14px; background: var(--card); font-size: 13.5px; flex-wrap: wrap; }
+  .field dt {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--fg3); min-width: 128px;
+  }
+  .field dd { margin: 0; color: var(--fg); }
+
+  .swatchdot { width: 12px; height: 12px; border-radius: 4px; flex: none; background: var(--primary); border: 1px solid var(--accent-line); }
+  .tone {
+    font-family: var(--mono); font-size: 10.5px; border-radius: 5px; padding: 0 6px; flex: none;
+    background: var(--accent-firm); border: 1px solid var(--accent-line); color: var(--accent-fg);
+  }
+  .opt {
+    font-family: var(--mono); font-size: 10.5px; border-radius: 5px; padding: 0 6px; flex: none;
+    border: 1px solid var(--line2); color: var(--fg3);
+  }
+
+  /* --- Farbtafel --- */
+  .legend { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+  .lrow {
+    display: grid; grid-template-columns: 132px minmax(200px, 1fr) minmax(0, 1.4fr);
+    gap: 14px; align-items: center; padding: 12px 16px; background: var(--sunk);
+  }
+  @media (max-width: 700px) { .lrow { grid-template-columns: minmax(0, 1fr); gap: 8px; } }
+  .lrow .tier { font-weight: 600; font-size: 14px; }
+  .lrow .tier small {
+    display: block; font-family: var(--mono); font-weight: 400; font-size: 10.5px;
+    color: var(--fg3); letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sw {
+    font-family: var(--mono); font-size: 10.5px; border-radius: 5px; padding: 2px 8px;
+    background: var(--accent-firm); border: 1px solid var(--accent-line); color: var(--accent-fg);
+  }
+  .sw.solid { background: var(--tone); color: var(--tone-fg); border-color: transparent; font-weight: 500; }
+  .lrow .rule { color: var(--fg2); font-size: 13.5px; text-wrap: pretty; }
+
+
+  @media (prefers-reduced-motion: reduce) { * { transition-duration: 0.01ms !important; } }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <p class="eyebrow">Design-Etappe D0 · docklet-hub#62</p>
+    <h1>Stacks zuerst, Container auf Zuruf</h1>
+    <p class="lede">
+      Die Übersicht führt jetzt <strong>Stacks</strong>; ein toter oder kranker
+      Container färbt seinen ganzen Stack. Alle Container einzeln stehen eine
+      Ebene tiefer, die Container eines Stacks auf dessen eigener Seite. Farben
+      sind nach Aufgabe gestaffelt — <strong>Host am kräftigsten</strong>, eigene
+      Marken leiser, Bereich nur angedeutet. Die drei Schalter sind im Hub keine
+      globalen Regler, sondern Einstellungen je Host und je Marke.
+    </p>
+  </header>
+
+  <div class="controls">
+    <fieldset>
+      <legend>Sättigung <code>--c</code></legend>
+      <div class="segmented" id="sat">
+        <button type="button" data-value="subtle" aria-pressed="false">zurückhaltend</button>
+        <button type="button" data-value="normal" aria-pressed="false">normal</button>
+        <button type="button" data-value="bold" aria-pressed="true">kräftig</button>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Farbeinsatz je Host</legend>
+      <div class="segmented" id="ink">
+        <button type="button" data-value="none" aria-pressed="false">keine Farbe</button>
+        <button type="button" data-value="edge" aria-pressed="false">nur Kante</button>
+        <button type="button" data-value="head" aria-pressed="true">Kopf getönt</button>
+        <button type="button" data-value="card" aria-pressed="false">ganze Karte</button>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Marke je Stack</legend>
+      <div class="segmented" id="marker">
+        <button type="button" data-value="label" aria-pressed="true">Label</button>
+        <button type="button" data-value="fill" aria-pressed="false">Fläche</button>
+      </div>
+    </fieldset>
+  </div>
+
+  <div class="stage" data-sat="bold" data-ink="head" data-marker="label">
+    <aside class="side pal" data-area="operations">
+      <div class="sidehead">
+        <div class="avatar">ff</div>
+        <div class="who">florianfinn</div>
+        <div class="chip">Hub</div>
+      </div>
+      <div class="search"><span>Suchen</span><span class="kbd">⌘K</span></div>
+
+      <div class="navgroup">
+        <div class="lbl">Betrieb</div>
+        <button type="button" class="navitem pal" data-screen="overview" data-area="operations" aria-current="page">
+          <span class="dotmark"></span>Übersicht
+        </button>
+        <button type="button" class="navitem pal" data-screen="containers" data-area="operations">
+          <span class="dotmark"></span>Container
+        </button>
+        <div class="navitem"><span class="dotmark"></span>Überwachung</div>
+        <div class="navitem"><span class="dotmark"></span>Freischaltung</div>
+        <div class="navitem"><span class="dotmark"></span>Verlauf</div>
+      </div>
+
+      <div class="usermenu pal" data-area="management">
+        <button type="button" class="nameplate" id="usermenu-button"
+          aria-haspopup="true" aria-expanded="false" aria-controls="usermenu-list">
+          <div class="avatar">FF</div>
+          <div>
+            <div class="who">florianfinn</div>
+            <div class="role">Administrator</div>
+          </div>
+          <span class="caret" aria-hidden="true">▲</span>
+        </button>
+        <div class="menu" id="usermenu-list" role="menu" aria-labelledby="usermenu-button" hidden>
+          <button type="button" role="menuitem" class="pal" data-screen="admin" data-area="management">
+            <span class="dotmark"></span>Benutzer &amp; Profil
+          </button>
+          <button type="button" role="menuitem" class="pal" data-screen="settings" data-area="management">
+            <span class="dotmark"></span>Einstellungen
+          </button>
+          <hr>
+          <button type="button" role="menuitem" disabled>Abmelden</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="content">
+      <!-- Übersicht: Stacks, aggregierter Status -->
+      <section class="screen" data-screen="overview">
+        <div class="topbar pal" data-area="operations">
+          <div class="tile"><span></span></div>
+          <h2>Übersicht</h2>
+          <div class="meta">3 Hosts · 6 Stacks · 34 Container<br>Stand vor 40 Sekunden</div>
+        </div>
+
+        <div class="filters">
+          <span class="filter on pal" data-area="operations">alle<span class="n">6</span></span>
+          <span class="filter">in Ordnung<span class="n">4</span></span>
+          <span class="filter">Achtung<span class="n">1</span></span>
+          <span class="filter">Ausfall<span class="n">1</span></span>
+          <span class="filter">Update<span class="n">3</span></span>
+        </div>
+
+        <div class="screenbody">
+          <div class="panel pal" data-host="local-host">
+            <div class="panelhead">
+              <span class="hostname">local-host</span>
+              <span class="sub">3 Stacks · 21 Container</span>
+              <span class="right">18 laufen · 1 aus</span>
+            </div>
+            <div class="rows">
+              <button type="button" class="row marked pal" data-mark="media" data-screen="stack">
+                <span class="dot down"></span><span class="name">arr_stack</span>
+                <span class="badges">
+                  <span class="label">Medien</span>
+                  <span class="sys update">2 Updates</span>
+                </span>
+                <span class="where">7 von 8 laufen</span>
+                <span class="chevron">›</span>
+              </button>
+              <div class="row">
+                <span class="dot warn"></span><span class="name">monitoring</span>
+                <span class="badges"><span class="sys update">1 Update</span></span>
+                <span class="where">4 von 4 laufen · 1 krank</span>
+              </div>
+              <div class="row marked pal" data-mark="house">
+                <span class="dot ok"></span><span class="name">haus_dienste</span>
+                <span class="badges"><span class="label">Haus</span></span>
+                <span class="where">6 von 6 laufen</span>
+              </div>
+              <div class="row sub">
+                <span class="dot ok"></span><span class="name">portainer-agent</span>
+                <span class="badges"><span class="opt">ohne Stack</span></span>
+                <span class="where">läuft</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel pal" data-host="unraid">
+            <div class="panelhead">
+              <span class="hostname">unraid</span>
+              <span class="sub">1 Stack · 11 Container</span>
+              <span class="right">10 laufen · 1 aus</span>
+            </div>
+            <div class="rows">
+              <div class="row marked pal" data-mark="media">
+                <span class="dot ok"></span><span class="name">mediathek</span>
+                <span class="badges">
+                  <span class="label">Medien</span>
+                  <span class="sys fresh">neu</span>
+                </span>
+                <span class="where">7 von 7 laufen</span>
+              </div>
+              <div class="row sub marked pal" data-mark="backup">
+                <span class="dot down"></span><span class="name">backup-agent</span>
+                <span class="badges"><span class="label">Sicherung</span><span class="opt">ohne Stack</span></span>
+                <span class="where">aus seit 2 Tagen</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel pal" data-host="vps">
+            <div class="panelhead">
+              <span class="hostname">vps</span>
+              <span class="sub">1 Stack · 2 Container</span>
+              <span class="right"><span class="sys aged">Agent 0.4.1 zu alt</span></span>
+            </div>
+            <div class="rows">
+              <div class="row marked pal" data-mark="network">
+                <span class="dot ok"></span><span class="name">edge</span>
+                <span class="badges"><span class="label">Netz</span><span class="sys update">1 Update</span></span>
+                <span class="where">2 von 2 laufen</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Container: der Deepdive, mit Einrückung je Stack -->
+      <section class="screen" data-screen="containers" hidden>
+        <div class="topbar pal" data-area="operations">
+          <div class="tile"><span></span></div>
+          <h2>Container</h2>
+          <div class="meta">34 Container · 31 laufen · 3 Updates</div>
+        </div>
+
+        <div class="filters">
+          <span class="filter on pal" data-area="operations">alle<span class="n">34</span></span>
+          <span class="filter">läuft<span class="n">31</span></span>
+          <span class="filter">krank<span class="n">1</span></span>
+          <span class="filter">aus<span class="n">2</span></span>
+          <span class="filter">Update<span class="n">3</span></span>
+        </div>
+
+        <div class="screenbody">
+          <div class="panel pal" data-host="local-host">
+            <div class="panelhead">
+              <span class="hostname">local-host</span>
+              <span class="sub">21 Container</span>
+              <svg class="spark" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+                <polyline points="0,17 12,13 24,15 36,7 48,10 60,4 76,6" fill="none"
+                  stroke="var(--chart-1)" stroke-width="1.5" stroke-linejoin="round"></polyline>
+                <polyline points="0,20 12,19 24,17 36,18 48,14 60,15 76,12" fill="none"
+                  stroke="var(--chart-2)" stroke-width="1.5" stroke-linejoin="round"></polyline>
+              </svg>
+            </div>
+            <div class="rows">
+              <button type="button" class="row marked pal" data-mark="media" data-screen="stack">
+                <span class="dot down"></span><span class="name">arr_stack</span>
+                <span class="badges"><span class="label">Medien</span></span>
+                <span class="where">Stack · 8 Container</span>
+                <span class="chevron">›</span>
+              </button>
+              <div class="nest pal" data-mark="media">
+                <div class="row sub"><span class="dot ok"></span><span class="name">sonarr</span><span class="where">läuft</span></div>
+                <div class="row sub"><span class="dot ok"></span><span class="name">radarr</span><span class="badges"><span class="sys update">Update</span></span><span class="where">läuft</span></div>
+                <div class="row sub"><span class="dot ok"></span><span class="name">prowlarr</span><span class="badges"><span class="sys update">Update</span></span><span class="where">läuft</span></div>
+                <div class="row sub"><span class="dot down"></span><span class="name">sabnzbd</span><span class="where">aus seit 4 Stunden</span></div>
+                <div class="row sub"><span class="dot ok"></span><span class="name">bazarr</span><span class="where">läuft</span></div>
+              </div>
+
+              <div class="row"><span class="dot warn"></span><span class="name">monitoring</span><span class="where">Stack · 4 Container</span></div>
+              <div class="nest">
+                <div class="row sub"><span class="dot warn"></span><span class="name">grafana</span><span class="badges"><span class="sys update">Update</span></span><span class="where">krank seit 12 Minuten</span></div>
+                <div class="row sub"><span class="dot ok"></span><span class="name">prometheus</span><span class="where">läuft</span></div>
+              </div>
+
+              <div class="row marked pal" data-mark="house"><span class="dot ok"></span><span class="name">haus_dienste</span><span class="badges"><span class="label">Haus</span></span><span class="where">Stack · 6 Container</span></div>
+              <div class="nest pal" data-mark="house">
+                <div class="row sub"><span class="dot ok"></span><span class="name">teamspeak</span><span class="where">läuft</span></div>
+                <div class="row sub"><span class="dot ok"></span><span class="name">musikbot</span><span class="where">läuft</span></div>
+              </div>
+
+              <div class="row sub"><span class="dot ok"></span><span class="name">portainer-agent</span><span class="badges"><span class="opt">ohne Stack</span></span><span class="where">läuft</span></div>
+            </div>
+          </div>
+
+          <div class="panel pal" data-host="unraid">
+            <div class="panelhead">
+              <span class="hostname">unraid</span>
+              <span class="sub">11 Container</span>
+              <svg class="spark" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+                <polyline points="0,9 12,11 24,6 36,12 48,8 60,13 76,9" fill="none"
+                  stroke="var(--chart-1)" stroke-width="1.5" stroke-linejoin="round"></polyline>
+                <polyline points="0,18 12,17 24,18 36,16 48,17 60,15 76,16" fill="none"
+                  stroke="var(--chart-2)" stroke-width="1.5" stroke-linejoin="round"></polyline>
+              </svg>
+            </div>
+            <div class="rows">
+              <div class="row marked pal" data-mark="media"><span class="dot ok"></span><span class="name">mediathek</span><span class="badges"><span class="label">Medien</span></span><span class="where">Stack · 7 Container</span></div>
+              <div class="nest pal" data-mark="media">
+                <div class="row sub"><span class="dot ok"></span><span class="name">plex</span><span class="where">läuft</span></div>
+                <div class="row sub"><span class="dot ok"></span><span class="name">jellyfin</span><span class="badges"><span class="sys fresh">neu</span></span><span class="where">läuft</span></div>
+              </div>
+              <div class="row sub marked pal" data-mark="backup"><span class="dot down"></span><span class="name">backup-agent</span><span class="badges"><span class="label">Sicherung</span><span class="opt">ohne Stack</span></span><span class="where">aus seit 2 Tagen</span></div>
+            </div>
+          </div>
+
+          <div class="panel pal" data-host="vps">
+            <div class="panelhead">
+              <span class="hostname">vps</span>
+              <span class="sub">2 Container</span>
+              <span class="right"><span class="sys aged">Agent 0.4.1 zu alt</span></span>
+            </div>
+            <div class="rows">
+              <div class="row marked pal" data-mark="network"><span class="dot ok"></span><span class="name">edge</span><span class="badges"><span class="label">Netz</span></span><span class="where">Stack · 2 Container</span></div>
+              <div class="nest pal" data-mark="network">
+                <div class="row sub"><span class="dot ok"></span><span class="name">caddy</span><span class="where">läuft</span></div>
+                <div class="row sub"><span class="dot ok"></span><span class="name">wireguard</span><span class="badges"><span class="sys update">Update</span></span><span class="where">läuft</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Stack-Seite: eigene Übersicht mit Reitern -->
+      <section class="screen" data-screen="stack" hidden>
+        <div class="topbar pal" data-host="local-host">
+          <div class="tile"><span></span></div>
+          <div>
+            <button type="button" class="back" data-screen="overview">‹ Übersicht</button>
+            <h2>arr_stack</h2>
+          </div>
+          <span class="badges">
+            <span class="label pal" data-mark="media">Medien</span>
+            <span class="sys update">2 Updates</span>
+          </span>
+          <div class="meta">auf local-host · 8 Container<br>Compose v2 · zuletzt gestartet vor 6 Tagen</div>
+        </div>
+
+        <div class="tabs pal" data-host="local-host">
+          <button type="button" class="tab on">Übersicht</button>
+          <button type="button" class="tab">Protokoll</button>
+          <button type="button" class="tab">Compose</button>
+          <button type="button" class="tab">Umgebung</button>
+          <button type="button" class="tab">Betrieb</button>
+          <button type="button" class="tab">Verlauf</button>
+        </div>
+
+        <div class="screenbody">
+          <div class="panel pal" data-host="local-host">
+            <div class="panelhead">
+              Container des Stacks
+              <span class="right">7 von 8 laufen · 1 aus</span>
+            </div>
+            <div class="rows">
+              <div class="row"><span class="dot ok"></span><span class="name">sonarr</span><span class="where">läuft seit 6 Tagen</span></div>
+              <div class="row"><span class="dot ok"></span><span class="name">radarr</span><span class="badges"><span class="sys update">Update</span></span><span class="where">läuft seit 6 Tagen</span></div>
+              <div class="row"><span class="dot ok"></span><span class="name">prowlarr</span><span class="badges"><span class="sys update">Update</span></span><span class="where">läuft seit 6 Tagen</span></div>
+              <div class="row"><span class="dot down"></span><span class="name">sabnzbd</span><span class="where">aus seit 4 Stunden</span></div>
+              <div class="row"><span class="dot ok"></span><span class="name">bazarr</span><span class="where">läuft seit 6 Tagen</span></div>
+              <div class="row"><span class="dot ok"></span><span class="name">overseerr</span><span class="where">läuft seit 6 Tagen</span></div>
+              <div class="row"><span class="dot ok"></span><span class="name">recyclarr</span><span class="where">läuft seit 6 Tagen</span></div>
+              <div class="row"><span class="dot ok"></span><span class="name">flaresolverr</span><span class="where">läuft seit 6 Tagen</span></div>
+            </div>
+          </div>
+
+          <div class="panel pal" data-host="local-host">
+            <div class="panelhead">
+              Was hier zum Stack gehört
+              <span class="right">nicht je Container</span>
+            </div>
+            <dl class="fields">
+              <div class="field"><dt>Protokoll</dt><dd>alle acht Container in einem Strom, nach Zeit sortiert</dd></div>
+              <div class="field"><dt>Compose</dt><dd>die Datei, aus der dieser Stack läuft</dd></div>
+              <div class="field"><dt>Umgebung</dt><dd>gemeinsame Variablen und Netze</dd></div>
+              <div class="field"><dt>Betrieb</dt><dd>starten, stoppen, neu ziehen — für den ganzen Stack</dd></div>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <!-- Benutzer & Profil -->
+      <section class="screen" data-screen="admin" hidden>
+        <div class="topbar pal" data-area="management">
+          <div class="tile"><span></span></div>
+          <h2>Benutzer &amp; Profil</h2>
+          <button type="button" class="action">Benutzer anlegen</button>
+          <div class="meta">4 Konten · 1 Administrator</div>
+        </div>
+
+        <div class="screenbody">
+          <div class="panel pal" data-area="management">
+            <div class="panelhead">Mein Profil<span class="right">Administrator seit 2026-06-14</span></div>
+            <dl class="fields">
+              <div class="field"><dt>Anzeigename</dt><dd>operator</dd></div>
+              <div class="field"><dt>E-Mail</dt><dd>operator@example.org</dd></div>
+              <div class="field"><dt>Passwort</dt><dd>zuletzt geändert vor 3 Monaten</dd></div>
+              <div class="field"><dt>Aktive Sitzungen</dt><dd>2 Geräte · Firefox · Linux, Safari · iPhone</dd></div>
+            </dl>
+          </div>
+
+          <div class="panel pal" data-area="management">
+            <div class="panelhead">Konten<span class="right">Rollen ändert nur ein Administrator</span></div>
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Name</th><th scope="col">Rolle</th>
+                    <th scope="col">Letzte Anmeldung</th><th scope="col">Sitzungen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr data-self="true">
+                    <td class="name">florianfinn</td><td><span class="pill admin">Administrator</span></td>
+                    <td class="when">vor 2 Minuten</td><td class="when">2</td>
+                  </tr>
+                  <tr><td class="name">pexx</td><td><span class="pill">Benutzer</span></td><td class="when">vor 6 Stunden</td><td class="when">1</td></tr>
+                  <tr><td class="name">marlene</td><td><span class="pill">Benutzer</span></td><td class="when">vor 3 Tagen</td><td class="when">1</td></tr>
+                  <tr><td class="name">gastzugang</td><td><span class="pill">Benutzer</span></td><td class="when">nie</td><td class="when">0</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Einstellungen -->
+      <section class="screen" data-screen="settings" hidden>
+        <div class="topbar pal" data-area="management">
+          <div class="tile"><span></span></div>
+          <h2>Einstellungen</h2>
+          <div class="meta">Darstellung · Hosts · Stacks · Marken</div>
+        </div>
+
+        <div class="screenbody">
+          <div class="panel pal" data-area="management">
+            <div class="panelhead">Darstellung<span class="right">gilt für alle Benutzer</span></div>
+            <dl class="fields">
+              <div class="field"><dt>Sättigung</dt><dd>kräftig</dd></div>
+              <div class="field"><dt>Schema</dt><dd>dunkel</dd></div>
+              <div class="field"><dt>Schrift</dt><dd>IBM Plex</dd></div>
+              <div class="field"><dt>Rundung</dt><dd>weich</dd></div>
+              <div class="field"><dt>Dichte</dt><dd>normal</dd></div>
+            </dl>
+          </div>
+
+          <div class="panel pal" data-area="management">
+            <div class="panelhead">Farbe der Bereiche<span class="right">2 Töne reserviert</span></div>
+            <div class="rows">
+              <div class="row">
+                <span class="swatchdot pal" data-area="operations"></span>
+                <span class="name">Betrieb</span>
+                <span class="badges"><span class="tone pal" data-area="operations">Stahlblau · 225</span></span>
+                <span class="where">Übersicht, Container, Überwachung …</span>
+              </div>
+              <div class="row">
+                <span class="swatchdot pal" data-area="management"></span>
+                <span class="name">Profil &amp; Einstellungen</span>
+                <span class="badges"><span class="tone pal" data-area="management">Magenta · 325</span></span>
+                <span class="where">alles hinter dem Profil-Knopf</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel pal" data-area="management">
+            <div class="panelhead">Farbe je Host<span class="right">6 Töne im Vorrat</span></div>
+            <div class="rows">
+              <div class="row">
+                <span class="swatchdot pal" data-host="local-host"></span>
+                <span class="name">local-host</span>
+                <span class="badges"><span class="tone pal" data-host="local-host">Lila · 300</span><span class="opt">Kopf getönt</span></span>
+                <span class="where">3 Stacks</span>
+              </div>
+              <div class="row">
+                <span class="swatchdot pal" data-host="unraid"></span>
+                <span class="name">unraid</span>
+                <span class="badges"><span class="tone pal" data-host="unraid">Türkis · 195</span><span class="opt">Kopf getönt</span></span>
+                <span class="where">1 Stack</span>
+              </div>
+              <div class="row">
+                <span class="swatchdot pal" data-host="vps"></span>
+                <span class="name">vps</span>
+                <span class="badges"><span class="tone pal" data-host="vps">Orange · 62</span><span class="opt">nur Kante</span></span>
+                <span class="where">1 Stack</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel pal" data-area="management">
+            <div class="panelhead">Eigene Marken<span class="right">4 vergeben</span></div>
+            <div class="rows">
+              <div class="row">
+                <span class="swatchdot pal" data-mark="media"></span>
+                <span class="name">Medien</span>
+                <span class="badges"><span class="tone pal" data-mark="media">Rosa · 350</span><span class="opt">Label</span></span>
+                <span class="where">2 Stacks</span>
+              </div>
+              <div class="row">
+                <span class="swatchdot pal" data-mark="house"></span>
+                <span class="name">Haus</span>
+                <span class="badges"><span class="tone pal" data-mark="house">Blau · 255</span><span class="opt">Label</span></span>
+                <span class="where">1 Stack</span>
+              </div>
+              <div class="row">
+                <span class="swatchdot pal" data-mark="network"></span>
+                <span class="name">Netz</span>
+                <span class="badges"><span class="tone pal" data-mark="network">Grasgrün · 130</span><span class="opt">Fläche</span></span>
+                <span class="where">1 Stack</span>
+              </div>
+              <div class="row">
+                <span class="swatchdot pal" data-mark="backup"></span>
+                <span class="name">Sicherung</span>
+                <span class="badges"><span class="tone pal" data-mark="backup">ohne Farbe</span><span class="opt">Label</span></span>
+                <span class="where">1 Container</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel pal" data-area="management">
+            <div class="panelhead">Stacks<span class="right">Marke, Einrückung, eigene Seite</span></div>
+            <div class="rows">
+              <div class="row">
+                <span class="dot down"></span><span class="name">arr_stack</span>
+                <span class="badges"><span class="label pal" data-mark="media">Medien</span><span class="opt">eingerückt</span></span>
+                <span class="where">local-host</span>
+              </div>
+              <div class="row">
+                <span class="dot warn"></span><span class="name">monitoring</span>
+                <span class="badges"><span class="opt">ohne Marke</span><span class="opt">eingerückt</span></span>
+                <span class="where">local-host</span>
+              </div>
+              <div class="row">
+                <span class="dot ok"></span><span class="name">haus_dienste</span>
+                <span class="badges"><span class="label pal" data-mark="house">Haus</span><span class="opt">eingerückt</span></span>
+                <span class="where">local-host</span>
+              </div>
+              <div class="row">
+                <span class="dot ok"></span><span class="name">edge</span>
+                <span class="badges"><span class="label pal" data-mark="network">Netz</span><span class="opt">flach</span></span>
+                <span class="where">vps</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <h2 class="section">Wer welche Farbe bekommt</h2>
+
+  <div class="legend">
+    <div class="lrow">
+      <div class="tier">Zustand<small>System · fest</small></div>
+      <div class="swatches">
+        <span class="sw solid" style="--tone: var(--state-ok); --tone-fg: oklch(0.22 0.05 160)">in Ordnung · 160</span>
+        <span class="sw solid" style="--tone: var(--state-warn); --tone-fg: oklch(0.22 0.05 85)">Achtung · 85</span>
+        <span class="sw solid" style="--tone: var(--state-down); --tone-fg: oklch(0.98 0.01 22)">Ausfall · 22</span>
+      </div>
+      <div class="rule">Für alles andere gesperrt. Bernstein erscheint zweimal: als Punkt am kranken Container, als Label „Update".</div>
+    </div>
+
+    <div class="lrow">
+      <div class="tier">Host<small>Achse · kräftig</small></div>
+      <div class="swatches">
+        <span class="sw pal" data-host="local-host" style="--sat-c: 0.19">local-host · 300</span>
+        <span class="sw pal" data-host="unraid" style="--sat-c: 0.19">unraid · 195</span>
+        <span class="sw pal" data-host="vps" style="--sat-c: 0.19">vps · 62</span>
+      </div>
+      <div class="rule">Die stärkste Ebene: <code>--c × 1.3</code>, vier Stufen des Farbeinsatzes je Host. Sechs Töne im Vorrat.</div>
+    </div>
+
+    <div class="lrow">
+      <div class="tier">Eigene Marke<small>Betreiber · leise</small></div>
+      <div class="swatches">
+        <span class="sw pal" data-mark="media" style="--sat-c: 0.19">Medien · 350</span>
+        <span class="sw pal" data-mark="house" style="--sat-c: 0.19">Haus · 255</span>
+        <span class="sw pal" data-mark="network" style="--sat-c: 0.19">Netz · 130</span>
+        <span class="sw pal" data-mark="backup" style="--sat-c: 0.19">Sicherung · grau</span>
+      </div>
+      <div class="rule">Halbe Sättigung (<code>--c × 0.5</code>), je Marke als Label oder Fläche. Eine Marke darf auch grau sein.</div>
+    </div>
+
+    <div class="lrow">
+      <div class="tier">Bereich<small>Schale · Andeutung</small></div>
+      <div class="swatches">
+        <span class="sw pal" data-area="operations" style="--sat-c: 0.19">Betrieb · 225</span>
+        <span class="sw pal" data-area="management" style="--sat-c: 0.19">Verwaltung · 325</span>
+      </div>
+      <div class="rule">Ein Drittel Sättigung (<code>--c × 0.32</code>), zwei Töne, die nie an einen Host gehen.</div>
+    </div>
+  </div>
+
+
+</div>
+
+<script>
+  const stage = document.querySelector('.stage');
+  const screens = stage.querySelectorAll('.screen');
+  const navButtons = stage.querySelectorAll('button[data-screen]');
+  const menuButton = document.getElementById('usermenu-button');
+  const menuList = document.getElementById('usermenu-list');
+
+  function closeMenu() {
+    menuList.hidden = true;
+    menuButton.setAttribute('aria-expanded', 'false');
+  }
+
+  menuButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const open = menuList.hidden;
+    menuList.hidden = !open;
+    menuButton.setAttribute('aria-expanded', String(open));
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!menuList.hidden && !event.target.closest('.usermenu')) closeMenu();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !menuList.hidden) {
+      closeMenu();
+      menuButton.focus();
+    }
+  });
+
+  function wire(groupId, attribute) {
+    const group = document.getElementById(groupId);
+    group.addEventListener('click', (event) => {
+      const button = event.target.closest('button');
+      if (!button) return;
+      for (const other of group.querySelectorAll('button')) {
+        other.setAttribute('aria-pressed', String(other === button));
+      }
+      stage.dataset[attribute] = button.dataset.value;
+    });
+  }
+
+  wire('sat', 'sat');
+  wire('ink', 'ink');
+  wire('marker', 'marker');
+
+  // Die Stack-Seite hat keinen eigenen Navigationseintrag: sie erbt die
+  // Markierung der Fläche, von der aus sie geöffnet wurde.
+  const ownNavItem = { overview: 'overview', containers: 'containers', stack: null };
+
+  for (const button of navButtons) {
+    button.addEventListener('click', () => {
+      const target = button.dataset.screen;
+      for (const screen of screens) screen.hidden = screen.dataset.screen !== target;
+
+      const highlight = target in ownNavItem ? ownNavItem[target] : target;
+      for (const other of navButtons) {
+        if (highlight && other.dataset.screen === highlight && other.classList.contains('navitem')) {
+          other.setAttribute('aria-current', 'page');
+        } else if (other.classList.contains('navitem')) {
+          other.removeAttribute('aria-current');
+        }
+      }
+      if (button.closest('.menu')) menuButton.setAttribute('aria-current', 'page');
+      else menuButton.removeAttribute('aria-current');
+      closeMenu();
+    });
+  }
+</script>
+</body>
+</html>

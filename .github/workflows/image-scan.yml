@@ -1,0 +1,66 @@
+# Weekly vulnerability scan of hub and agent images.
+# This complements local checks and GitHub PR checks.
+#
+# What there is to watch differs per image:
+#
+#   - The agent has no runtime dependency tree worth the name (zod, pinned
+#     exactly). What there is, is the BASE: `node:24-alpine` with `docker-cli`,
+#     `docker-cli-compose`, `wireguard-tools` and `iproute2`. It only gets
+#     current when the image is rebuilt, and without this run nobody would
+#     notice that a rebuild is due.
+#   - The hub carries its production dependencies and a base image pinned to a
+#     digest, which only moves when somebody moves it.
+#
+# The scan therefore builds anew instead of pulling a published release: the
+# question is "does the current base have gaps?", not "did the base of the
+# release tag have some?". A finding usually means: cut a release without a code
+# change, so that the hosts get a patched base.
+#
+# A failed run IS the report — GitHub notifies about failed scheduled runs.
+# That is the reason for `--exit-code 1`.
+name: Image scan
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    # Both images are scanned even if the first one has findings.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: hub
+            dockerfile: server/Dockerfile
+          - name: agent
+            dockerfile: agent/Dockerfile
+    steps:
+      - name: Check out the source
+        # Pinned to the commit, like in `release.yml`. The scanner below is
+        # explicitly not pinned: a pinned vulnerability database is none.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build the image
+        run: docker build --file "${{ matrix.dockerfile }}" --tag "scan:${{ matrix.name }}" .
+
+      - name: Trivy
+        # The scanner itself runs on `latest` on purpose: a pinned vulnerability
+        # database is no vulnerability database. `--ignore-unfixed` hides what
+        # has no update — otherwise the run stays red for good without anybody
+        # being able to do anything, and is ignored after the third week.
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${HOME}/.cache/trivy:/root/.cache/trivy" \
+            aquasec/trivy:latest image \
+              --severity HIGH,CRITICAL \
+              --ignore-unfixed \
+              --exit-code 1 \
+              "scan:${{ matrix.name }}"

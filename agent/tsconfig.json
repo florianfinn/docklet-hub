@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    // Type-check against the source of `contract`, the same files tsx loads
+    // with `--conditions=source`, as in `server/`. The build drops the
+    // condition again (`tsconfig.build.json`).
+    "customConditions": ["source"],
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    // TypeScript 7 no longer pulls in `@types/*` on its own: without this line
+    // tsc finds neither `Buffer` nor `process` nor the `node:` modules.
+    "types": ["node"]
+  },
+  // `lint` (tsc --noEmit) checks the tests too; the build leaves them out.
+  "include": ["src"]
+}

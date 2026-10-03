@@ -1,0 +1,18 @@
+-- Grundlage des Schemas.
+--
+-- Warum eine Erweiterung und keine Tabelle: die Tabellen dieses Systems
+-- entstehen mit den Phasen, die sie brauchen (Auth, Hosts, Audit). Was schon
+-- hier gehört, ist das, was die DATENBANK betrifft und nicht ein einzelnes
+-- Merkmal — und Erweiterungen sind genau das: sie werden einmal in die
+-- Datenbank installiert, nicht je Tabelle.
+--
+-- `citext` trägt den Vergleich ohne Rücksicht auf Groß- und Kleinschreibung.
+-- Gebraucht wird er dort, wo Menschen etwas eintippen, das trotzdem eindeutig
+-- bleiben muss: E-Mail-Adressen bei der Anmeldung, Hostnamen beim Anbinden
+-- eines Arms. Beides ohne citext zu bauen hieße, die Normalisierung in jede
+-- Abfrage zu schreiben und in genau einer zu vergessen — mit dem Ergebnis
+-- zweier Konten auf dieselbe Adresse.
+--
+-- Die Erweiterung liegt in den contrib-Modulen und ist im offiziellen
+-- postgres-Image enthalten; ein fremder Betreiber muss dafür nichts tun.
+CREATE EXTENSION IF NOT EXISTS citext;

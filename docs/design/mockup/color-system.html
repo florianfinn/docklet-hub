@@ -1,0 +1,461 @@
+<!doctype html>
+<!--
+  Herkunft: historische Layoutreferenz des Projekts, vor dem öffentlichen Neustart.
+  Artboard „Farbsystem" (eine Zahl je Modul, die shadcn-Token daraus abgeleitet), Bezugsdatum 2026-09-04.
+  Abweichungen gegenüber der Quelle: der Editor-Einbau (support.js, der DCLogic-Script-Block am Ende) ist
+  entfernt, damit die Datei ohne den Canvas im Browser aufgeht; sonst unverändert. Externe Ressource:
+  nur die Schriftfamilie IBM Plex von fonts.googleapis.com — ohne Netz fällt sie auf system-ui zurück.
+  Diese Datei ist Referenz für die Oberfläche (Konzept §2, UI-Design-Basis), kein Code des Hubs.
+-->
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;450;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+    :root {
+      --bg: oklch(0.165 0.008 265);
+      --card: oklch(0.205 0.009 265);
+      --card2: oklch(0.245 0.010 265);
+      --fg: oklch(0.945 0.005 265);
+      --fg2: oklch(0.735 0.012 265);
+      --fg3: oklch(0.585 0.012 265);
+      --line: oklch(1 0 0 / 9%);
+      --line2: oklch(1 0 0 / 17%);
+      --state-ok: oklch(0.78 0.14 160);
+      --state-warn: oklch(0.81 0.14 85);
+      --state-down: oklch(0.70 0.19 22);
+    }
+
+    /* Reihenfolge zählt: erst die Ableitung, dann die Farbtöne. */
+    [data-modul] {
+      --c: 0.145;
+      --primary: oklch(0.78 var(--c) var(--h));
+      --primary-fg: oklch(0.22 0.05 var(--h));
+      --accent: oklch(0.78 var(--c) var(--h) / 0.13);
+      --accent-line: oklch(0.78 var(--c) var(--h) / 0.34);
+      --accent-fg: oklch(0.86 calc(var(--c) * 0.72) var(--h));
+      --ring: oklch(0.78 var(--c) var(--h) / 0.45);
+      --chart-1: oklch(0.78 var(--c) var(--h));
+      --chart-2: oklch(0.70 var(--c) calc(var(--h) + 22));
+      --chart-3: oklch(0.62 var(--c) calc(var(--h) + 44));
+      --chart-4: oklch(0.72 calc(var(--c) * 0.75) calc(var(--h) - 26));
+      --chart-5: oklch(0.55 calc(var(--c) * 0.6) var(--h));
+    }
+    [data-modul="plex"]       { --h: 62; }
+    [data-modul="verwaltung"] { --h: 265; --c: 0.022; }
+    [data-modul="statistik"]  { --h: 195; }
+    [data-modul="teamspeak"]  { --h: 255; }
+    [data-modul="container"]  { --h: 300; }
+    [data-modul="spiele"]     { --h: 350; }
+
+    body { margin: 0; background: var(--bg); color: var(--fg);
+      font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
+      font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+    a { color: var(--fg2); text-decoration: none; }
+    a:hover { color: var(--fg); text-decoration: underline; }
+    .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+    .lbl { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: .13em;
+      text-transform: uppercase; color: var(--fg3); }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+    .tile { width: 38px; height: 38px; border-radius: 11px; display: flex; align-items: center;
+      justify-content: center; flex-shrink: 0; background: var(--accent); }
+    pre { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; line-height: 1.75;
+      background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+      padding: 18px 20px; margin: 0; overflow: hidden; color: var(--fg2); }
+    .k { color: oklch(0.78 0.13 300); }
+    .v { color: oklch(0.80 0.12 195); }
+    .cm { color: var(--fg3); }
+    .sw { height: 34px; border-radius: 7px; }
+    .slot { display: grid; grid-template-columns: 46px 30px minmax(0,1fr) 128px;
+      align-items: center; gap: 14px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; min-height: 1560px; background: var(--bg); padding: 42px 48px 56px">
+
+  <h1 style="margin: 0 0 8px; font-size: 27px; font-weight: 500; letter-spacing: -0.028em">Farbsystem</h1>
+  <p style="margin: 0 0 34px; color: var(--fg2); font-size: 16px; max-width: 830px; text-wrap: pretty">
+    Jedes Modul hat eine eigene Palette, und jede Palette hängt an genau einer Zahl: dem Farbton.
+    Alles andere — Kennfarbe, Symbolplatte, Fokusring, die fünf Diagrammfarben — wird daraus gerechnet.
+    Eine Palette zu tauschen heißt später, eine Zahl zu ändern.
+  </p>
+
+  <!-- Die Mechanik -->
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-bottom: 40px">
+    <div>
+      <div class="lbl" style="margin-bottom: 10px">Ein Modul setzt eine Zahl</div>
+<pre><span class="cm">/* das ist alles, was ein Modul definiert */</span>
+[data-modul=<span class="v">"plex"</span>]       { <span class="k">--h</span>: <span class="v">62</span>; }
+[data-modul=<span class="v">"verwaltung"</span>] { <span class="k">--h</span>: <span class="v">265</span>; <span class="k">--c</span>: <span class="v">0.022</span>; }
+[data-modul=<span class="v">"statistik"</span>]  { <span class="k">--h</span>: <span class="v">195</span>; }
+[data-modul=<span class="v">"teamspeak"</span>]  { <span class="k">--h</span>: <span class="v">255</span>; }
+[data-modul=<span class="v">"container"</span>]  { <span class="k">--h</span>: <span class="v">300</span>; }
+[data-modul=<span class="v">"spiele"</span>]     { <span class="k">--h</span>: <span class="v">350</span>; }</pre>
+    </div>
+    <div>
+      <div class="lbl" style="margin-bottom: 10px">Die shadcn-Token werden abgeleitet</div>
+<pre>[data-modul] {
+  <span class="k">--primary</span>:    oklch(.78 <span class="v">var(--c)</span> <span class="v">var(--h)</span>);
+  <span class="k">--accent</span>:     oklch(.78 <span class="v">var(--c)</span> <span class="v">var(--h)</span> / .13);
+  <span class="k">--ring</span>:       oklch(.78 <span class="v">var(--c)</span> <span class="v">var(--h)</span> / .45);
+  <span class="k">--chart-1</span>:    oklch(.78 <span class="v">var(--c)</span> <span class="v">var(--h)</span>);
+  <span class="k">--chart-2</span>:    oklch(.70 <span class="v">var(--c)</span> calc(<span class="v">var(--h)</span> + 22));
+  <span class="k">--chart-3</span>:    oklch(.62 <span class="v">var(--c)</span> calc(<span class="v">var(--h)</span> + 44));
+}</pre>
+    </div>
+  </div>
+
+  <!-- Palettenreihe je Modul -->
+  <div class="lbl" style="margin-bottom: 14px">Die sechs Paletten</div>
+  <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 42px">
+
+    <div data-modul="container" style="display: grid; grid-template-columns: 178px 128px minmax(0,1fr); gap: 20px; align-items: center; padding: 14px 18px; background: var(--card); border: 1px solid var(--line); border-radius: 13px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span class="tile" style="width: 32px; height: 32px; border-radius: 9px">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.8"><path d="M3 8.5 12 4l9 4.5-9 4.5z"/><path d="M3 12.5 12 17l9-4.5M3 16.5 12 21l9-4.5"/></svg>
+        </span>
+        <div>
+          <div style="font-weight: 500; font-size: 14.5px">Container</div>
+          <div class="mono" style="font-size: 11.5px; color: var(--fg3)">Betrieb, Hosts, Updates</div>
+        </div>
+      </div>
+      <div class="mono" style="font-size: 13px; color: var(--primary)">--h: 300 &#183; Lila</div>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 8px">
+        <div class="sw" style="background: var(--chart-1)"></div>
+        <div class="sw" style="background: var(--chart-2)"></div>
+        <div class="sw" style="background: var(--chart-3)"></div>
+        <div class="sw" style="background: var(--chart-4)"></div>
+        <div class="sw" style="background: var(--chart-5)"></div>
+      </div>
+    </div>
+
+    <div data-modul="plex" style="display: grid; grid-template-columns: 178px 128px minmax(0,1fr); gap: 20px; align-items: center; padding: 14px 18px; background: var(--card); border: 1px solid var(--line); border-radius: 13px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span class="tile" style="width: 32px; height: 32px; border-radius: 9px">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.8"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 4v16M17 4v16M2 12h20"/></svg>
+        </span>
+        <div>
+          <div style="font-weight: 500; font-size: 14.5px">Plex &amp; Mediathek</div>
+          <div class="mono" style="font-size: 11.5px; color: var(--fg3)">Aktivität, Kalender, Speicher</div>
+        </div>
+      </div>
+      <div class="mono" style="font-size: 13px; color: var(--primary)">--h: 62 &#183; Orange</div>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 8px">
+        <div class="sw" style="background: var(--chart-1)"></div>
+        <div class="sw" style="background: var(--chart-2)"></div>
+        <div class="sw" style="background: var(--chart-3)"></div>
+        <div class="sw" style="background: var(--chart-4)"></div>
+        <div class="sw" style="background: var(--chart-5)"></div>
+      </div>
+    </div>
+
+    <div data-modul="teamspeak" style="display: grid; grid-template-columns: 178px 128px minmax(0,1fr); gap: 20px; align-items: center; padding: 14px 18px; background: var(--card); border: 1px solid var(--line); border-radius: 13px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span class="tile" style="width: 32px; height: 32px; border-radius: 9px">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.8" stroke-linecap="round"><path d="M12 3a4 4 0 0 1 4 4v5a4 4 0 0 1-8 0V7a4 4 0 0 1 4-4z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        </span>
+        <div>
+          <div style="font-weight: 500; font-size: 14.5px">Teamspeak</div>
+          <div class="mono" style="font-size: 11.5px; color: var(--fg3)">und Musikbot</div>
+        </div>
+      </div>
+      <div class="mono" style="font-size: 13px; color: var(--primary)">--h: 255 &#183; Blau</div>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 8px">
+        <div class="sw" style="background: var(--chart-1)"></div>
+        <div class="sw" style="background: var(--chart-2)"></div>
+        <div class="sw" style="background: var(--chart-3)"></div>
+        <div class="sw" style="background: var(--chart-4)"></div>
+        <div class="sw" style="background: var(--chart-5)"></div>
+      </div>
+    </div>
+
+    <div data-modul="spiele" style="display: grid; grid-template-columns: 178px 128px minmax(0,1fr); gap: 20px; align-items: center; padding: 14px 18px; background: var(--card); border: 1px solid var(--line); border-radius: 13px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span class="tile" style="width: 32px; height: 32px; border-radius: 9px">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="6" width="20" height="12" rx="4"/><path d="M7 12h.01M17 12h.01M12 10v4"/></svg>
+        </span>
+        <div>
+          <div style="font-weight: 500; font-size: 14.5px">Spiele</div>
+          <div class="mono" style="font-size: 11.5px; color: var(--fg3)">Browserspiele und Haus-Präsenz</div>
+        </div>
+      </div>
+      <div class="mono" style="font-size: 13px; color: var(--primary)">--h: 350 &#183; Rosa</div>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 8px">
+        <div class="sw" style="background: var(--chart-1)"></div>
+        <div class="sw" style="background: var(--chart-2)"></div>
+        <div class="sw" style="background: var(--chart-3)"></div>
+        <div class="sw" style="background: var(--chart-4)"></div>
+        <div class="sw" style="background: var(--chart-5)"></div>
+      </div>
+    </div>
+
+    <div data-modul="statistik" style="display: grid; grid-template-columns: 178px 128px minmax(0,1fr); gap: 20px; align-items: center; padding: 14px 18px; background: var(--card); border: 1px solid var(--line); border-radius: 13px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span class="tile" style="width: 32px; height: 32px; border-radius: 9px">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+        </span>
+        <div>
+          <div style="font-weight: 500; font-size: 14.5px">Statistiken</div>
+          <div class="mono" style="font-size: 11.5px; color: var(--fg3)">Auswertungen über alle Module</div>
+        </div>
+      </div>
+      <div class="mono" style="font-size: 13px; color: var(--primary)">--h: 195 &#183; Türkis</div>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 8px">
+        <div class="sw" style="background: var(--chart-1)"></div>
+        <div class="sw" style="background: var(--chart-2)"></div>
+        <div class="sw" style="background: var(--chart-3)"></div>
+        <div class="sw" style="background: var(--chart-4)"></div>
+        <div class="sw" style="background: var(--chart-5)"></div>
+      </div>
+    </div>
+
+    <div data-modul="verwaltung" style="display: grid; grid-template-columns: 178px 128px minmax(0,1fr); gap: 20px; align-items: center; padding: 14px 18px; background: var(--card); border: 1px solid var(--line); border-radius: 13px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span class="tile" style="width: 32px; height: 32px; border-radius: 9px">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2.2" fill="oklch(0.205 0.009 265)"/><circle cx="15" cy="12" r="2.2" fill="oklch(0.205 0.009 265)"/><circle cx="8" cy="18" r="2.2" fill="oklch(0.205 0.009 265)"/></svg>
+        </span>
+        <div>
+          <div style="font-weight: 500; font-size: 14.5px">Verwaltung</div>
+          <div class="mono" style="font-size: 11.5px; color: var(--fg3)">und die Schale selbst</div>
+        </div>
+      </div>
+      <div class="mono" style="font-size: 13px; color: var(--fg2)">--c: 0.022 &#183; neutral</div>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 8px">
+        <div class="sw" style="background: var(--chart-1)"></div>
+        <div class="sw" style="background: var(--chart-2)"></div>
+        <div class="sw" style="background: var(--chart-3)"></div>
+        <div class="sw" style="background: var(--chart-4)"></div>
+        <div class="sw" style="background: var(--chart-5)"></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 420px; gap: 34px">
+
+    <!-- Dieselbe Karte, sechs Paletten -->
+    <div>
+      <div class="lbl" style="margin-bottom: 4px">Dieselbe Karte, sechs Paletten</div>
+      <div style="color: var(--fg2); font-size: 14px; margin-bottom: 16px">
+        Identisches Markup. Nur das <span class="mono">data-modul</span> unterscheidet sich.
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px">
+
+        <div class="card" data-modul="container" style="padding: 16px 17px">
+          <span class="tile" style="width: 32px; height: 32px; border-radius: 9px; margin-bottom: 13px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.8"><path d="M3 8.5 12 4l9 4.5-9 4.5z"/><path d="M3 12.5 12 17l9-4.5"/></svg>
+          </span>
+          <div style="font-size: 24px; font-weight: 500; letter-spacing: -0.025em; color: var(--primary)">31</div>
+          <div class="lbl" style="margin-top: 2px">laufen</div>
+          <div style="display: flex; align-items: flex-end; gap: 4px; height: 26px; margin-top: 13px">
+            <span style="flex: 1; height: 40%; background: var(--chart-3); border-radius: 2px"></span>
+            <span style="flex: 1; height: 66%; background: var(--chart-2); border-radius: 2px"></span>
+            <span style="flex: 1; height: 52%; background: var(--chart-2); border-radius: 2px"></span>
+            <span style="flex: 1; height: 88%; background: var(--chart-1); border-radius: 2px"></span>
+            <span style="flex: 1; height: 100%; background: var(--chart-1); border-radius: 2px"></span>
+          </div>
+        </div>
+
+        <div class="card" data-modul="plex" style="padding: 16px 17px">
+          <span class="tile" style="width: 32px; height: 32px; border-radius: 9px; margin-bottom: 13px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.8" stroke-linecap="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+          </span>
+          <div style="font-size: 24px; font-weight: 500; letter-spacing: -0.025em; color: var(--primary)">14</div>
+          <div class="lbl" style="margin-top: 2px">Wiedergaben</div>
+          <div style="display: flex; align-items: flex-end; gap: 4px; height: 26px; margin-top: 13px">
+            <span style="flex: 1; height: 40%; background: var(--chart-3); border-radius: 2px"></span>
+            <span style="flex: 1; height: 66%; background: var(--chart-2); border-radius: 2px"></span>
+            <span style="flex: 1; height: 52%; background: var(--chart-2); border-radius: 2px"></span>
+            <span style="flex: 1; height: 88%; background: var(--chart-1); border-radius: 2px"></span>
+            <span style="flex: 1; height: 100%; background: var(--chart-1); border-radius: 2px"></span>
+          </div>
+        </div>
+
+        <div class="card" data-modul="teamspeak" style="padding: 16px 17px">
+          <span class="tile" style="width: 32px; height: 32px; border-radius: 9px; margin-bottom: 13px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.8" stroke-linecap="round"><path d="M12 3a4 4 0 0 1 4 4v5a4 4 0 0 1-8 0V7a4 4 0 0 1 4-4z"/><path d="M5 11a7 7 0 0 0 14 0"/></svg>
+          </span>
+          <div style="font-size: 24px; font-weight: 500; letter-spacing: -0.025em; color: var(--primary)">67</div>
+          <div class="lbl" style="margin-top: 2px">Stunden</div>
+          <div style="display: flex; align-items: flex-end; gap: 4px; height: 26px; margin-top: 13px">
+            <span style="flex: 1; height: 40%; background: var(--chart-3); border-radius: 2px"></span>
+            <span style="flex: 1; height: 66%; background: var(--chart-2); border-radius: 2px"></span>
+            <span style="flex: 1; height: 52%; background: var(--chart-2); border-radius: 2px"></span>
+            <span style="flex: 1; height: 88%; background: var(--chart-1); border-radius: 2px"></span>
+            <span style="flex: 1; height: 100%; background: var(--chart-1); border-radius: 2px"></span>
+          </div>
+        </div>
+
+        <div class="card" data-modul="spiele" style="padding: 16px 17px">
+          <span class="tile" style="width: 32px; height: 32px; border-radius: 9px; margin-bottom: 13px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="6" width="20" height="12" rx="4"/><path d="M12 10v4"/></svg>
+          </span>
+          <div style="font-size: 24px; font-weight: 500; letter-spacing: -0.025em; color: var(--primary)">17</div>
+          <div class="lbl" style="margin-top: 2px">Runden</div>
+          <div style="display: flex; align-items: flex-end; gap: 4px; height: 26px; margin-top: 13px">
+            <span style="flex: 1; height: 40%; background: var(--chart-3); border-radius: 2px"></span>
+            <span style="flex: 1; height: 66%; background: var(--chart-2); border-radius: 2px"></span>
+            <span style="flex: 1; height: 52%; background: var(--chart-2); border-radius: 2px"></span>
+            <span style="flex: 1; height: 88%; background: var(--chart-1); border-radius: 2px"></span>
+            <span style="flex: 1; height: 100%; background: var(--chart-1); border-radius: 2px"></span>
+          </div>
+        </div>
+
+        <div class="card" data-modul="statistik" style="padding: 16px 17px">
+          <span class="tile" style="width: 32px; height: 32px; border-radius: 9px; margin-bottom: 13px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7"/></svg>
+          </span>
+          <div style="font-size: 24px; font-weight: 500; letter-spacing: -0.025em; color: var(--primary)">6</div>
+          <div class="lbl" style="margin-top: 2px">Konten</div>
+          <div style="display: flex; align-items: flex-end; gap: 4px; height: 26px; margin-top: 13px">
+            <span style="flex: 1; height: 40%; background: var(--chart-3); border-radius: 2px"></span>
+            <span style="flex: 1; height: 66%; background: var(--chart-2); border-radius: 2px"></span>
+            <span style="flex: 1; height: 52%; background: var(--chart-2); border-radius: 2px"></span>
+            <span style="flex: 1; height: 88%; background: var(--chart-1); border-radius: 2px"></span>
+            <span style="flex: 1; height: 100%; background: var(--chart-1); border-radius: 2px"></span>
+          </div>
+        </div>
+
+        <div class="card" data-modul="verwaltung" style="padding: 16px 17px">
+          <span class="tile" style="width: 32px; height: 32px; border-radius: 9px; margin-bottom: 13px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </span>
+          <div style="font-size: 24px; font-weight: 500; letter-spacing: -0.025em; color: var(--primary)">25</div>
+          <div class="lbl" style="margin-top: 2px">Nutzer</div>
+          <div style="display: flex; align-items: flex-end; gap: 4px; height: 26px; margin-top: 13px">
+            <span style="flex: 1; height: 40%; background: var(--chart-3); border-radius: 2px"></span>
+            <span style="flex: 1; height: 66%; background: var(--chart-2); border-radius: 2px"></span>
+            <span style="flex: 1; height: 52%; background: var(--chart-2); border-radius: 2px"></span>
+            <span style="flex: 1; height: 88%; background: var(--chart-1); border-radius: 2px"></span>
+            <span style="flex: 1; height: 100%; background: var(--chart-1); border-radius: 2px"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Farbtonkreis: belegt, reserviert, frei -->
+    <div>
+      <div class="lbl" style="margin-bottom: 4px">Die Farbtöne im Kreis</div>
+      <div style="color: var(--fg2); font-size: 14px; margin-bottom: 12px">
+        Damit ein neues Modul nicht dort landet, wo der Zustand wohnt.
+      </div>
+
+      <div class="slot" style="border-top: none">
+        <span class="mono" style="font-size: 12px; color: var(--fg3)">22</span>
+        <span class="sw" style="width: 26px; height: 26px; border-radius: 7px; background: var(--state-down)"></span>
+        <span>Rot</span>
+        <span class="mono" style="font-size: 11.5px; color: var(--state-down)">ZUSTAND</span>
+      </div>
+      <div class="slot">
+        <span class="mono" style="font-size: 12px; color: var(--fg3)">62</span>
+        <span class="sw" style="width: 26px; height: 26px; border-radius: 7px; background: oklch(0.78 0.145 62)"></span>
+        <span>Orange</span>
+        <span class="mono" style="font-size: 11.5px; color: var(--fg2)">Plex</span>
+      </div>
+      <div class="slot">
+        <span class="mono" style="font-size: 12px; color: var(--fg3)">85</span>
+        <span class="sw" style="width: 26px; height: 26px; border-radius: 7px; background: var(--state-warn)"></span>
+        <span>Bernstein</span>
+        <span class="mono" style="font-size: 11.5px; color: var(--state-warn)">ZUSTAND</span>
+      </div>
+      <div class="slot">
+        <span class="mono" style="font-size: 12px; color: var(--fg3)">130</span>
+        <span class="sw" style="width: 26px; height: 26px; border-radius: 7px; background: oklch(0.78 0.145 130)"></span>
+        <span>Grasgrün</span>
+        <span class="mono" style="font-size: 11.5px; color: var(--fg3)">frei</span>
+      </div>
+      <div class="slot">
+        <span class="mono" style="font-size: 12px; color: var(--fg3)">160</span>
+        <span class="sw" style="width: 26px; height: 26px; border-radius: 7px; background: var(--state-ok)"></span>
+        <span>Grün</span>
+        <span class="mono" style="font-size: 11.5px; color: var(--state-ok)">ZUSTAND</span>
+      </div>
+      <div class="slot">
+        <span class="mono" style="font-size: 12px; color: var(--fg3)">195</span>
+        <span class="sw" style="width: 26px; height: 26px; border-radius: 7px; background: oklch(0.78 0.145 195)"></span>
+        <span>Türkis</span>
+        <span class="mono" style="font-size: 11.5px; color: var(--fg2)">Statistiken</span>
+      </div>
+      <div class="slot">
+        <span class="mono" style="font-size: 12px; color: var(--fg3)">225</span>
+        <span class="sw" style="width: 26px; height: 26px; border-radius: 7px; background: oklch(0.78 0.145 225)"></span>
+        <span>Stahlblau</span>
+        <span class="mono" style="font-size: 11.5px; color: var(--fg3)">frei</span>
+      </div>
+      <div class="slot">
+        <span class="mono" style="font-size: 12px; color: var(--fg3)">255</span>
+        <span class="sw" style="width: 26px; height: 26px; border-radius: 7px; background: oklch(0.78 0.145 255)"></span>
+        <span>Blau</span>
+        <span class="mono" style="font-size: 11.5px; color: var(--fg2)">Teamspeak</span>
+      </div>
+      <div class="slot">
+        <span class="mono" style="font-size: 12px; color: var(--fg3)">300</span>
+        <span class="sw" style="width: 26px; height: 26px; border-radius: 7px; background: oklch(0.78 0.145 300)"></span>
+        <span>Lila</span>
+        <span class="mono" style="font-size: 11.5px; color: var(--fg2)">Container</span>
+      </div>
+      <div class="slot">
+        <span class="mono" style="font-size: 12px; color: var(--fg3)">325</span>
+        <span class="sw" style="width: 26px; height: 26px; border-radius: 7px; background: oklch(0.78 0.145 325)"></span>
+        <span>Magenta</span>
+        <span class="mono" style="font-size: 11.5px; color: var(--fg3)">frei</span>
+      </div>
+      <div class="slot">
+        <span class="mono" style="font-size: 12px; color: var(--fg3)">350</span>
+        <span class="sw" style="width: 26px; height: 26px; border-radius: 7px; background: oklch(0.78 0.145 350)"></span>
+        <span>Rosa</span>
+        <span class="mono" style="font-size: 11.5px; color: var(--fg2)">Spiele</span>
+      </div>
+      <div class="slot">
+        <span class="mono" style="font-size: 12px; color: var(--fg3)">&#8212;</span>
+        <span class="sw" style="width: 26px; height: 26px; border-radius: 7px; background: oklch(0.78 0.022 265)"></span>
+        <span>Neutral</span>
+        <span class="mono" style="font-size: 11.5px; color: var(--fg2)">Verwaltung, Schale</span>
+      </div>
+
+      <div style="margin-top: 22px; padding: 16px 18px; background: var(--card); border: 1px solid var(--line); border-radius: 12px">
+        <div style="font-weight: 500; margin-bottom: 6px">Warum Modul- und Zustandsfarben sich nicht in die Quere kommen</div>
+        <div style="color: var(--fg2); font-size: 13.5px; text-wrap: pretty">
+          Sie haben getrennte Rollen. <strong style="color: var(--fg); font-weight: 500">Modulfarben tragen Flächen</strong>
+          — Symbolplatten, Diagramme, Kennzahlen, den Fokusring.
+          <strong style="color: var(--fg); font-weight: 500">Zustandsfarben erscheinen nur als Punkt, dünner Balken
+          oder kurze Beschriftung, immer mit Symbol</strong> — nie als Fläche. Deshalb liest sich ein oranger
+          Plex-Balken nie als Warnung, obwohl Orange und Bernstein benachbart sind.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 28px">
+    <div>
+      <div style="font-weight: 500; margin-bottom: 5px">Später per Klick tauschbar</div>
+      <div style="color: var(--fg2); font-size: 13.5px; text-wrap: pretty">
+        Weil ein Modul nur den Farbton setzt, ist ein Palettenwechsel ein Zahlenfeld in den
+        Website-Einstellungen — kein Neusatz von zwölf Tokens. Der Farbwähler, den die Zielabfolge
+        ohnehin durch geprüfte Vorgaben ersetzen will, wird damit ein Farbtonregler je Modul.
+      </div>
+    </div>
+    <div>
+      <div style="font-weight: 500; margin-bottom: 5px">Kontrast ist eingebaut, nicht geprüft</div>
+      <div style="color: var(--fg2); font-size: 13.5px; text-wrap: pretty">
+        Alle Kennfarben liegen auf derselben Helligkeit (0.78) und Buntheit (0.145). Wer den Farbton
+        dreht, kann den Kontrast nicht kaputt machen — das war beim freien Farbwähler die Falle.
+      </div>
+    </div>
+    <div>
+      <div style="font-weight: 500; margin-bottom: 5px">Hell und dunkel</div>
+      <div style="color: var(--fg2); font-size: 13.5px; text-wrap: pretty">
+        Im hellen Thema wandert die Kennfarbe auf 0.55 Helligkeit, der Farbton bleibt gleich.
+        Ein Modul behält seine Identität in beiden Fassungen.
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,25 @@
+/* Einstiegsdatei der Gestaltung. Sie trägt bewusst keine Regel und keinen
+ * Farbwert — nur die Reihenfolge, in der die drei Teile geladen werden, und
+ * die ist nicht beliebig:
+ *
+ * - `tailwindcss` zuerst, weil alles Weitere in seine Ebenen einsortiert wird.
+ * - `platform/theme/fonts.css` bringt IBM Plex Sans und Mono als Dateien aus dem
+ *   Web-Paket mit; erst dieser Import lässt Vite die woff2 mit bündeln.
+ * - `platform/theme/tokens.css` trägt die Grundwerte, die Stellschrauben, den
+ *   `@theme inline`-Block, aus dem Tailwind seine Hilfsklassen erzeugt, und
+ *   die drei Grundregeln für Grund, Schrift und Fokusring.
+ * - `platform/theme/palette.css` zuletzt, weil es die aus Farbton und Sättigung
+ *   gerechneten Werte deklariert und dabei auf die Stellschrauben von oben
+ *   zugreift.
+ * - `features/compose/compose-layout.css` begrenzt Datei und Editor nach
+ *   dem Seitenverhältnis; `compose-syntax.css` setzt feste YAML-Syntaxfarben.
+ *
+ * Eingebunden wird diese Datei in main.tsx; @tailwindcss/vite übersetzt sie
+ * beim Bauen. Eine tailwind.config.js gibt es in Tailwind 4 nicht mehr.
+ */
+@import "tailwindcss";
+@import "./platform/theme/fonts.css";
+@import "./platform/theme/tokens.css";
+@import "./platform/theme/palette.css";
+@import "./features/compose/compose-layout.css";
+@import "./features/compose/compose-syntax.css";

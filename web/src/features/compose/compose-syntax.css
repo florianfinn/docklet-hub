@@ -1,0 +1,28 @@
+/* Feste Syntaxbedeutungen für Compose-YAML. Die Töne stammen aus den
+ * kontrastgeprüften ANSI-Farben in platform/theme/tokens.css; sie folgen weder dem
+ * Farbton noch der Sättigung eines Hosts. Der helle Satz hält dieselben
+ * Farbfamilien auf dem hellen Kartenhintergrund lesbar. */
+:root {
+  --compose-syntax-key: #7caaff;
+  --compose-syntax-string: #a1e5a2;
+  --compose-syntax-literal: #eece74;
+  --compose-syntax-special: #65e9e8;
+  --compose-syntax-anchor: #dd87d6;
+  --compose-syntax-variable: #fcb5f5;
+}
+
+[data-scheme="light"] {
+  --compose-syntax-key: #2757b6;
+  --compose-syntax-string: #00721b;
+  --compose-syntax-literal: #735a00;
+  --compose-syntax-special: #006c6c;
+  --compose-syntax-anchor: #8c3287;
+  --compose-syntax-variable: #6b1667;
+}
+
+.compose-syntax-key { color: var(--compose-syntax-key); }
+.compose-syntax-string { color: var(--compose-syntax-string); }
+.compose-syntax-literal { color: var(--compose-syntax-literal); }
+.compose-syntax-special { color: var(--compose-syntax-special); }
+.compose-syntax-anchor { color: var(--compose-syntax-anchor); }
+.compose-syntax-variable { color: var(--compose-syntax-variable); }

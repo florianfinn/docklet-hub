@@ -1,0 +1,38 @@
+{
+  // Die Wächter als EIGENES Programm.
+  //
+  // Warum getrennt und nicht als zweiter Eintrag im `include` der Hauptfassung
+  // (so stand es in 48d2758 und war ein Fehler): die Wächter importieren
+  // `node:test`, `node:assert/strict` und `node:fs`. Schon ein solcher Import
+  // lädt die globalen Typen von Node in das GANZE Programm — `process`,
+  // `Buffer` und `__dirname` wären damit auch unter `src/` fehlerfrei, obwohl
+  // im Bündel keines davon existiert und ein `process` dort zur Laufzeit
+  // `undefined` ist. Gemessen am 2026-09-06 in beide Richtungen: mit `tests`
+  // im Hauptprogramm übersetzte `process.env.HOME` in einer Datei unter `src/`
+  // sauber, ohne es ist es wieder TS2591. Die `types`-Liste hilft dagegen
+  // nicht — sie steuert nur, was OHNE Import global dazukommt.
+  //
+  // Geprüft wird hier trotzdem, und das ist der Zweck: `tsx` entfernt Typen,
+  // ohne sie zu messen — ohne diesen zweiten Lauf wäre ein falscher Typ im
+  // DOM-Test unsichtbar. `pnpm --filter web run lint` fährt beide Läufe.
+  //
+  // ⚠️ Diese Datei steuert NUR den Typcheck. `tsx` liest sie nicht: gemessen
+  // am 2026-09-06 blieb das JSX der Testdateien beim alten Laufzeitmodell,
+  // gleich ob die Datei über `extends` erreichbar war oder über
+  // `TSX_TSCONFIG_PATH` benannt wurde. Deshalb importiert
+  // `language-switch.test.tsx` React namentlich — die Stelle trägt die
+  // Begründung.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client", "node"]
+  },
+  // ⚠️ DAZU JEDE AMBIENTE DEKLARATION UNTER `src/`. Dieses Programm übersetzt
+  // den Quellcode MIT, sobald ein Test einen Bildschirm importiert — aber eine
+  // `.d.ts`, die nicht selbst im Programm liegt, wird dabei NICHT geladen.
+  // Gemessen am 2026-09-07: `marks-assign.test.tsx` zieht über die Stack-Seite
+  // den YAML-Einfärber und damit `prismjs/components/prism-core.js` herein;
+  // ohne diese Zeile meldete `tsc -p tests` dort TS7016, während `tsc` unter
+  // `src/` sauber durchlief. Zwei Läufe mit verschiedenen Urteilen über
+  // dieselbe Datei sind schlimmer als einer.
+  "include": [".", "../src/**/*.d.ts"]
+}

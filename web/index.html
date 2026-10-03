@@ -1,0 +1,24 @@
+<!doctype html>
+<!--
+  ⚠️ `lang` und `<title>` stehen hier als Stand VOR dem ersten Rendern.
+
+  Danach setzt `web/src/platform/i18n/LanguageProvider.tsx` beide aus der Sprache, die
+  gerade gilt — `document.documentElement.lang` und `document.title`. Deutsch
+  steht hier, weil es die erste Sprache ist und die Vorgabe bleibt, wenn der
+  Browser keine mitbringt, die wir sprechen.
+
+  Wer den Titel ändern will, ändert die Nachricht `appTitle` in den
+  Sprachdateien und nicht diese Zeile: sonst stünde für einen Wimpernschlag
+  der eine Titel da und danach der andere.
+-->
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>docklet hub</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

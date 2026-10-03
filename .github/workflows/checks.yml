@@ -1,0 +1,29 @@
+name: PR checks
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-24.04
+    env:
+      PUBLICATION_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - run: npm install --global pnpm@11.21.0
+      - run: pnpm install --frozen-lockfile
+      - run: git config core.hooksPath .githooks
+      - run: node scripts/check-publication.mjs --history
+      - run: node scripts/check-pr-publication.mjs
+      - run: pnpm run lint
+      - run: pnpm run test
+      - run: pnpm run build

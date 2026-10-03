@@ -1,0 +1,343 @@
+# Der Stack: Hub, Postgres, Agent für den lokalen Host, WireGuard-Sidecar.
+#
+# Vor dem ersten Start einmal `scripts/bootstrap.sh` ausführen — es erzeugt die
+# .env neben dieser Datei (Geheimnisse gewürfelt, Docker-GID am Socket
+# abgelesen). Danach genügt `docker compose up -d`. Eine Angabe ist an keiner
+# Stelle nötig.
+#
+# ⚠️ Der eigene Projektname ist keine Kosmetik. Läuft auf demselben Host
+# bereits ein Agent des Hauptdashboards, trennt er beide Stacks vollständig:
+# eigene Container, eigenes State-Volume, eigenes Secret. Zwei Agenten am
+# selben docker.sock stören einander nicht, solange nur einer Container anlegt
+# und löscht (concept-and-plan.md §6, Issue #11).
+name: ${COMPOSE_PROJECT_NAME:-docklet-hub}
+
+services:
+  # ---------------------------------------------------------------------
+  # Der Hub
+  # ---------------------------------------------------------------------
+  hub:
+    # Regelweg ist ein gebautes Image; der lokale Bau bleibt der Rückfall,
+    # damit ein Auschecken ohne Registry-Zugang trotzdem hochfährt (AGENTS.md).
+    # Solange kein Hub-Image veröffentlicht ist, greift genau dieser Rückfall.
+    image: ${HUB_IMAGE:-docklet-hub:local}
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    # Der Hub teilt sich den Netz-Namensraum des Sidecars (Netzvariante A,
+    # docs/design/phase-4-bootstrap-and-registration.md §6). Er sieht damit
+    # 10.254.0.1 als eigene Adresse und erreicht die Agenten der Arme direkt —
+    # ohne eine einzige Capability in DIESEM Container.
+    #
+    # ⚠️ Drei Folgen, die man der Zeile nicht ansieht:
+    #   1. Der Hub hat hier KEIN `ports` mehr. Compose lehnt das in dieser
+    #      Betriebsart ab; veröffentlicht wird für ihn beim Sidecar, mit
+    #      denselben Variablen und derselben Vorgabe 127.0.0.1.
+    #   2. `hub` ist kein auflösbarer Name mehr. Niemand im Stack ruft ihn an;
+    #      umgekehrt lösen `postgres` und `docker-agent` weiter auf, weil der
+    #      Sidecar im Compose-Netz hängt und dessen Resolver mitbringt.
+    #   3. Der Hub ist über den Tunnel unter 10.254.0.1 erreichbar — auf ALLEN
+    #      Ports, auf denen er lauscht, nicht nur auf dem der Registrierung.
+    #      Das ist keine Eigenheit dieser Variante, sondern der Preis dafür,
+    #      dass der Hub im Tunnel steht (§6).
+    network_mode: "service:wireguard"
+    environment:
+      PORT: ${PORT:-8080}
+      DATABASE_URL: postgres://${POSTGRES_USER:-hub}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt — scripts/bootstrap.sh ausführen}@postgres:5432/${POSTGRES_DB:-docker_hub}
+      # Der Agent ist nur über das Compose-Netz erreichbar, unter seinem
+      # Dienstnamen. Kein Port auf dem Host, keine Adresse, die jemand kennen muss.
+      DOCKER_AGENT_URL: http://docker-agent:8099
+      DOCKER_AGENT_SECRET: ${DOCKER_AGENT_SECRET:?DOCKER_AGENT_SECRET fehlt — scripts/bootstrap.sh ausführen}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET fehlt — scripts/bootstrap.sh ausführen}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:8080}
+      # Wohin der Hub die Peer-Liste des Tunnels schreibt. Der Sidecar liest
+      # dieselbe Datei aus demselben Volume — sie ist die einzige Verbindung
+      # zwischen beiden Diensten.
+      HUB_WIREGUARD_CONFIG_PATH: ${HUB_WIREGUARD_CONFIG_PATH:-/etc/wireguard/wg0.conf}
+      # Die Identität der Hub-Seite und die Maße des Tunnels. Sie standen in der
+      # .env und in der Vorlage, wurden aber nie hereingereicht — der Hub sah sie
+      # nicht und wies jedes „Arm anlegen" mit `config-incomplete` ab, während
+      # `wg0.conf` leer blieb. Gemessen am 2026-09-06 an einem frischen Stack.
+      HUB_WIREGUARD_PRIVATE_KEY: ${HUB_WIREGUARD_PRIVATE_KEY:?HUB_WIREGUARD_PRIVATE_KEY fehlt — scripts/bootstrap.sh ausführen}
+      HUB_WIREGUARD_PUBLIC_KEY: ${HUB_WIREGUARD_PUBLIC_KEY:?HUB_WIREGUARD_PUBLIC_KEY fehlt — scripts/bootstrap.sh ausführen}
+      # Leer beim Start erlaubt: gebraucht wird die Adresse erst, wenn der erste
+      # Arm angelegt wird, und dort lässt sie sich je Arm überschreiben.
+      HUB_WIREGUARD_ENDPOINT: ${HUB_WIREGUARD_ENDPOINT:-}
+      # ⚠️ Dieselbe Zahl wie im `ports`-Eintrag des Sidecars weiter unten. Sie
+      # steht in der wg0.conf jedes Arms; zwei Fassungen wären ein Tunnel, den
+      # der Arm auf dem falschen Port sucht.
+      HUB_WIREGUARD_PORT: ${HUB_WIREGUARD_PORT:-51821}
+      HUB_TUNNEL_CIDR: ${HUB_TUNNEL_CIDR:-10.254.0.0/24}
+      TUNNEL_PORT: ${TUNNEL_PORT:-8099}
+      LOCAL_HOST_NAME: ${LOCAL_HOST_NAME:-local}
+      # Der Takt, in dem der Hub seine Arme von sich aus fragt. `0` schaltet
+      # den Hintergrundlauf ab; die Übersicht fragt dann wieder bei jeder
+      # Anfrage jeden Arm einzeln.
+      HUB_HOST_CYCLE_INTERVAL_SECONDS: ${HUB_HOST_CYCLE_INTERVAL_SECONDS:-60}
+    depends_on:
+      postgres:
+        # Nicht nur „gestartet", sondern „antwortet": ohne diese Bedingung
+        # läuft der Hub in seine Warteschleife, und das erste, was ein
+        # Betreiber im Log sieht, sind Verbindungsfehler.
+        condition: service_healthy
+      docker-agent:
+        condition: service_started
+      wireguard:
+        # ⚠️ `service_started` und ausdrücklich NICHT `service_healthy`.
+        # Gesund ist der Sidecar erst, wenn `wg show wg0` antwortet, also erst
+        # mit einer wg0.conf — und die schreibt der Hub. Mit `service_healthy`
+        # wartete der Hub auf eine Datei, die nur er selbst erzeugen kann: ein
+        # frischer Stack käme nie hoch, und zwar ohne Fehlermeldung, nur mit
+        # einem Container in „waiting". Für den geteilten Namensraum genügt,
+        # dass der Sidecar-Container läuft.
+        condition: service_started
+    volumes:
+      # ⚠️ Dass der Hub hier schreiben darf, entscheidet das Image und nicht
+      # diese Zeile: ein benanntes Volume übernimmt Besitzer und Rechte beim
+      # ersten Start aus dem Verzeichnis im Image. Deshalb legt
+      # `server/Dockerfile` /etc/wireguard vor `USER node` an und übergibt es
+      # `node` (uid 1000). Ohne das legte Docker es als root:root 0755 an, der
+      # Hub käme nicht hinein — und sichtbar würde es erst beim ersten Arm.
+      - wireguard-config:/etc/wireguard
+    # Der Hub sieht docker.sock nie (SECURITY.md, Grundsatz 3). Deshalb hier
+    # kein Socket, keine erhöhten Rechte, kein group_add — und auch für den
+    # Tunnel keine: NET_ADMIN trägt allein der Sidecar (§6, Vorgabe).
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    # Node startet sonst als PID 1 und bekommt keine Signale weitergereicht;
+    # jedes Stoppen liefe dann in die Frist statt sauber herunterzufahren.
+    init: true
+
+  # ---------------------------------------------------------------------
+  # Die Datenbank
+  # ---------------------------------------------------------------------
+  postgres:
+    # Tag und Digest, abgerufen am 2026-09-01.
+    image: ${POSTGRES_IMAGE:-postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt — scripts/bootstrap.sh ausführen}
+      POSTGRES_DB: ${POSTGRES_DB:-docker_hub}
+    volumes:
+      # ⚠️ `/var/lib/postgresql` und ausdrücklich NICHT `/var/lib/postgresql/data`.
+      # Ab Postgres 18 legt das offizielle Image seine Daten in ein Verzeichnis
+      # mit der Hauptversion im Namen (`/var/lib/postgresql/18/docker`), damit
+      # `pg_upgrade --link` ohne Grenze zwischen zwei Mounts arbeiten kann. Ein
+      # Volume am alten Pfad ist für dieses Image ein „unused mount/volume": der
+      # Einstiegspunkt bricht mit einer Erklärung ab, der Container bleibt
+      # `unhealthy`, und der Hub kommt wegen `condition: service_healthy` gar
+      # nicht erst hoch. Gemessen am 2026-09-06 mit einem frischen Stack auf dem
+      # Zielhost.
+      - postgres-data:/var/lib/postgresql
+    # ⚠️ Kein `ports`. Die Datenbank ist ausschließlich aus dem Compose-Netz
+    # erreichbar; sie auf dem Host zu veröffentlichen wäre ein offener Port
+    # mehr, für den es keinen Anlass gibt.
+    healthcheck:
+      # `-U` und `-d` gehören dazu: ohne sie fragt pg_isready nach der
+      # Standarddatenbank „postgres" und meldet bereit, bevor die eigene
+      # angelegt ist.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hub} -d ${POSTGRES_DB:-docker_hub}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # ⚠️ Hier steht bewusst KEIN `cap_drop: [ALL]` mit nachgereichter Auswahl.
+    # Der Einstiegspunkt des offiziellen Images legt beim ersten Start
+    # Verzeichnisse an, ändert deren Eigentümer und wechselt dann den Benutzer;
+    # welche Rechte er dafür genau braucht, sagt das Image nicht zu. Eine hier
+    # geratene Liste wäre eine ungeprüfte Annahme an genau der Stelle, an der
+    # diese Phase ihr Abnahmekriterium hat — ein Postgres, das auf einer fremden
+    # Maschine nicht hochkommt. Der Sicherheitsgewinn läge zudem bei einem
+    # Container, der keinen Port veröffentlicht und nur die eigene Datenbank
+    # hält. Wer die Liste misst statt zu raten, trägt sie hier nach.
+
+  # ---------------------------------------------------------------------
+  # Der Agent für den lokalen Host
+  # ---------------------------------------------------------------------
+  #
+  # Unverändert übernommen aus seinem eigenen Repo (dashboard-docker-agent).
+  # Er ist der einzige Container hier, der docker.sock sieht.
+  #
+  # Ohne WireGuard und ohne veröffentlichten Port: für den Host, auf dem der
+  # Hub selbst läuft, ist der Tunnel gegenstandslos — er ist Transport für
+  # FREMDE Hosts, nicht die Bedingung dafür, dass überhaupt ein Agent
+  # dazwischensteht (SECURITY.md, Grundsatz 3).
+  docker-agent:
+    # The agent image comes from this repository's release workflow (#279):
+    # one tag `v<semver>` builds hub and agent, both with the same version.
+    # The pin is a SemVer tag; the digest follows once the first release run has
+    # produced one. Never `latest` (AGENTS.md, "Images").
+    #
+    # The pin says what THIS stack runs, the mark (`MIN_AGENT_VERSION`,
+    # server/src/domain/hosts/version.ts) what a foreign arm has to speak at
+    # least. The pin never stands below the mark. `ARM_AGENT_IMAGE`
+    # (server/src/domain/hosts/arm-agent-image.ts) carries the same value, and
+    # `enrollment.test.ts` compares the two.
+    #
+    # `build` is the fallback: a checkout that cannot pull the image (no
+    # registry access, or a tag that has not been released yet) builds the
+    # agent from this repository instead and still comes up.
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    image: ${DOCKER_AGENT_IMAGE:-ghcr.io/florianfinn/docklet-hub-agent:v0.32.0}
+    restart: unless-stopped
+    # ⚠️ Kein `ports`. Der Agent ist ausschließlich unter seinem Dienstnamen im
+    # Compose-Netz erreichbar. Ein veröffentlichter Port wäre ein Weg zum
+    # docker.sock, der an der Anmeldung des Hubs vorbeiführt.
+    environment:
+      DOCKER_AGENT_SECRET: ${DOCKER_AGENT_SECRET:?DOCKER_AGENT_SECRET fehlt — scripts/bootstrap.sh ausführen}
+      DOCKER_AGENT_PORT: "8099"
+      # 0.0.0.0 ist hier richtig und nicht nachlässig: „alle Adressen" heißt in
+      # diesem Container die eine Adresse im isolierten Compose-Netz. Der
+      # Tunnel-Zwang des Agenten bleibt deshalb aus — er gilt für Agenten, die
+      # an einem echten Netz hängen.
+      DOCKER_AGENT_HOST: "0.0.0.0"
+      DOCKER_AGENT_REQUIRE_TUNNEL_BIND: "false"
+      DOCKER_AGENT_REGISTRY_FILE: /state/registry.json
+      DOCKER_AGENT_MONITOR_FILE: /state/monitors.json
+      DOCKER_AGENT_AUDIT_FILE: /state/audit.jsonl
+      DOCKER_AGENT_BIND_BASE_PATH: ${DOCKER_AGENT_BIND_BASE_PATH:-/home/docker}
+    volumes:
+      # `:ro` verhindert nicht den Zugriff auf die Engine-API — das täte es
+      # nicht, denn die läuft über denselben Socket —, sondern nur das
+      # versehentliche Ersetzen der Socket-Datei. Die Isolation liegt darin,
+      # dass NUR dieser Container den Socket sieht (SECURITY.md, Grundsatz 3).
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Eigenes State-Volume, getrennt von jedem anderen Agenten auf diesem
+      # Host. Es hängt am Projektnamen und kann deshalb nicht mit dem des
+      # Hauptdashboards zusammenfallen.
+      - docker-agent-state:/state
+      # ⚠️ DER BASISPFAD, unter DEMSELBEN Pfad eingehängt, unter dem er auf dem
+      # Host liegt — genau wie im Setup-Archiv eines Arms
+      # (`server/src/features/hosts/bootstrap/host-archive-compose.ts`). Der Agent liest die
+      # Compose-Datei eines Stacks unter dem Pfad aus dessen Labels; fehlt
+      # der Mount, findet er KEINE. Gemessen am 2026-09-29 auf dem Proxy: alle
+      # Stacks mit gültigem Anker unter `/home/docker`, und `compose-raw`
+      # antwortete für jeden mit `409 compose-datei-fehlt` (#183). Nicht `:ro`:
+      # der Compose-Editor schreibt die Datei.
+      #
+      # ⚠️ Damit liegt auch das Verzeichnis DIESES Stacks im Blick des Agenten.
+      # Der Hub sperrt das Anwenden auf seinen eigenen Stack selbst
+      # (`server/src/features/compose/hub-own-stack.ts`): ein Anwenden dort ersetzte den
+      # Hub mitten im Vorgang.
+      - ${DOCKER_AGENT_BIND_BASE_PATH:-/home/docker}:${DOCKER_AGENT_BIND_BASE_PATH:-/home/docker}
+    group_add:
+      # Abgelesen an /var/run/docker.sock, nicht geraten: die GID unterscheidet
+      # sich je Distribution und ist der wahrscheinlichste Grund, aus dem ein
+      # fremder Start scheitert.
+      - "${DOCKER_GID:?DOCKER_GID fehlt — scripts/bootstrap.sh ausführen}"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    healthcheck:
+      # Ohne Healthcheck gilt ein Agent, der beim Start abgebrochen hat (kein
+      # schreibbares Audit-Log, zu kurzes Secret), für Docker als „läuft" —
+      # `restart: unless-stopped` fährt ihn dann still in einer Schleife hoch.
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8099/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ---------------------------------------------------------------------
+  # Die Hub-Seite des Tunnels
+  # ---------------------------------------------------------------------
+  #
+  # Der einzige Container hier mit einer Capability, und der einzige mit einem
+  # Port nach außen (SECURITY.md, Grundsatz 5). Er trägt den Netz-Namensraum,
+  # in dem auch der Hub läuft — der Hub selbst bleibt damit ohne NET_ADMIN
+  # (docs/design/phase-4-bootstrap-and-registration.md §6).
+  #
+  # Bauart übernommen aus dashboard-docker-agent@v0.19.1,
+  # deploy/remote-wireguard/docker-compose.yml (Dienst `wireguard`) — die Datei
+  # ist dort seit v0.18.1 byteweise unverändert, verglichen am 2026-09-06.
+  wireguard:
+    # Dieselbe Variable wie beim Agenten, nicht nur derselbe Wert: beide Seiten
+    # des Tunnels bewegen sich damit zwangsläufig gemeinsam. Zwei Einträge, die
+    # man einzeln hochziehen kann, wären zwei Fassungen von `wg`, die sich erst
+    # im Betrieb widersprechen.
+    image: ${DOCKER_AGENT_IMAGE:-ghcr.io/florianfinn/docklet-hub-agent:v0.32.0}
+    # The same build fallback as the agent: both services run this one image.
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    restart: unless-stopped
+    # `wg-quick` legt Netzgeräte an; das geht nur als root.
+    user: "0:0"
+    # ⚠️ Hier steht bewusst NICHT `/usr/local/bin/wireguard-sidecar` aus dem
+    # Agent-Image. Das Skript dort (wireguard-sidecar.sh:11-18 in v0.19.1) ruft
+    # einmal `wg-quick up` und hält danach nur noch den Namensraum offen — es
+    # lädt eine geänderte wg0.conf NIE nach. Für den Arm ist das richtig, seine
+    # Datei ändert sich nicht; für den Hub wäre es der stille Fehler dieser
+    # Phase: der Hub schriebe den neuen Arm in die Datei, alles sähe richtig
+    # aus, und im Tunnel stünde er nicht.
+    #
+    # Warum kein zweiter Dienst dafür: ein Nachlader müsste im selben
+    # Netz-Namensraum sitzen und NET_ADMIN tragen — er wäre derselbe Container
+    # noch einmal, nur mit eigenem Lebenszyklus, aus dem heraus er den ersten
+    # umkonfiguriert. Ein Dienst, der seine eigene Datei liest, ist weniger.
+    #
+    # ⚠️ Drei Dinge in dieser Zeile sind Fallen, die grün durchkommen:
+    #   * `$$` statt `$`: Compose ersetzt `$name` sonst SELBST, aus der .env
+    #     heraus, und die Schleife vergliche leere Zeichenketten.
+    #   * `wg-quick strip` vor `syncconf`: `wg` kennt `Address`, `DNS` und
+    #     `PostUp` nicht und bricht ab — ohne Strip bliebe das Interface still
+    #     auf dem alten Stand.
+    #   * Der Strip läuft in eine Datei und nicht in `<(…)`: Prozessersetzung
+    #     kennt die busybox-Shell des Alpine-Images nicht.
+    # Scheitert der Strip, bleibt die Marke stehen und der Versuch wiederholt
+    # sich in fünf Sekunden — eine halb geschriebene Datei wird nie geladen.
+    command:
+      - sh
+      - -c
+      - 'umask 077; trap "wg-quick down wg0 >/dev/null 2>&1 || true" EXIT INT TERM; until stamp=$$(stat -c %i:%Y:%s /etc/wireguard/wg0.conf 2>/dev/null) && wg-quick up wg0; do echo "wireguard: warte auf wg0.conf vom Hub"; sleep 5; done; while :; do sleep 5; wg show wg0 >/dev/null 2>&1 || wg-quick up wg0 || continue; now=$$(stat -c %i:%Y:%s /etc/wireguard/wg0.conf 2>/dev/null) || continue; [ "$$now" = "$$stamp" ] && continue; wg-quick strip wg0 > /run/wg0.stripped && wg syncconf wg0 /run/wg0.stripped && stamp=$$now; done'
+    ports:
+      # Der eine Port, den dieser Hub nach außen zeigt. UDP, und ausdrücklich
+      # auf allen Adressen: ein Arm im Internet erreicht ihn sonst nicht.
+      - "${HUB_WIREGUARD_PORT:-51821}:51821/udp"
+      # ⚠️ Der Port des Hubs steht HIER und nicht beim Hub — der teilt sich
+      # diesen Namensraum und darf deshalb selbst nichts veröffentlichen.
+      # Vorgabe unverändert 127.0.0.1: der Hub steht nicht ungefragt im LAN
+      # (SECURITY.md, Grundsatz 4).
+      - "${HUB_BIND_ADDRESS:-127.0.0.1}:${HUB_PORT:-8080}:${PORT:-8080}"
+    cap_add: [NET_ADMIN]
+    sysctls:
+      # Nur in DIESEM Namensraum. Für Variante A trägt es nichts bei — der Hub
+      # sitzt im selben Namensraum, sein Verkehr wird nicht weitergeleitet,
+      # sondern lokal zugestellt. Es steht hier, damit ein Betreiber, der
+      # später einen zweiten Container an diesen Tunnel hängt, nicht an einem
+      # ausgeschalteten Kernel-Schalter scheitert.
+      net.ipv4.ip_forward: "1"
+    volumes:
+      # `:ro` ist hier eine Zusage und keine Vorsicht: die Peer-Liste hat genau
+      # einen Schreiber, den Hub. Was der Sidecar sieht, hat er nie verändert.
+      - wireguard-config:/etc/wireguard:ro
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    # `/run` trägt den Zustand von wg-quick und die gestrippte Fassung, in der
+    # der private Schlüssel steht — deshalb tmpfs und nicht das Volume.
+    tmpfs: ["/run", "/tmp"]
+    healthcheck:
+      # ⚠️ Solange der Hub noch keine wg0.conf geschrieben hat, ist dieser
+      # Dienst „unhealthy" und nicht „kaputt": es gibt schlicht noch keinen
+      # Tunnel. Genau deshalb hängt der Start des Hubs an `service_started`
+      # und nicht an dieser Prüfung.
+      test: ["CMD", "wg", "show", "wg0"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  postgres-data:
+  docker-agent-state:
+  # Die einzige Verbindung zwischen Hub und Sidecar: eine Datei. Der Hub
+  # schreibt sie unteilbar (server/src/features/hosts/bootstrap/wireguard-config-writer.ts),
+  # der Sidecar liest sie nach jeder Änderung neu.
+  wireguard-config:

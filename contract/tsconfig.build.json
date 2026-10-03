@@ -1,0 +1,11 @@
+{
+  // Build for the hub image: `node server/dist/index.js` resolves `contract`
+  // through the `default` condition to `dist/index.js`. The image carries
+  // no `src/*.ts` and no tsx; it must never depend on loading TypeScript.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "declaration": true
+  }
+}

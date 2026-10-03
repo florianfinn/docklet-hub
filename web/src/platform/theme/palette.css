@@ -1,0 +1,182 @@
+/*
+ * Die Palette: alles, was aus einem Farbton und einer Sättigung gerechnet
+ * wird. Was nicht rechnet, steht in tokens.css.
+ *
+ * Der Mechanismus, auf dem die ganze Datei steht — und der Grund, warum sie
+ * ungewöhnlich aussieht:
+ *
+ * Eine CSS-Variable wird dort aufgelöst, WO SIE DEKLARIERT IST, nicht dort,
+ * wo sie benutzt wird. `--primary: oklch(0.78 var(--c) var(--h))` rechnet
+ * also mit dem `--h` des Elements, das diese Deklaration trägt, und vererbt
+ * danach nur noch das fertige Ergebnis. Stünde die Ableitung allein auf
+ * `:root`, käme bei jedem Kind dieselbe Farbe an, egal welchen Ton es selbst
+ * setzt — ein Host mit eigenem Ton bliebe wirkungslos.
+ *
+ * Daraus folgt die Selektorliste der Ableitungsregel: sie muss jedes Element
+ * nennen, das eine eigene Palette tragen kann. Wer die Liste kürzt, weil sie
+ * überflüssig aussieht, nimmt genau der Ebene die Wirkung, deren Selektor er
+ * gestrichen hat — und nichts wird davon rot.
+ *
+ * Daraus folgt zweitens die Reihenfolge — aber nur an genau den Stellen, wo
+ * DIESELBE Eigenschaft zweimal bei gleicher Spezifität deklariert wird.
+ * `:root` und `[data-host]` sind beide (0,1,0); dort gewinnt die SPÄTERE
+ * Deklaration. Wo zwei Blöcke verschiedene Eigenschaften setzen, ist ihre
+ * Reihenfolge dagegen gleichgültig: ein `var()` löst träge am Benutzungsort
+ * auf, nicht in Schreibreihenfolge. Ableitung und Tonvorrat lassen sich
+ * tauschen, ohne dass sich ein Pixel ändert — gemessen.
+ *
+ * Es sind genau drei Paare in dieser Datei, und nur sie sind zu schützen:
+ *
+ *   1. `--c` — `:root` gegen `[data-host]`, `[data-mark]`, `[data-area]` und
+ *      gegen `[data-hue="neutral"]`. Der `:root`-Wert muss VOR ihnen stehen.
+ *   2. `--h` — `:root` gegen den Tonvorrat `[data-hue="…"]` und gegen
+ *      `[data-area="operations"|"management"]`. Auch hier ist jeder
+ *      Attributselektor (0,1,0), also genau so viel wie `:root`; der
+ *      Grundton muss VOR dem Vorrat stehen, sonst gilt überall 265.
+ *   3. `--head-face`, `--body-face`, `--card-line`, `--mark-face`,
+ *      `--mark-line` — die Ableitungsregel gegen `[data-ink]` und
+ *      `[data-mark-style]`. Die Ableitung muss VOR diesen beiden Blöcken
+ *      stehen.
+ *
+ * Die Ableitungsregel selbst deklariert weder `--h` noch `--c`. Sie steht
+ * nicht wegen der Kaskade vorn, sondern weil sie zuerst gelesen werden will.
+ *
+ * (Ein drittes Paar steht in tokens.css: die fünf Stellschrauben in `:root`
+ * gegen ihre Umschalter. Dort ist es dokumentiert.)
+ *
+ * Wird einer dieser Blöcke über seinen Partner geschoben, verliert er
+ * lautlos: kein Lint, kein Test und kein Bau meldet etwas.
+ *
+ * Drittens trägt `:root` einen eigenen Grundton. Eine Ableitung, die aus
+ * `var(--h)` rechnet, ohne dass `--h` gesetzt ist, ergibt eine ungültige
+ * Farbe — und eine ungültige Farbe fällt in CSS still auf „nicht gesetzt"
+ * zurück, nicht auf einen Fehler.
+ */
+
+/* 1. Die Ableitung. Eine Regel, deren Selektorliste jedes Element nennt, das
+ *    eine eigene Palette trägt. Formeln wörtlich aus
+ *    docs/design/mockup/color-system.html Z. 36–46, ergänzt um die zwei
+ *    Deckungsstufen aus D0 und um die Flächen der vier Farbeinsatz-Stufen.
+ *    `--primary-fg` des Artboards heißt hier `--primary-foreground`, weil die
+ *    shadcn-Konvention gilt; die Formel bleibt unverändert.
+ *
+ *    ⚠️ Seit D7a stehen die HELLIGKEITEN dieser Formeln nicht mehr als Zahl
+ *    darin, sondern als Skalar aus tokens.css (`--tone-l`, `--tone-ink-l`,
+ *    `--tone-ink-c`, `--accent-ink-l`). Kein Wert hat sich dabei geändert: mit
+ *    dem dunklen Satz steht in jeder Formel wieder dieselbe Zahl wie vorher
+ *    (0.78, 0.22/0.05, 0.86, und die Diagrammstufen 0.70/0.62/0.72/0.55 als
+ *    −0.08/−0.16/−0.06/−0.23 auf `--tone-l`). Der Grund ist der helle
+ *    Wertesatz: er darf diese Regel nicht ein zweites Mal führen. Eine zweite
+ *    Fassung derselben fünfzehn Formeln mit `[data-scheme="light"] ` vor jedem
+ *    der fünf Selektoren wäre nicht falsch, aber sie wäre ab dem Tag danach
+ *    eine zweite Wahrheit — die Begründung steht bei den Skalaren selbst.
+ *
+ *    ⚠️ `--focus-chroma` und `--chart-turn` sind aus demselben Grund Zahlen und
+ *    keine zweiten Farbregeln: null mal die Buntheit ist ein grauer Ring, null
+ *    mal 22 Grad ist keine Drehung. */
+:root,
+[data-hue],
+[data-host],
+[data-area],
+[data-mark] {
+  --primary: oklch(var(--tone-l) var(--c) var(--h));
+  --primary-foreground: oklch(var(--tone-ink-l) var(--tone-ink-c) var(--h));
+  --accent: oklch(var(--tone-l) var(--c) var(--h) / 0.13);
+  --accent-firm: oklch(var(--tone-l) var(--c) var(--h) / 0.22);
+  --accent-strong: oklch(var(--tone-l) var(--c) var(--h) / 0.34);
+  --accent-line: oklch(var(--tone-l) var(--c) var(--h) / 0.34);
+  --accent-foreground: oklch(var(--accent-ink-l) calc(var(--c) * 0.72) var(--h));
+  --ring: oklch(var(--tone-l) calc(var(--c) * var(--focus-chroma)) var(--h) / 0.45);
+  --chart-1: oklch(var(--tone-l) var(--c) var(--h));
+  --chart-2: oklch(calc(var(--tone-l) - 0.08) var(--c) calc(var(--h) + 22 * var(--chart-turn)));
+  --chart-3: oklch(calc(var(--tone-l) - 0.16) var(--c) calc(var(--h) + 44 * var(--chart-turn)));
+  --chart-4: oklch(calc(var(--tone-l) - 0.06) calc(var(--c) * 0.75) calc(var(--h) - 26 * var(--chart-turn)));
+  --chart-5: oklch(calc(var(--tone-l) - 0.23) calc(var(--c) * 0.6) var(--h));
+  --head-face: var(--secondary);
+  --body-face: var(--card);
+  --card-line: var(--border);
+  --mark-face: transparent;
+  --mark-ink: var(--accent-foreground);
+  --mark-line: var(--accent-line);
+
+  /* Die fünf farbführenden Namen der Seitenleiste stehen hier und nicht bei
+   * ihren drei Geschwistern in tokens.css: eine Zuordnung wie
+   * `--sidebar-primary: var(--primary)` in `:root` löst an `:root` auf und
+   * friert damit den Grundton ein — die Seitenleiste bliebe neutral, auch
+   * unter einem Bereich oder Host mit eigenem Ton. In dieser Regel wird sie
+   * auf jedem Element neu gerechnet, das eine eigene Palette trägt. */
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-ring: var(--ring);
+}
+
+/* 2. Der Grundton und die Sättigung der vier Ebenen.
+ *    ⚠️ Was hier wirklich zählt, ist nicht der Abstand zur Ableitung — die
+ *    deklariert weder `--h` noch `--c`, ein Tausch mit ihr ändert nichts.
+ *    Es zählt, dass die `:root`-Zeile VOR den drei Ebenen darunter steht:
+ *    dieselbe Eigenschaft, dieselbe Spezifität (0,1,0), die spätere gewinnt.
+ *    Die Faktoren sind in docs/design/hub-color-and-structure.md, Abschnitt 2,
+ *    begründet: der Host trägt am meisten Farbe, die Marke die Hälfte, der
+ *    Bereich und der Grund fast keine. Die Zustandsfarben sind nicht dabei —
+ *    sie stehen fest in tokens.css und folgen keiner Palette. */
+:root { --h: 265; --c: calc(var(--chroma) * 0.32); }
+
+[data-host] { --c: min(calc(var(--chroma) * 1.3), 0.215); }
+[data-mark] { --c: calc(var(--chroma) * 0.5); }
+[data-area] { --c: calc(var(--chroma) * 0.32); }
+
+/* 3. Der Tonvorrat: sechs freie Töne aus D0 plus ein neutraler. Die Namen
+ *    sind die Kennung, die D7 speichert. Die drei Zustandstöne 160, 85 und 22
+ *    kommen hier nicht vor — das ist keine Auslassung, sondern D0s Sperre
+ *    gegen einen Host, der aussieht wie eine Störung. */
+[data-hue="amber"]   { --h: 62; }
+[data-hue="green"]   { --h: 130; }
+[data-hue="teal"]    { --h: 195; }
+/* 255 ist kein Tippfehler für die 265 des Grundtons: 265 ist der neutrale Ton
+ * des ganzen Hauses, auf dem jede Fläche und jeder Textwert in tokens.css
+ * steht, 255 einer der sechs Töne, die D0 an Hosts vergibt. Sie sind Nachbarn,
+ * weil ein neutraler Grund und ein blauer Host keine Gegensätze sein sollen. */
+[data-hue="blue"]    { --h: 255; }
+[data-hue="violet"]  { --h: 300; }
+[data-hue="rose"]    { --h: 350; }
+[data-hue="neutral"] { --h: 265; --c: 0.014; }
+
+/* Die beiden Bereichstöne sind fest vergeben und stehen deshalb nicht im
+ * Vorrat: sie sind Ortsangabe, nicht Geschmack. */
+[data-area="operations"] { --h: 225; }
+[data-area="management"] { --h: 325; }
+
+/* 4. Farbeinsatz am Host — die vier Stufen aus D0.
+ *    Dieser Block und der nächste überschreiben `--head-face`, `--body-face`,
+ *    `--card-line`, `--mark-face` und `--mark-line` aus der Ableitungsregel
+ *    (Paar 3 oben) — sie müssen deshalb hinter ihr bleiben.
+ *
+ *    ⚠️ Bis D7a stand hier, `none` und `edge` trügen absichtlich dieselben
+ *    Flächen, und der Unterschied liege „allein in der Kante, die das Bauteil
+ *    in D3/D5 aus `--accent-line` zieht oder eben nicht". Dieser Mechanismus
+ *    war nie gebaut: alle vier Bauteile, die eine Host-Karte zeichnen, trugen
+ *    `border-accent-line` fest und zogen die getönte Kante bedingungslos —
+ *    auch bei „keine Farbe". Die beiden Zeilen waren damit ZEICHENGLEICH, der
+ *    Betreiber wählte eine Stufe, und auf dem Schirm passierte nichts.
+ *
+ *    Die Kante ist deshalb seit D7a eine eigene Variable in derselben Bauart
+ *    wie die Flächen: `--card-line` bekommt in der Ableitungsregel ihren
+ *    Vorgabewert (`--border`, also die neutrale Kante des Hauses) und wird
+ *    hier Stufe für Stufe überschrieben. Die vier Bauteile lesen sie über
+ *    `border-card-line` statt `border-accent-line`.
+ *
+ *    Nur „keine Farbe" trägt eine neutrale Kante; die drei übrigen Stufen
+ *    tönen sie. Der Unterschied zwischen `none` und `edge` steht damit in
+ *    diesem Block selbst und nicht in einem Bauteil, das ihn nie kannte.
+ *    Dass keine zwei Stufen derselben Stellschraube mehr denselben Satz Werte
+ *    deklarieren, hält web/tests/theme-presets.test.mjs fest. */
+[data-ink="none"] { --head-face: var(--secondary);     --body-face: var(--card);        --card-line: var(--border); }
+[data-ink="edge"] { --head-face: var(--secondary);     --body-face: var(--card);        --card-line: var(--accent-line); }
+[data-ink="head"] { --head-face: var(--accent-firm);   --body-face: var(--card);        --card-line: var(--accent-line); }
+[data-ink="card"] { --head-face: var(--accent-strong); --body-face: var(--accent);      --card-line: var(--accent-line); }
+
+/* 5. Darstellung einer Marke — die zwei Stufen aus D0. */
+[data-mark-style="label"] { --mark-face: transparent;       --mark-line: var(--accent-line); }
+[data-mark-style="fill"]  { --mark-face: var(--accent-firm); --mark-line: transparent; }

@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    // Read `contract` from its source, as Vite and tsx do (`source` export
+    // condition). The web never needs the built `contract/dist`.
+    "customConditions": ["source"],
+    "jsx": "react-jsx",
+    "strict": true,
+    // Bringt die Typen für Nicht-Code-Importe mit (hier: die CSS-Datei).
+    // Ohne sie hält `tsc` den Seiteneffekt-Import von styles.css für einen Tippfehler.
+    //
+    // ⚠️ `node` steht hier NICHT und darf hier nicht stehen: was unter `src/`
+    // gebündelt wird, läuft im Browser, und dort gibt es weder `process` noch
+    // `Buffer`.
+    "types": ["vite/client"],
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  // ⚠️ NUR `src`. Die Wächter unter `tests/` haben ihre eigene Fassung
+  // (`tests/tsconfig.json`) und stehen bewusst nicht in diesem Programm: sie
+  // importieren `node:test`, und schon dieser eine Import zieht die globalen
+  // Typen von Node in das GANZE Programm — `process` und `Buffer` wären damit
+  // auch im Browsercode fehlerfrei. Gemessen am 2026-09-06: mit `tests` in
+  // dieser Liste übersetzte `process.env.HOME` in einer Datei unter `src/`
+  // sauber; ohne sie ist es der Fehler, der es sein muss. Die `types`-Liste
+  // oben hilft dagegen nicht — sie steuert nur, was OHNE Import global
+  // dazukommt.
+  "include": ["src"]
+}

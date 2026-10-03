@@ -1,0 +1,17 @@
+packages:
+  - contract
+  - server
+  - web
+  - agent
+allowBuilds:
+  esbuild: true
+
+# dependency-cruiser reads TypeScript through `require("typescript")` from its
+# own directory and accepts only versions below 7 (measured with 18.4.0:
+# "missing-typescript-transpiler", after which it parses .ts files as
+# JavaScript). The repo itself uses TypeScript 7. The extension gives the tool
+# a TypeScript 6 of its own and leaves everything else alone.
+packageExtensions:
+  dependency-cruiser@*:
+    dependencies:
+      typescript: ^6.0.3

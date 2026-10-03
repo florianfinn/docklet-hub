@@ -1,0 +1,76 @@
+/* Lage und Maske des Grundes — mehr steht hier nicht.
+ *
+ * Die Datei wird von DotWave.tsx selbst importiert und nicht in styles.css
+ * eingetragen. Das ist die Bedingung dafür, dass der Rückbau zwei Handgriffe
+ * bleibt: Ordner löschen, eine Zeile in AuthCard.tsx streichen. Ein Eintrag in
+ * einer Sammeldatei wäre ein dritter Ort, an dem der Grund verankert wäre.
+ *
+ * ⚠️ Kein Farbwert in dieser Datei außer der Palettenvariablen unten. Der Ton
+ * der Punkte wird nicht hier geschrieben und schon gar nicht im Skript — er
+ * steht an genau einer Stelle, in `--accent-foreground`.
+ */
+
+/* Die Leinwand liegt unter dem Inhalt und fängt keinen Zeiger ab: sie ist
+ * Zierde, kein Bedienelement. Die Größe kommt aus dem umgebenden Kasten und
+ * nicht aus den Attributen der Leinwand — DotWave.tsx misst sie und rechnet
+ * das Raster daraufhin neu. */
+.dot-wave {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+
+  /* ⚠️ `inset: 0` allein streckt eine Leinwand NICHT. `canvas` ist ein
+   * ERSETZTES Element: bei `width: auto` gilt seine eigene Größe, und die ist
+   * ohne Attribute 300×150. Die überzählige Angabe wird dann aufgelöst, indem
+   * `right` und `bottom` fallen — der Kasten bleibt 300×150 in der linken
+   * oberen Ecke. Bei einem nicht ersetzten Element (etwa einem `div`) würde
+   * dieselbe Regel strecken; das ist der Unterschied, der die Falle stellt.
+   *
+   * Gemessen am 2026-09-05 im gebauten Bildschirm: ohne die beiden Zeilen
+   * meldete `getBoundingClientRect()` 300×150 bei `position: absolute`,
+   * `inset: 0` und einem `main` mit `position: relative` darüber. Der Grund
+   * zeichnete daraufhin ein Raster über 300×150 in die Ecke. Kein Wächter,
+   * kein `tsc` und kein Bau meldet das — nur ein Blick auf den Bildschirm. */
+  width: 100%;
+  height: 100%;
+
+  /* Die Maske nimmt die Punkte hinter der Karte nicht weg, sie dämpft sie:
+   * die Kämme kommen hinter der Karte hervor, statt unter ihr durchzulaufen.
+   *
+   * Für eine Maske zählt allein der Alphakanal; der Ton darin ist ohne
+   * Wirkung. Schwarz ist hier also kein Gestaltungswert, sondern nur der
+   * Träger der drei Deckungsstufen 22 %, 62 % und 100 %.
+   *
+   * ⚠️ Geschrieben als Mischung aus zwei Schlüsselwörtern und nicht in einer
+   * Farbfunktion mit Alphakanal: die Regel „kein roher Farbwert im Ordner"
+   * gilt für die ganze Datei, und eine Ausnahme allein für Maskenwerte wäre
+   * eine Lücke, die niemand mehr von einem eingefrorenen Ton unterscheidet.
+   * `color-mix(in srgb, black 22%, transparent)` ist derselbe Wert: die
+   * Deckung wird gemischt, Schwarz bleibt Schwarz. */
+  -webkit-mask-image: radial-gradient(
+    ellipse 470px 340px at 50% 50%,
+    color-mix(in srgb, black 22%, transparent) 26%,
+    color-mix(in srgb, black 62%, transparent) 62%,
+    black 90%
+  );
+  mask-image: radial-gradient(
+    ellipse 470px 340px at 50% 50%,
+    color-mix(in srgb, black 22%, transparent) 26%,
+    color-mix(in srgb, black 62%, transparent) 62%,
+    black 90%
+  );
+}
+
+/* Das Ablese-Element. Es zeigt nichts an — es ist der einzige Weg, auf dem
+ * eine Leinwand an einen Wert aus der Palette kommt: sie braucht eine
+ * konkrete Farbe, die Palette liefert eine Variable. Der Browser rechnet sie
+ * hier aus, DotWave.tsx liest sie mit `getComputedStyle` ab. Was dabei
+ * herauskommt, ist per Definition eine Farbe, die er auch wieder lesen kann.
+ *
+ * `display: none` hindert das nicht: der berechnete Wert von `color` steht
+ * auch an einem Element, das nicht dargestellt wird. */
+.dot-wave-ink {
+  display: none;
+  color: var(--accent-foreground);
+}

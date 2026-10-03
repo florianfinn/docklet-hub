@@ -1,0 +1,15 @@
+# Zeilenenden gehören ins Repo, nicht in die Einstellungen des Beitragenden.
+# Ohne diese Datei bringt ein Beitrag von einem Windows-Rechner CRLF mit, und
+# der nächste Diff zeigt jede Zeile als geändert.
+* text=auto eol=lf
+
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary

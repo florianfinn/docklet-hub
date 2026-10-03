@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+root="$(git rev-parse --show-toplevel)"
+node "$root/scripts/check-umlauts.mjs" "$1"
+node "$root/scripts/check-publication.mjs" --text "$1"

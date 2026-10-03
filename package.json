@@ -1,0 +1,29 @@
+{
+  "name": "docklet-hub",
+  "version": "0.32.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Eigenständige Docker-Verwaltung: Übersicht, Logs, Shell, Compose, Web-FTP, Updates mit Rollback, Benachrichtigungen.",
+  "packageManager": "pnpm@11.21.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "prepare": "node scripts/setup-git-hooks.mjs",
+    "dev": "concurrently \"pnpm --filter server run dev\" \"pnpm --filter web run dev\"",
+    "build": "pnpm --filter contract run build && pnpm --filter server run build && pnpm --filter web run build && pnpm --filter agent run build",
+    "lint": "pnpm --filter contract run lint && pnpm --filter server run lint && pnpm --filter web run lint && pnpm --filter agent run lint && eslint .",
+    "test": "pnpm -r --no-bail run test",
+    "check:boundaries": "depcruise contract/src server/src web/src web/tests agent/src --config .dependency-cruiser.mjs --ignore-known .dependency-cruiser-known-violations.json",
+    "check:publication": "node scripts/check-publication.mjs --worktree --history"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^10.0.5",
+    "dependency-cruiser": "^18.4.0",
+    "eslint": "^10.9.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.11.0",
+    "typescript-eslint": "^8.67.0"
+  }
+}

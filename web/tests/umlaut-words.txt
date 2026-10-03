@@ -1,0 +1,163 @@
+# Deutsche Wörter in ASCII-Umschreibung — jedes davon ist ein Fehler.
+#
+# AGENTS.md: „Umlaute und ß werden richtig gesetzt, auch im Commit-Betreff."
+# Diese Liste ist die Sperrklinke dazu. Gelesen wird sie von zwei Stellen:
+#
+#   web/tests/german-umlauts.test.mjs      für die Dateien im Repo
+#   .githooks/commit-msg                  für den Commit-Betreff
+#
+# Format: ein Wort je Zeile, kleingeschrieben, verglichen wird ohne Rücksicht
+# auf Groß-/Kleinschreibung und nur auf ganze Wörter. Zeilen mit # sind
+# Kommentar.
+#
+# ⚠️ Die Liste ist ABSICHTLICH kurz und keine Mustererkennung. Eine Regel wie
+# „ue gefolgt von Konsonant" träfe englische Bezeichner, die hier vorgeschrieben
+# sind (queue, value, build), und ein Wächter mit Fehlalarmen wird abgeschaltet,
+# nicht befolgt. Wer eine Umschreibung findet, die durchgerutscht ist, trägt sie
+# hier nach — das ist der vorgesehene Weg, nicht ein Versagen der Liste.
+#
+# Nicht aufgenommen, obwohl es Umschreibungen sind: Wörter, die auch englisch
+# gültig sind (gross, weiss, muss, dass). Der Preis dafür ist eine Lücke; der
+# Preis dagegen wäre ein Fehlalarm in jedem englischen Bezeichner.
+
+# ae
+aenderung
+aendern
+abhaengig
+faellt
+gemaess
+haette
+haengt
+laesst
+maessig
+naechste
+naechster
+naechsten
+spaeter
+taeglich
+waere
+waeren
+waehrend
+waehlen
+zaehlt
+zufaellig
+ergaenzt
+ergaenzen
+erklaeren
+
+# oe
+koennen
+koennte
+moeglich
+moeglichkeit
+noetig
+gehoert
+oeffentlich
+oeffnen
+groesse
+groesser
+loeschen
+erhoeht
+stoert
+
+# ue
+fuer
+ueber
+uebersicht
+uebernommen
+ueblich
+muessen
+zurueck
+gueltig
+ungueltig
+schluessel
+pruefen
+pruefung
+prueft
+ausfuehren
+durchfuehren
+fuehrt
+fuehren
+gruen
+wuerde
+kuerzer
+laeuft
+traegt
+ausfuellen
+verfuegbar
+zusaetzlich
+waechter
+
+# ss statt ß
+#
+# ⚠️ DIESER ABSCHNITT STAND BIS #99 AUF EINEM EINZIGEN WORT. Gemessen am
+# 2026-09-07: die Liste trug 97 Zeilen, davon deckte genau eine einen ß-Fall ab
+# (`ausserhalb`). Die Umlaut-Seite war gründlich, die ß-Seite praktisch
+# ungedeckt — und AGENTS.md nennt beide in einem Satz. Aufgefallen ist es auf
+# die unangenehmste Art: ein Bauagent schrieb `heisst` in einen neuen Kommentar,
+# der Wächter blieb grün, und beim Nachlesen stand dieselbe Form im Bestand.
+#
+# ⚠️ WARUM DIE LISTE KURATIERT IST UND KEINE REGEL. Die MEISTEN `ss` sind
+# richtig: `muss`, `dass`, `Fluss`, `Kuss`, `bisschen`, `Prozess`, `Adresse`,
+# `Interesse`. Ein „alle ss verdächtigen" machte den Wächter im ersten Lauf
+# unbrauchbar, und ein Wächter mit Fehlalarmen wird abgeschaltet, nicht befolgt.
+# Hier steht nur, wo nach heutiger Rechtschreibung ZWINGEND ß steht — langer
+# Vokal oder Diphthong davor.
+#
+# ⚠️ NICHT AUFGENOMMEN, UND ZWAR ABSICHTLICH:
+#   * `muss`, `dass`, `bisschen`, `Prozess` — sie sind richtig geschrieben.
+#   * `masse` — `Masse` und `Maße` sind BEIDE richtig und bedeuten
+#     Verschiedenes. Ein Wort, das nicht entscheidbar ist, gehört nicht in eine
+#     Sperrklinke, sondern hierher.
+#   * `busse` (`Busse` und `Buße`), `flosse`, `russe` — dieselbe Lage.
+#
+# ⚠️ `gross` UND `weiss` STEHEN JETZT DRIN, entgegen dem Absatz oben. Der
+# Einwand dort war der englische Bezeichner. Er trägt nicht: der Vergleich läuft
+# auf GANZE Wörter (`\b…\b`), und `grossAmount` oder `grossTotal` haben an der
+# Nahtstelle keine Wortgrenze — sie werden nicht getroffen. Getroffen wird
+# `zu-gross`, weil der Bindestrich eine Grenze IST, und das ist eine
+# Fehlerkennung des Agenten. Solche Werte der Gegenseite stehen in
+# `EXEMPT_WORDS` in `web/tests/german-umlauts.test.mjs` und nur in
+# Anführungszeichen — dieselbe Bauart wie bei `loeschen`.
+ausserhalb
+ausserdem
+aussen
+gross
+grosse
+grossen
+grosser
+groesst
+groesstenteils
+heiss
+heisst
+heissen
+liess
+liesse
+liessen
+weiss
+schliesst
+schliessen
+schliesslich
+strasse
+fuss
+spass
+beissen
+reissen
+giessen
+fliesst
+grossbuchstaben
+grossteil
+verstoss
+verstoesse
+verstoessen
+dreissig
+
+# Dieselben Wörter mit RICHTIGEM Umlaut und falschem ss — die Schweizer Form.
+# Sie ist keine ASCII-Umschreibung und fiele durch jede Liste, die nur auf
+# `oe`/`ue`/`ae` schaut. Gemessen am 2026-09-07 stand `grössere` im Bestand.
+grösse
+grösser
+grössere
+grösseren
+grösste
+büsst

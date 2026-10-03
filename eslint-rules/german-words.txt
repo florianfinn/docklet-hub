@@ -1,0 +1,838 @@
+# Deutsche Wörter, die als Bezeichner nicht vorkommen dürfen.
+#
+# AGENTS.md, Abschnitt Sprache: Bezeichner und Branch-Namen sind englisch,
+# Codekommentare, Doku und Commit-Texte deutsch. Diese Liste setzt die erste
+# Hälfte durch; gelesen wird sie von eslint-rules/english-identifiers.mjs. Sie
+# ist für alle drei Repos dieselbe Datei — Dashboard, Docker-Agent, Docker-Hub.
+#
+# Format: ein Wort je Zeile, kleingeschrieben. Verglichen wird gegen die
+# einzelnen Wörter eines Bezeichners, nachdem camelCase, PascalCase,
+# CONSTANT_CASE und snake_case zerlegt wurden. Zeilen mit # sind Kommentar.
+#
+# ══ DIE AUFNAHMEPRÜFUNG ════════════════════════════════════════════════════
+#
+# Die Frage lautet NICHT „trifft dieses Wort heute einen englischen Namen?",
+# sondern:
+#
+#     KANN DIESES WORT IN ENGLISCHEM CODE ALS EIGENES WORT AUFTRETEN?
+#
+# ⚠️ Der Unterschied ist der ganze Punkt. Diese Regel wirkt auf Code, den es
+# noch nicht gibt. Ein Bestandstreffer rechtfertigt gar nichts: der Bestand
+# steht in jedem der drei Repos ohnehin auf einer Ausnahmeliste (Stand
+# 2026-09-04: Hub 0, Agent 0, Dashboard 257 Namen), sonst wäre jede Datei sofort rot. Ein Wort, dessen
+# einzige Rechtfertigung Bestandstreffer sind, schützt also NICHTS und trägt
+# das volle Fehlalarmrisiko. `fallBack`, `standAlone`, `grossAmount`,
+# `holeSize`, `fundId`, `basisPoints` schreibt jeder irgendwann — und eine
+# Regel mit Fehlalarmen wird abgeschaltet, nicht befolgt.
+#
+# Die Beweislast liegt bei dem, der ein Wort AUFNIMMT. Wo eine frühere Fassung
+# dieser Liste ein Wort ausgeschlossen hat, bleibt es draußen, solange das
+# Gegenargument nur ein Bestandstreffer ist.
+#
+# So wird geprüft, in dieser Reihenfolge:
+#   1. Ist das Wort im Englischen dasselbe Wort oder ein englisches Wort mit
+#      anderer Bedeutung? Dann raus, mit englischem Gegenbeleg unten.
+#   2. Messung gegen einen englischen Korpus: die Typdeklarationen der
+#      Abhängigkeiten (3239 .d.ts-Dateien, 572021 Bezeichner-Knoten, fremder
+#      englischer Code). Von den 342 Kandidaten trafen dort genau zwei:
+#      `basis` (flexBasis) und `fall` (fallThrough). Beide sind raus.
+#      ⚠️ Der Korpus BEWEIST nur Vorkommen, nie Abwesenheit — `grossAmount`
+#      steht dort nicht und ist trotzdem selbstverständliches Englisch.
+#      Schritt 1 bleibt deshalb das schärfere Sieb.
+#   3. Messung gegen die drei eigenen Bäume. Ein Treffer auf einem englischen
+#      Namen ist ein Ausschlussgrund — kein Treffer ist KEIN Aufnahmegrund.
+#
+# HERKUNFT (#418, Paket P0): 296 Stämme aus scripts/german-identifiers.mjs
+# des Dashboards, vereinigt mit den 90 Wörtern der Hub-Liste. Die Schnittmenge
+# zählt 44 Wörter, der Hub brachte 46 eigene mit, das Dashboard 252;
+# zusammen 342, davon 8 in der Aufnahmeprüfung verworfen: 334 Einträge.
+#
+# NACHTRAG 2026-09-04 (dashboard-docker-agent#50): 247 Wörter aus einer Erhebung
+# ALLER Bezeichner-Wörter im Baum des Docker-Agents — Wörter, die keine der
+# beiden Listen kannte, weil sie nur in Komposita ohne Trennzeichen standen
+# (`textMitAltnamen`, `erwarteterRef`, `startBestaetigt`). Aufnahmeprüfung wie
+# oben: Schritt 1 von Hand (verworfen: gut, lang, modus, wart, ist, als, dem,
+# alter, halte, ort, basis, lies); Schritt 2 gegen 2501 .d.ts-Dateien mit
+# 1988146 Bezeichner-Tokens — null Treffer auf einem Bezeichner (zwei in Prosa:
+# „Helvetica Neue" als Schriftname in chart.js, ein Tippfehler „signatur" in
+# einem Kommentar der React-Typen); Schritt 3: die 247 treffen im Dashboard 184
+# Namen, allesamt deutsch (Liste zweite Grundlinie in
+# german-identifier-allowlist.txt), im Agent und im Hub nach dem Aufräumen
+# null. Stand danach: 581 Einträge.
+#
+# NACHTRAG 2026-10-02 (#278): 76 Wörter aus den deutschen Werten des
+# Agent-Protokolls (`fehlt`, `ungueltig`, `ausserhalb`, `delegationssperre` …).
+# Sie standen als Zeichenketten in Hub und Agent, wo diese Regel nichts sieht;
+# seit #278 prüft `web/tests/agent-contract-language.test.mjs` die Werte der
+# Schemas in `contract/src/agent/` gegen diese Liste. Aufnahmeprüfung wie oben:
+# Schritt 1 von Hand (verworfen: ab, als, art, im, ist, lang, zu, zum, weg,
+# gross, intern, versions — Englisch oder zu kurz, um eindeutig zu sein);
+# Schritt 2 gegen 4000 .d.ts-Dateien der Abhängigkeiten: null Treffer;
+# Schritt 3 gegen den eigenen Baum über `pnpm run lint`: null Treffer.
+# Stand danach: 657 Einträge.
+#
+# ⚠️ ABSICHTLICH eine Liste und kein Muster. Eine Regel wie „endet auf -ung"
+# träfe englische Bezeichner, und eine Regel mit Fehlalarmen wird abgeschaltet
+# statt befolgt. Wer ein deutsches Wort findet, das durchgerutscht ist, trägt
+# es hier nach — das ist der vorgesehene Weg, nicht ein Versagen der Liste.
+#
+# ⚠️ GEMESSEN GEGEN ALLE DREI BÄUME (Stand 2026-09-03, Dashboard 45b2d70,
+# Agent dceb22b, Hub 269af70): 334 Wörter gegen 14803 Bezeichner aus 630
+# Code-Dateien. Ergebnis: 407 getroffene Bezeichner, davon NULL englische. Der
+# Hub ist dabei der schärfste Prüfstein, weil sein Baum englisch ist; sein
+# einziger Treffer ist `lokal` in seiner eigenen eslint.config.mjs
+# (`plugins: { lokal: localRules }`, Zeilen 40 und 46). Das ist kein
+# Fehltreffer, sondern ein echter deutscher Name; wer die Regel dort
+# verdrahtet, benennt ihn zuerst nach `local` um.
+#
+# ⚠️ DER BLINDE FLECK DIESER REGEL — sie sieht nur, was splitWords() zerlegt.
+# Ein durchgehend kleingeschriebenes Kompositum wird NICHT zerlegt: aus
+# `zusammenfassung` wird ein einziges Wort, das in keiner Liste steht. Gemessen
+# in denselben drei Bäumen: 4562 der 14803 Bezeichner zerfallen in genau ein
+# Wort, und darunter stehen 138 deutsche Bezeichner, die diese Liste NICHT
+# fangen kann (9 davon lassen sich restlos aus Wörtern dieser Liste
+# zusammensetzen — `kopfzeilen`, `pfadliste`, `ladefehler`, `wartezeiten`,
+# `grundgeruest` —, die übrigen sind Ableitungen und Komposita wie
+# `zusammenfassung`, `unbekannt`, `ueberschreiben`, `delegationssperre`).
+# Die Regel fängt damit 407 von 545 deutschen Bezeichnern, rund 75 %. Das ist
+# eine Eigenschaft der Zerlegung, nicht der Liste: kein zusätzliches Wort
+# schließt diese Lücke, dafür müsste die Regel Teilzeichenketten prüfen — und
+# die brächte die Fehlalarme zurück (allein `modul` steckt in 89 englischen
+# Bezeichnern wie `ModuleContext`).
+# ── DIE WÖRTER ─────────────────────────────────────────────────────────────
+# Alphabetisch, damit ein Nachtrag als Einzeiler im Diff steht.
+# ── DIESELBEN WÖRTER MIT UMLAUT UND ß ──────────────────────────────────────
+#
+# In allen drei Repos werden deutsche Bezeichner mit ue/ae/oe/ss geschrieben;
+# diese 26 Formen treffen dort heute nichts (0 Treffer in den drei Bäumen).
+# Sie stehen ZUSÄTZLICH und nicht ersetzend: ein Bezeichner darf Umlaute
+# tragen, auch wenn es heute keiner tut, und dann soll er auffallen.
+# ── HOMOGRAPHEN: GEPRÜFT UND VERWORFEN ─────────────────────────────────────
+#
+# Diese Wörter treten in englischem Code als eigenes Wort auf. Sie stehen
+# auskommentiert und nicht gar nicht da, damit der nächste, der die Liste
+# ergänzen will, den Fall nicht neu aufrollt.
+#
+# Belege: (gemessen) = Bezeichner aus einem der drei Bäume oder aus dem
+# englischen Korpus der Abhängigkeiten. (englisch) = geläufiger englischer
+# Name, der heute nirgends steht und morgen jeder schreiben kann — genau der
+# Fall, gegen den diese Prüfung schützt. Hinter dem Strich steht der Preis:
+# der deutsche Name, der dafür ungefangen bleibt.
+#
+# alarm     34 englische Bezeichner (gemessen): cpuAlarm (D:server/src/docker-api.ts)
+# module    70 (gemessen): ModuleContext (D:server/src/api.ts)
+# modules   13 (gemessen): dashboardModules (D:server/src/api.ts)
+# relative   7 (gemessen): mountRelativeUrl (D:server/src/proxy-durchreichung.ts)
+#              — deutsch wäre `relativ`, und das steht oben in der Liste.
+# listen     4 (gemessen): listenPort (D:server/src/docker-host-routes.ts)
+#              — Preis: `tagListen` (D:server/src/docker-versionen.ts) ist
+#                „Tag-Listen" und bleibt unsichtbar.
+#
+# ── und diese acht dazu, nach der Aufnahmeprüfung oben (#418 P0) ───────────
+#
+# basis     (gemessen) flexBasis, webkitFlexBasis, FlexBasis (csstype/index.d.ts,
+#           lib.dom.d.ts — 5 Bezeichner im Korpus); (englisch) basisPoints,
+#           costBasis. Die Hub-Fassung führte `basis` ausdrücklich unter den
+#           Wörtern, die als englisch gültig NICHT aufgenommen werden; dieser
+#           Ausschluss galt schon vor der Messung und gilt weiter.
+#           — Preis: bindBasis (D:server/src/docker-anlegen-routes.ts).
+# fall      (gemessen) fallThrough (@xterm/xterm/src/common/parser/Types.d.ts);
+#           (englisch) fallBack, freeFall. — Preis: fall (D:server/src/anfrage-herkunft.test.ts).
+# art       (englisch) coverArt, albumArt — die Medienmodule sprechen mit Plex,
+#           Tautulli und *arr, deren Feldnamen genau so heißen; dazu artName,
+#           artBoard. — Preis: releaseArt (D:server/src/modules/media/clients/arr-client.ts),
+#           nowArt, art. Für die deutsche „Art" steht auf Englisch ohnehin `type`.
+# gross     (englisch) grossAmount, grossTotal, grossMargin, grossWeight.
+#           — Preis: zuGross, gross. Deutsch bleibt `groesse`/`groessen` in der Liste.
+# hole      (englisch) holeSize, pinHole, holePunch, blackHole.
+#           — Preis: hole (D:server/src/docker-status-extern.test.ts). `holen` bleibt drin.
+# stand     (englisch) standAlone, standBy, withStand, standIn.
+#           — Preis: stand (D:server/src/docker-selbstupdate-routes.ts). `zustand`,
+#             `bestand` und `zustaende` bleiben drin und sind die häufigeren Formen.
+# fund      (englisch) fundId, fundSource, hedgeFund. — Preis: fund
+#           (D:server/src/docker-anlegen-routes.ts). `befund`, `befunde` und
+#           `gefunden` bleiben drin und tragen die Bedeutung.
+# lies      (englisch) liesWithin, liesInRange, liesBetween — „the point lies
+#           within" ist geläufiges Englisch. — Preis: liesStatus, liesVerfuegbar
+#           (A:src/index.ts). `lese`, `lesen`, `gelesen` bleiben drin.
+#
+# Diese acht kosteten zusammen 14 Bestandsnamen in den drei Bäumen — allesamt
+# Namen, die ohnehin auf den Ausnahmelisten stehen und deshalb nie rot geworden
+# wären. Der Schutz, den sie aufgeben, ist also null; das Fehlalarmrisiko, das
+# sie abgeben, ist es nicht.
+#
+# ── ZWEI GRENZFÄLLE, GEPRÜFT UND BEHALTEN ──────────────────────────────────
+#
+# Auch `aus` und `laden` sehen nach Englisch aus. Sie stehen trotzdem oben in
+# der Liste, und zwar mit Grund, nicht auf Probe:
+#
+# aus    Es gibt kein englisches Wort „aus". Als eigenes Wort träte es nur als
+#        Länderkürzel auf (AUS = Australien, etwa `AUS_TIMEZONE`) — in einem
+#        Homelab-Dashboard ohne Länderlisten. Im englischen Korpus: 0 von
+#        572021 Bezeichnern. Dagegen steht ein produktives deutsches Muster:
+#        `versionAusLabels`, `portAusCompose`, `zeileAus`, `ausGruppen` — die
+#        deutsche Präposition ist hier die häufigste Wortfuge überhaupt.
+#        ⚠️ Taucht ein `AUS_`-Länderkürzel auf, gehört das Wort in den Block
+#        darüber. Das ist dann eine Zeile, keine Grundsatzfrage.
+# laden  Englisch „laden" gibt es (`fullyLaden`, `ladenWeight`), aber nur als
+#        literarisches Adjektiv der Frachtsprache; in Anwendungscode kommt es
+#        nicht vor (0 von 572021 Bezeichnern im Korpus). Deutsch ist es eines
+#        der häufigsten Verben überhaupt: `neuLaden`, `onHostsNeuLaden`,
+#        `datenLaden`. Von den zehn Grenzfällen ist das der knappste.
+abarbeiten
+abbrechen
+abfrage
+abfragen
+abgebrochen
+abgeholt
+abgelehnt
+abgewiesen
+ablehnen
+ablehnung
+abschluss
+absolut
+abweichend
+abweichung
+abweichungen
+adoptiert
+adresse
+aeltester
+aenderung
+aenderungen
+aktion
+aktionen
+aktiv
+aktive
+aktualisierbar
+aktuell
+aktuelle
+aktueller
+akzeptiert
+akzeptierte
+alle
+alleine
+allowlistet
+alte
+alternativen
+altnamen
+anderes
+anfrage
+angabe
+angebrochen
+angefordert
+angelegt
+angemeldet
+angenommen
+anker
+anlegen
+anmeldung
+ansicht
+antwort
+antworten
+anzahl
+archiv
+argumente
+atomar
+auf
+aufgegeben
+aufloesbar
+aufloesen
+aufraeumen
+aufruf
+aufrufe
+auftrag
+aufzeichnen
+aufzeichnung
+aus
+ausfall
+ausgabe
+ausgaenge
+ausgang
+ausgangs
+ausgenommen
+ausgetauscht
+auskunft
+ausnahme
+ausnahmen
+ausserhalb
+auswahl
+auswahlen
+basispfad
+bearbeiten
+bedient
+bedingung
+beende
+beendet
+beendete
+befund
+befunde
+beginn
+begonnen
+beim
+beispiel
+beispielpfad
+bekannt
+bekannte
+bekannten
+belegbar
+belegt
+benachrichtigung
+benenne
+benutzer
+bereits
+bericht
+beschaeftigt
+beschlossen
+beschreibung
+bestaetigen
+bestaetigt
+bestaetigung
+bestaetigungen
+bestand
+bestätigung
+betrieb
+betriebe
+beweglich
+beweglichkeit
+boshaft
+brav
+darf
+datei
+dateien
+dateiname
+daten
+dauer
+deaktiviert
+delegationssperre
+deskriptorlimit
+dienst
+dienste
+digeste
+dokumentiert
+doppelt
+draussen
+drossel
+durchgereicht
+echtzeit
+eigene
+eigener
+eingabe
+eingaben
+eingang
+eintraege
+eintrag
+einzelbefund
+empfangen
+ende
+enden
+entferne
+entfernen
+entfernt
+entfernter
+entpackt
+entscheidung
+entscheidungen
+ereignis
+erfordert
+ergaenze
+ergebnis
+ergebnisse
+erlaubt
+erlaubte
+ermittle
+erneut
+erreichbar
+erste
+erstes
+erwartet
+erwartete
+erwarteter
+erwartung
+erzeuge
+erzeugt
+erzeugung
+exakt
+existiert
+existierte
+faelle
+falsch
+falsche
+fassung
+fehlen
+fehlend
+fehlende
+fehler
+fehlerhaft
+fehlertext
+fehlgeschlagen
+fehlt
+feld
+felder
+fenster
+fertig
+fertiger
+finde
+folge
+formular
+fortschritt
+fortschritts
+frei
+freier
+freigabe
+freigaben
+freigeben
+fremd
+fremde
+fremder
+fremdes
+fremdverwaltet
+fremdverwaltung
+frist
+fuehre
+fuellung
+fuer
+führe
+ganzer
+geaendert
+geaenderte
+geeignet
+gemountet
+geschlossen
+gestartet
+getrennt
+geändert
+gedulld
+gefaehrlich
+gefaelscht
+gefangen
+gefunden
+geheim
+geheimnis
+geheimnisse
+gekappt
+gekuerzt
+gekürzt
+gelesen
+geliefert
+generiert
+geoeffnet
+geparst
+gepinnt
+geplant
+geprueft
+gepruefte
+geprüft
+geruest
+gesammelt
+gesamt
+gescheitert
+geschrieben
+gesehen
+gesendet
+gesetzt
+gesichert
+gesperrt
+gestoppt
+gesundheit
+getrimmt
+gewuenscht
+grenze
+grenzen
+groesse
+groessen
+größe
+grund
+grundgeruest
+gruppe
+gruppen
+gueltig
+haelfte
+haertung
+hilfsprogramm
+härtung
+haupt
+helfer
+herkunft
+hinweis
+hinweise
+historie
+hochladbar
+hoechststand
+holen
+identitaet
+inhalt
+intervall
+jetzt
+jung
+kachel
+kacheln
+kanal
+kandidat
+kandidaten
+kaputt
+kein
+keine
+kennt
+kennung
+klartext
+klassen
+klein
+knopf
+koerper
+kollision
+kommentar
+konfiguration
+konflikt
+kopf
+kopiert
+kopplung
+kopplungen
+kuerze
+kurz
+lade
+laden
+laedt
+laenge
+laengster
+laeuft
+lage
+lauf
+laufend
+laufende
+laufendes
+lesbarer
+lesend
+loeschen
+läuft
+laufzeit
+leer
+leere
+leerlauf
+leiste
+lesbar
+lese
+lesen
+letzter
+liste
+literale
+loeschbar
+loese
+lokal
+lokaler
+löschbar
+löse
+mehrdeutig
+mehrdeutiger
+mehrere
+melde
+meldung
+meldungen
+methode
+methoden
+minuten
+modul
+muster
+mutierend
+nach
+nachgerechnet
+nachher
+nachweis
+namen
+namens
+namensraum
+neu
+neue
+neuer
+nicht
+normalisiere
+nur
+objekt
+objekte
+oder
+oeffentlich
+oeffne
+oeffnen
+offen
+offene
+ohne
+projektname
+projektverzeichnis
+prozess
+rueckstau
+schreibrecht
+skalierter
+stroeme
+textdatei
+umbenennen
+unbekannte
+unbelegbar
+unbestimmbar
+uneindeutig
+ungueltig
+ungueltiger
+unlesbar
+unterstuetzt
+unveraenderlich
+veraltet
+verletzt
+verweis
+verworfen
+viele
+weicht
+weitergereicht
+zeitlimit
+ziehen
+zugelassen
+zurueckrollen
+öffne
+öffnen
+oktal
+optionen
+ordner
+paare
+passend
+passt
+pfad
+pfade
+planen
+platz
+platzhalter
+politik
+positivliste
+praefix
+programm
+projekt
+protokoll
+pruef
+pruefe
+pruefen
+pruefsumme
+prueftakt
+pruefung
+prüfe
+prüfsumme
+prüfung
+puffer
+quantor
+quelle
+quellen
+quelltext
+rahmen
+realer
+recht
+rechte
+rechts
+redigiere
+regel
+regeln
+registriere
+reihenfolge
+reiter
+relativ
+risiko
+roh
+rolle
+rollen
+routen
+rueckruf
+rueckweg
+ruhend
+rumpf
+sammle
+sauber
+schalte
+schalten
+schalter
+schlafe
+schlecht
+schliesse
+schließe
+schliessen
+schluessel
+schlüssel
+schnitt
+schreibbar
+schreibe
+schreiben
+schreibend
+schritt
+schritte
+schwelle
+schwellen
+seit
+sekunden
+selbst
+selbstkontroll
+selbstpruefend
+selbstupdate
+selbstverwaltung
+sende
+senden
+setze
+setzen
+sicher
+sicht
+sichtbar
+sichtbare
+signatur
+signaturen
+sitzung
+sitzungen
+soll
+sortiert
+spalte
+spalten
+speichere
+speichern
+sperre
+sperrend
+sperrende
+sperrliste
+spiele
+spuren
+stapel
+starte
+starten
+startfrist
+startmeldung
+steht
+stelle
+stellen
+stille
+stoppe
+stoppen
+strom
+stromfreigabe
+stromgrenze
+stueck
+stuecke
+stufe
+stufen
+synchron
+takt
+tausche
+teil
+teile
+temporaer
+termin
+terminalgroesse
+termine
+texte
+titel
+traegt
+tragbar
+treffer
+treiber
+trenner
+übergabe
+überlauf
+übernimm
+übersicht
+ueber
+uebergabe
+ueberlauf
+uebernimm
+ueberschreiben
+uebersicht
+uhr
+umbau
+umbenannt
+unbekannt
+unbestaetigt
+ungequotet
+unter
+unterdrueckt
+untergrenze
+unverlinkt
+unzulaessig
+verarbeite
+verbindung
+verbindungsgrenzen
+verboten
+verfuegbar
+vergleich
+vergleiche
+verlauf
+versatz
+verstoesse
+verstoss
+verstoß
+verstrichene
+versuch
+versuche
+versuchen
+verwaltung
+verwendet
+verwendung
+verwendungen
+verwerfe
+verwerfen
+verzeichnis
+voll
+vollstaendig
+vollständig
+von
+vor
+vorab
+vorfall
+vorgabe
+vorgang
+vorhanden
+vorher
+vorlage
+vorschau
+vorschauen
+wächter
+waechter
+waehle
+wähle
+warnung
+warte
+warten
+wartezeit
+wartezeiten
+wartung
+wartungs
+weich
+weiches
+weiter
+wendung
+wendungen
+wert
+werte
+wieder
+wiederholbare
+winzig
+wirft
+woerter
+wort
+wurzel
+zaehle
+zaehler
+zahl
+zahlen
+zähler
+zeichen
+zeige
+zeigen
+zeile
+zeilen
+zeit
+zeiten
+zeitgeber
+zeitpunkt
+zerlege
+zerlegt
+ziel
+ziele
+ziffern
+zugriff
+zurueck
+zurueckgehalten
+zusammen
+zusatz
+zustaende
+zustand
+zwei
+zweit
+zweite

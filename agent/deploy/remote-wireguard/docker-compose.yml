@@ -1,0 +1,154 @@
+name: docklet-hub-agent-remote
+
+services:
+  wireguard:
+    image: ${DOCKER_AGENT_IMAGE:?DOCKER_AGENT_IMAGE fehlt}
+    pull_policy: always
+    restart: unless-stopped
+    user: "0:0"
+    command: ["/usr/local/bin/wireguard-sidecar"]
+    cap_add: [NET_ADMIN]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/run", "/tmp"]
+    volumes:
+      - ./wg0.conf:/etc/wireguard/wg0.conf:ro
+    healthcheck:
+      test: ["CMD", "wg", "show", "wg0"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  docker-agent:
+    image: ${DOCKER_AGENT_IMAGE:?DOCKER_AGENT_IMAGE fehlt}
+    pull_policy: always
+    restart: unless-stopped
+    network_mode: "service:wireguard"
+    depends_on:
+      wireguard:
+        condition: service_healthy
+    env_file: [.env]
+    environment:
+      DOCKER_AGENT_HOST: ${DOCKER_AGENT_HOST:?DOCKER_AGENT_HOST fehlt}
+      DOCKER_AGENT_PORT: "8099"
+      DOCKER_AGENT_REQUIRE_TUNNEL_BIND: "true"
+      DOCKER_AGENT_TUNNEL_CIDR: ${DOCKER_AGENT_TUNNEL_CIDR:-10.253.0.0/24}
+      DOCKER_AGENT_REGISTRY_FILE: /state/registry.json
+      DOCKER_AGENT_MONITOR_FILE: /state/monitors.json
+      DOCKER_AGENT_AUDIT_FILE: /state/audit.jsonl
+      DOCKER_AGENT_BIND_BASE_PATH: ${DOCKER_AGENT_BIND_BASE_PATH:-/home/docker}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - docker-agent-state:/state
+      - ${DOCKER_AGENT_BIND_BASE_PATH:-/home/docker}:${DOCKER_AGENT_BIND_BASE_PATH:-/home/docker}
+    group_add:
+      - "${DOCKER_GID:?DOCKER_GID fehlt}"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    # Without a healthcheck, an agent that aborted at startup (no writable
+    # audit log, invalid secret) counts as "running" for Docker —
+    # `restart: unless-stopped` then silently restarts it in a loop, and that
+    # was only noticed when someone used the dashboard.
+    # `wget` comes from busybox and is present in the Alpine base image.
+    healthcheck:
+      # The tunnel address, not 127.0.0.1: with tunnel protection enabled the
+      # agent listens exclusively on DOCKER_AGENT_HOST.
+      test: ["CMD", "wget", "--spider", "-q", "http://${DOCKER_AGENT_HOST}:8099/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # The watcher (#36): performs the agent's update.
+  #
+  # Why a second container: during the swap the engine stops the agent
+  # container and with it every process inside. The agent therefore cannot
+  # replace itself — it only places a job in the shared /state, and the job is
+  # executed here.
+  #
+  # `network_mode: none` is not caution but simply possible: the watcher talks
+  # exclusively via the socket (pull, container swap and the cosign call all
+  # run as requests to the daemon), and its input is a file. So it has no port,
+  # no route and no secret — `env_file` is deliberately missing here.
+  #
+  # ⚠️ The watcher swaps ONLY the agent, not itself. After a self-update it
+  # therefore keeps running on the previous version until the next
+  # `docker compose up -d` brings it along. That is intended (whoever does the
+  # swap should be known code), but it also means: this service ages
+  # silently.
+  watcher:
+    image: ${DOCKER_AGENT_IMAGE:?DOCKER_AGENT_IMAGE fehlt}
+    pull_policy: always
+    restart: unless-stopped
+    command: ["node", "dist/watcher.js"]
+    network_mode: "none"
+    environment:
+      # The mount point stays /state/selbstupdate; only the key has become
+      # English (v0.18.0). The old name is still read.
+      DOCKER_AGENT_SELF_UPDATE_DIR: /state/selbstupdate
+      # The registry login — the watcher needs NO token of its own.
+      #
+      # The Docker daemon has no credentials; they live in the `config.json`
+      # of the user who calls the CLI (the one-time `docker login` from the
+      # README). The watcher pulls via the same CLI and gets to see the same
+      # file read-only. A direct call to the engine API would not have this
+      # login and would pull anonymously — so for a private package not at all.
+      #
+      # The path appears TWICE: once as a mount for this CLI here, once as the
+      # HOST path for the `docker run -v` of the cosign call (the daemon
+      # resolves bind mounts against the host file system). Hence the same
+      # variable in both places.
+      #
+      # Default `/root/.docker`, because `docker` usually runs via sudo on the
+      # target hosts. If it runs as a normal user, that user's directory belongs
+      # in the `.env` (e.g. /home/codex/.docker). If the path points nowhere,
+      # Docker creates an empty directory — the pull then fails visibly with
+      # `unauthorized` instead of silently doing something wrong.
+      DOCKER_CONFIG: /dockercfg
+      DOCKER_AGENT_DOCKERCFG_HOST_PATH: ${DOCKER_AGENT_DOCKERCFG_HOST_PATH:-${DOCKER_AGENT_DOCKERCFG_HOST_PFAD:-/root/.docker}}
+    # If the mounted `config.json` belongs to root — the normal case when
+    # `docker` runs via sudo on the host, and unavoidable on unraid —, the
+    # watcher running as `USER node` (uid 1000) cannot get at it:
+    # `open /dockercfg/config.json: permission denied`, then `unauthorized`.
+    #
+    # Then set these TWO lines and leave out `group_add`:
+    #
+    #   user: "0"
+    #   cap_add: ["DAC_OVERRIDE"]
+    #
+    # ⚠️ `user: "0"` alone is NOT enough, and the reason is the most common
+    # misconception about root on Linux: root bypasses file permissions not
+    # "because root" but via CAP_DAC_OVERRIDE — and `cap_drop: [ALL]` below
+    # throws that away. `/state/selbstupdate` belongs to uid 1000 and is set to
+    # 0755; root lands in the "other" class there and may only read and
+    # traverse. Measured on the proxy (2026-08-26): without the capability even
+    # creating the first status file fails.
+    #
+    # `group_add` becomes superfluous then: it gives uid 1000 the docker group
+    # for the socket. The socket belongs to root (`srw-rw---- root docker`),
+    # and root is thus its OWNER — that needs neither the group nor a
+    # capability.
+    #
+    # ⚠️ What this costs and what it does not: the capability is a real
+    # loosening of the hardening of THIS container. But it is irrelevant next
+    # to the docker.sock it holds anyway — that already makes it
+    # root-equivalent, and it could create a privileged container with `/` as a
+    # mount at any time. The uid in the container is not a security boundary;
+    # it only decides who owns the files it writes. That is exactly why the
+    # channel has been at 0644 since v0.14.2 (self-update-state.ts): otherwise
+    # the agent could no longer read what the watcher puts there for it.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - docker-agent-state:/state
+      - ${DOCKER_AGENT_DOCKERCFG_HOST_PATH:-${DOCKER_AGENT_DOCKERCFG_HOST_PFAD:-/root/.docker}}:/dockercfg:ro
+    group_add:
+      - "${DOCKER_GID:?DOCKER_GID fehlt}"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp"]
+
+volumes:
+  docker-agent-state:

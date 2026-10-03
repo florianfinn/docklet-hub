@@ -1,0 +1,18 @@
+/* Datei und Editor stehen links. Der Vergleich samt Anwendung nutzt die volle
+ * Breite des Stack-Reiters; deshalb trägt nur deren gemeinsame Hülle diese
+ * Klasse. Die Mindestbreite schützt kleine Bildschirme im Querformat. */
+.compose-single-file {
+  width: 100%;
+}
+
+@media (min-width: 1024px) and (min-aspect-ratio: 16/9) {
+  .compose-single-file {
+    width: 75%;
+  }
+}
+
+@media (min-width: 1440px) and (min-aspect-ratio: 21/9) {
+  .compose-single-file {
+    width: 50%;
+  }
+}

@@ -1,0 +1,24 @@
+/*
+ * Schriftschnitte für das Hub-Interface.
+ *
+ * Pakete: @fontsource/ibm-plex-sans (5.3.0), @fontsource/ibm-plex-mono (5.3.0).
+ * Lizenz der Schrift: SIL Open Font License, Version 1.1 (OFL-1.1) —
+ * Copyright 2019 IBM Corp., siehe node_modules/@fontsource/ibm-plex-sans/LICENSE
+ * bzw. .../ibm-plex-mono/LICENSE.
+ * Geladene Schnitte: Sans 400, 500, 600 — Mono 400, 500.
+ *
+ * Die Schrift liegt als Datei im Paket statt vom Netz zu kommen, weil die
+ * Content-Security-Policy des Hubs scharf ist: ein Ladeversuch gegen
+ * fonts.googleapis.com/fonts.gstatic.com wäre ein Zugriff nach außen, den
+ * die Richtlinie nicht zulässt — Vite bündelt die woff2-Dateien stattdessen
+ * mit in dist/assets/.
+ *
+ * Diese Datei setzt bewusst keine Variable und keinen Farbwert — der
+ * Rückfall auf system-ui steckt in --font-sans-stack (tokens.css).
+ */
+
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";

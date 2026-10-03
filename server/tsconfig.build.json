@@ -1,0 +1,59 @@
+{
+  // Bau-Fassung: wie tsconfig.json, aber ohne Testdateien im Ergebnis.
+  //
+  // Getrennt und nicht als `exclude` in der Hauptdatei, weil beide Läufe
+  // verschiedene Mengen brauchen: `lint` (tsc --noEmit) soll die Tests
+  // MITprüfen — ein Test, der nicht mehr typprüft, fällt sonst still aus der
+  // Prüfkette. Ins Image gehören sie deswegen trotzdem nicht.
+  //
+  // `agent-simulator.ts` trägt keine Endung `.test.ts` und fiele deshalb durch
+  // das erste Muster, gehört aber zur selben Menge: er ist der nachgebaute
+  // Anmelde-Client des Agenten und wird ausschließlich von Integrationstests
+  // benutzt. Im Image wäre er ein Werkzeug, das gegen den eigenen
+  // Registrierungs-Listener sprechen kann — nichts, was dort zu suchen hat.
+  //
+  // `exec-test-support.ts` ist derselbe Fall (Paket B6, Etappe E3, #5): der
+  // Prüfstand der Shell-Fläche — ein Zuhörer, der einen Agenten nachstellt,
+  // und ein Hub darum herum. Er trägt keine Endung `.test.ts`, weil ihn ZWEI
+  // Testdateien brauchen (`exec-routes.test.ts` für den Strom,
+  // `exec-session-routes.test.ts` für die drei kurzen Routen) und eine
+  // Testdatei, die eine andere importiert, deren Fälle ein zweites Mal
+  // ausführte. Im Image wäre er ein gefälschter Arm mit einem gültigen
+  // Geheimnis — nichts, was dort zu suchen hat.
+  //
+  // `port-test-support.ts` ebenso: der Zuhörer jedes Prüfstands, der einen
+  // Port zieht, den `fetch` auch anspricht. Ohne `.test.ts`, weil ihn zwanzig
+  // Testdateien importieren.
+  //
+  // `file-routes-test-support.ts` is the harness of the file surface: a
+  // listener that stands in for the agent, the real router behind it, and a
+  // caller that imitates the own UI. Two test files import it
+  // (`file-routes.test.ts`, `file-routes-contract.test.ts`); it imports
+  // `port-test-support.ts` and, while it was missing here, carried that one
+  // into `dist` too. `web/tests/build-excludes-test-support.test.mjs` fails
+  // when a `*test-support*` file under `src/` reaches this program again,
+  // through a missing pattern or through an import from built code.
+  //
+  // `agent-roundtrip-test-support.ts` is the harness of the contract test of
+  // #272: it loads the agent's real handlers next to the hub. In the image it
+  // would be a path into `agent/src`, which is not there.
+  //
+  // `agent-client-test-support.ts` holds the stand-in agents of the client
+  // tests of the feature `shell` (#260); two test files import it.
+  //
+  // ⚠️ `exclude` nimmt eine Datei nur aus der Wurzelmenge; importiert eine
+  // gebaute Datei sie, übersetzt und schreibt tsc sie trotzdem. Der Eintrag
+  // hält den Simulator also nur so lange draußen, wie ihn allein Tests
+  // importieren. Wer ihn aus Produktionscode importiert, bekommt ihn ohne
+  // Warnung wieder ins `dist` — dagegen hilft kein `exclude`, sondern nur,
+  // es nicht zu tun.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Without the `source` condition, `contract` resolves to its built
+    // `dist/*.d.ts` — the same files `node server/dist/index.js` loads as JS.
+    // With it, tsc would pull `contract/src` into this program, outside
+    // `rootDir`.
+    "customConditions": []
+  },
+  "exclude": ["src/**/*.test.ts", "src/**/agent-simulator.ts", "src/**/exec-test-support.ts", "src/**/port-test-support.ts", "src/**/file-routes-test-support.ts", "src/**/agent-roundtrip-test-support.ts", "src/**/agent-client-test-support.ts"]
+}

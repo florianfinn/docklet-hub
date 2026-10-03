@@ -1,0 +1,9 @@
+{
+  // Build variant: like tsconfig.json, but without test files in `dist`. The
+  // tests run through tsx and must not land in the runtime image.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "customConditions": []
+  },
+  "exclude": ["src/**/*.test.ts", "src/**/*-test-support.ts"]
+}

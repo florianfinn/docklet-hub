@@ -1,0 +1,23 @@
+{
+  // What server and web both know: schemas, limits, wire constants.
+  //
+  // This code runs in Node AND in the browser bundle. `types` is therefore
+  // empty and `lib` carries no DOM: neither `process` nor `document` may
+  // type-check here.
+  //
+  // `erasableSyntaxOnly` rejects `enum`, `namespace` and parameter properties.
+  // tsx and Vite strip types without generating code, and an enum has no
+  // JSON Schema form either — use `z.enum` or `as const` instead.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": [],
+    "strict": true,
+    "erasableSyntaxOnly": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src"]
+}

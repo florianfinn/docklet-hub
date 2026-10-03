@@ -1,0 +1,49 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc && vite build",
+    "lint": "tsc --noEmit && tsc -p tests --noEmit",
+    "test": "node --conditions=source --import tsx --test \"tests/**/*.test.{mjs,tsx}\""
+  },
+  "dependencies": {
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "@fontsource/ibm-plex-sans": "5.3.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@tanstack/react-query": "5.104.0",
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/xterm": "5.5.0",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "cmdk": "1.1.1",
+    "contract": "workspace:*",
+    "lucide-react": "1.41.0",
+    "prismjs": "1.30.0",
+    "radix-ui": "1.6.7",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router": "8.3.1",
+    "recharts": "3.8.0",
+    "sonner": "2.0.8",
+    "tailwind-merge": "3.6.0",
+    "tailwindcss": "^4.3.3",
+    "use-intl": "4.14.2"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "^20.14.0",
+    "@types/node": "^26.4.0",
+    "@types/prismjs": "^1.26.6",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.1",
+    "happy-dom": "^20.14.0",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "yaml": "^2.9.0"
+  }
+}

@@ -1,0 +1,556 @@
+/*
+ * Die Grundwerte des Hubs: Flächen, Text, Linien, Zustände — und die
+ * Stellschrauben, an denen D7 später dreht.
+ *
+ * Warum die Werte hier und nicht in der Palette stehen: sie folgen keinem
+ * Farbton. Grund, Karte, Text und die drei Zustandsfarben bedeuten etwas und
+ * dürfen sich nicht ändern, wenn jemand den Ton eines Hosts umschaltet. Die
+ * Palette daneben rechnet, diese Datei behauptet.
+ *
+ * Warum jede Stellschraube schon jetzt mit ihrem Standardwert dasteht, obwohl
+ * in D1 niemand sie umschaltet: D7 soll nur noch Werte setzen und kein Markup
+ * anfassen. Eine Variable nachzurüsten heißt, jede Stelle zu suchen, die den
+ * festen Wert eingebaut hat — genau das entfällt so.
+ *
+ * Warum `@theme inline` und nicht `@theme`: Tailwind erzeugt seine
+ * Hilfsklassen aus diesem Block. Ohne das Schlüsselwort legt es eine
+ * Zwischenvariable an und schreibt sie auf `:root`:
+ *
+ *     .bg-primary{background-color:var(--color-primary)}
+ *     :root,:host{--color-primary:var(--primary)}
+ *
+ * Nichts wird dabei ausgerechnet — der Fehler ist ein anderer und derselbe
+ * wie überall in dieser Schicht: `--color-primary` ist auf `:root`
+ * deklariert, löst dort auf und vererbt nur noch das fertige Ergebnis. Eine
+ * Palette, die auf einem Nachfahren umgeschaltet wird, kommt nicht mehr an.
+ * Es ist zum dritten Mal dieselbe Regel, nicht ein Sonderfall von Tailwind.
+ *
+ * Mit `inline` entsteht keine Zwischenvariable: die Klasse schreibt
+ * `var(--primary)` und löst am benutzenden Element auf. Der Bau bliebe auch
+ * ohne `inline` grün und die Farben stimmten sogar — bis jemand eine Palette
+ * umschaltet und nichts passiert. Ohne `inline` ist die Achse tot, und die
+ * Achse ist der Zweck dieses Pakets.
+ *
+ * Warum `--font-sans-stack` und nicht `--font-sans`: in `@theme inline` heißt
+ * die Tailwind-Variable selbst `--font-sans`. Stünde derselbe Name auch in
+ * `:root`, wäre die Zuordnung `--font-sans: var(--font-sans)` — ein
+ * Selbstbezug, dessen Auflösung nicht in beiden Richtungen sicher ist. Der
+ * Suffix macht die Quelle eindeutig; der Tokenname `--font-sans` entsteht
+ * trotzdem, nämlich im Theme-Block.
+ */
+
+/* Herkunft der Werte: docs/design/mockup/color-system.html Z. 19–31 bzw.
+ * hub-palette.html Z. 26–40, zeichengenau übernommen. Die Zuordnung auf die
+ * shadcn-Namen: --bg auf --background, --card auf --card, --card2 auf
+ * --popover und --secondary, --sunk auf --muted, --fg auf --foreground, --fg2
+ * auf --muted-foreground, --fg3 auf --subtle-foreground, --line auf --border,
+ * --line2 auf --input. `--subtle-foreground` ist der einzige eigene Name: die
+ * shadcn-Konvention kennt zwei Textstufen, das Artboard hat drei. */
+:root {
+  --background: oklch(0.165 0.008 265);
+  --foreground: oklch(0.945 0.005 265);
+  --card: oklch(0.205 0.009 265);
+  --card-foreground: oklch(0.945 0.005 265);
+  --popover: oklch(0.245 0.010 265);
+  --popover-foreground: oklch(0.945 0.005 265);
+  --secondary: oklch(0.245 0.010 265);
+  --secondary-foreground: oklch(0.945 0.005 265);
+  --muted: oklch(0.185 0.008 265);
+  --muted-foreground: oklch(0.735 0.012 265);
+  --subtle-foreground: oklch(0.585 0.012 265);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 17%);
+
+  /* Bedeutung, kein Geschmack: diese drei folgen keiner Palette. */
+  --state-ok: oklch(0.78 0.14 160);
+  --state-warn: oklch(0.81 0.14 85);
+  --state-down: oklch(0.70 0.19 22);
+  --destructive: var(--state-down);
+  --destructive-foreground: oklch(0.22 0.05 22);
+
+  /* Die Seitenleiste hat in der shadcn-Konvention eigene Namen, aber keine
+   * eigenen Werte. Hier stehen nur die drei, die auf Karte, Text und Linie
+   * zeigen — die folgen keiner Palette und dürfen deshalb an `:root`
+   * auflösen. Die fünf farbführenden Namen (`--sidebar-primary`,
+   * `--sidebar-primary-foreground`, `--sidebar-accent`,
+   * `--sidebar-accent-foreground`, `--sidebar-ring`) stehen bewusst NICHT
+   * hier, sondern in der Ableitungsregel von palette.css: eine Zuordnung an
+   * dieser Stelle würde den Grundton einfrieren. */
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+}
+
+/* Die Stellschrauben aus D0. Der Kommentar hinter jeder nennt die Stufen, die
+ * die Entwurfsetappe festgelegt hat — D7 baut daraus die Umschalter. */
+:root {
+  --chroma: 0.145;              /* D0: 0.055 zurückhaltend, 0.145 normal, 0.19 kräftig */
+  --radius: 8px;                /* D0: 4 kantig, 8 weich, 12 rund */
+  --density-size: 15px;         /* D0: 15px/1.55 normal, 14px/1.45 kompakt */
+  --density-leading: 1.55;
+  --stack-indent: 18px;         /* D0: eingerückt oder flach (0) */
+  --font-sans-stack: "IBM Plex Sans", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono-stack: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+
+/* Die Skalare des Schemas — der Teil des hellen und dunklen Wertesatzes, der
+ * in eine Formel eingeht statt eine Farbe zu sein.
+ *
+ * Warum es sie gibt: die Ableitung in palette.css steht auf einer
+ * Selektorliste, die jedes Element nennt, das eine eigene Palette tragen kann.
+ * Ein zweiter Wertesatz mit eigenen Formeln bräuchte diese Liste ein zweites
+ * Mal, jeden Selektor um `[data-scheme="light"] ` verlängert — dieselben
+ * fünfzehn Formeln zweimal, und jede Änderung an einer davon wäre ab dann eine
+ * Änderung an zweien. Also wandert nicht die Formel ins Schema, sondern die
+ * Zahl: die Ableitung bleibt EINE Regel und liest diese Skalare, das Schema
+ * setzt sie um.
+ *
+ * Das geht, weil diese Zahlen NICHT vom Farbton des Elements abhängen. Sie
+ * werden auf <html> deklariert, lösen dort auf und vererben sich als fertige
+ * Zahl nach unten — genau das, was für `--primary` schiefginge und hier
+ * richtig ist.
+ *
+ * Die Werte hier sind der DUNKLE Satz; sie stehen zeichengenau für das, was
+ * vorher als Zahl in der Formel stand (0.78, 0.22/0.05, 0.86, Drehung an,
+ * Ring bunt). Der helle Satz steht weiter unten. */
+:root {
+  --tone-l: 0.78;               /* Helligkeit der Kennfarbe (Artboard Z. 39) */
+  --tone-ink-l: 0.22;           /* Schrift AUF der Kennfarbe */
+  --tone-ink-c: 0.05;
+  --accent-ink-l: 0.86;         /* farbige Schrift auf getönter Fläche */
+  --focus-chroma: 1;            /* D0: Fokusring aus --h (1) oder neutral (0) */
+  --chart-turn: 1;              /* D0: Diagramme gedreht (1) oder einfarbig (0) */
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * DER HELLE WERTESATZ
+ *
+ * D1 hat ihn ausdrücklich hierher vertagt, und der Grund steht in
+ * docs/design/hub-color-and-structure.md §8, letzter Absatz: „ein heller
+ * Wertesatz ist kein zweiter Blick auf dieselben Zahlen, sondern verlangt
+ * einen eigenen Kontrasttest gegen den hellen Grund".
+ *
+ * Er ist deshalb GERECHNET und nicht gespiegelt. Was gespiegelt wurde, ist
+ * allein das Gefüge: im dunklen Satz liegen Grund, Senke, Karte und
+ * Hochfläche 0.165 / 0.185 / 0.205 / 0.245, also in Schritten von 0.02, 0.02
+ * und 0.04 vom Grund weg. Der helle Satz hält dieselben Abstände, nur in die
+ * andere Richtung — mit einer Ausnahme, die die Sehgewohnheit verlangt: im
+ * Hellen ist die Karte die HELLSTE Fläche (fast Weiß) und die Hochfläche die
+ * dunkelste, weil eine Karte auf hellem Grund nach oben aus ihm heraustritt
+ * und nicht nach unten.
+ *
+ * ⚠️ Das Artboard führt Hell nur als Prosa (color-system.html Z. 452: „Im
+ * hellen Thema wandert die Kennfarbe auf 0.55 Helligkeit, der Farbton bleibt
+ * gleich"). Diese 0.55 ist NICHT übernommen, und das ist der wichtigste
+ * einzelne Befund dieses Bauabschnitts: bei 0.55 erreicht die Kennfarbe gegen
+ * die drei Flächen nur 3.24:1, und gegen sie selbst erreicht WEDER eine helle
+ * NOCH eine dunkle Schrift die 4.5:1 (3.66:1 bzw. 3.35:1) — eine Fläche
+ * mittlerer Helligkeit trägt keine Schrift, in keine Richtung. Gerechnet ist
+ * daraus 0.46: Kennfarbe 4.67:1 gegen die schlechteste der drei Flächen,
+ * Schrift darauf 5.27:1. Gemessen von web/tests/theme-contrast.test.mjs, das
+ * die Zahlen aus DIESER Datei liest und nicht aus einer eigenen Kopie.
+ *
+ * Die drei Zustandsfarben stehen auch hier: ihre BEDEUTUNG ist fest (Grün
+ * heißt in Ordnung, und daran dreht kein Editor), ihr WERT muss dem Grund
+ * folgen wie jeder andere Vordergrund auch. Eine 0.78 helle Kennfarbe für
+ * „in Ordnung" erreicht auf einem 0.968 hellen Grund 1.9:1 und ist damit
+ * nicht mehr da. Sie hängen weiterhin an keinem `--h` und an keinem `--c` —
+ * genau das, und nur das, sichert der Wächter in design-tokens.test.mjs zu.
+ *
+ * ⚠️ Reihenfolge: `[data-scheme="light"]` ist EIN Attributselektor, also
+ * (0,1,0) — genau so viel wie `:root`. Dieser Block wirkt allein deshalb,
+ * weil er HINTER den beiden `:root`-Blöcken steht. Wer ihn nach oben zieht,
+ * schaltet das helle Thema ab, ohne dass ein Test rot wird.
+ * ────────────────────────────────────────────────────────────────────────── */
+[data-scheme="light"] {
+  --background: oklch(0.968 0.004 265);
+  --foreground: oklch(0.235 0.014 265);
+  --card: oklch(0.998 0.001 265);
+  --card-foreground: oklch(0.235 0.014 265);
+  --popover: oklch(0.928 0.006 265);
+  --popover-foreground: oklch(0.235 0.014 265);
+  --secondary: oklch(0.928 0.006 265);
+  --secondary-foreground: oklch(0.235 0.014 265);
+  --muted: oklch(0.948 0.005 265);
+  --muted-foreground: oklch(0.450 0.016 265);
+  --subtle-foreground: oklch(0.530 0.016 265);
+  --border: oklch(0 0 0 / 10%);
+  --input: oklch(0 0 0 / 18%);
+
+  --state-ok: oklch(0.52 0.14 160);
+  --state-warn: oklch(0.52 0.14 85);
+  --state-down: oklch(0.52 0.19 22);
+  --destructive-foreground: oklch(0.99 0.02 22);
+
+  --tone-l: 0.46;
+  --tone-ink-l: 0.99;
+  --tone-ink-c: 0.02;
+  --accent-ink-l: 0.38;
+}
+
+/* Die Umschalter sitzen auf <html>. `[data-chroma="subtle"]` ist EIN
+ * Attributselektor und damit (0,1,0) — genau so viel wie `:root`, nicht mehr.
+ * Sie wirken also allein deshalb, weil sie HINTER dem `:root`-Block stehen:
+ * bei gleicher Spezifität gewinnt die spätere Deklaration.
+ *
+ * ⚠️ Wer diesen Block nach oben vor `:root` zieht, schaltet damit alle fünf
+ * Stellschrauben ab — `--chroma` fiele auf 0.145 zurück, `rounded-lg` von
+ * 12px auf 8px. Lint, Tests und Bau bleiben dabei grün. Gemessen, nicht
+ * vermutet. */
+[data-chroma="subtle"] { --chroma: 0.055; }
+[data-chroma="normal"] { --chroma: 0.145; }
+[data-chroma="bold"]   { --chroma: 0.19; }
+
+[data-radius="sharp"]  { --radius: 4px; }
+[data-radius="soft"]   { --radius: 8px; }
+[data-radius="round"]  { --radius: 12px; }
+
+[data-density="normal"]  { --density-size: 15px; --density-leading: 1.55; }
+[data-density="compact"] { --density-size: 14px; --density-leading: 1.45; }
+
+/* Einrückung je Stack (D0 §4, nachgetragen in D7b/#62). „nested" trägt
+ * denselben Wert wie `:root` und hat trotzdem eine eigene Regel: der Editor
+ * setzt das Attribut ausdrücklich, und eine Stufe aus `INDENT_STEPS` ohne
+ * Umschalter wäre eine Wahl, die im Stylesheet nicht vorkommt. */
+[data-indent="nested"]   { --stack-indent: 18px; }
+[data-indent="flat"]     { --stack-indent: 0; }
+
+/* Die vier Stellschrauben aus D0 §4, für die D1 noch keinen Umschalter
+ * angelegt hatte: Schriftart, Diagrammfarben, Fokusring — und das Schema, das
+ * seinen Block weiter oben hat, weil er einen ganzen Wertesatz trägt und keine
+ * einzelne Zeile. Sie stehen hier in derselben Bauart wie die vier von D1,
+ * damit der Editor in D7 nur noch Werte setzt und kein Markup wechselt.
+ *
+ * Warum „einfarbig" und „neutral" über eine ZAHL und nicht über eine zweite
+ * Farbregel gehen: `--chart-2` und `--ring` werden in der Ableitungsregel von
+ * palette.css deklariert, auf der Selektorliste jedes Elements mit eigener
+ * Palette. Ein Umschalter, der die Farbe selbst überschreibt, müsste diese
+ * Liste noch einmal führen. Ein Umschalter, der einen Faktor auf 0 setzt,
+ * braucht nur `<html>` — und 0 mal 22 Grad ist keine Drehung, 0 mal die
+ * Buntheit ist grau. Dieselbe Regel wie überall in dieser Schicht: die Formel
+ * bleibt an einer Stelle, das Schaltbare wandert in eine Zahl. */
+[data-font="plex"] {
+  --font-sans-stack: "IBM Plex Sans", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono-stack: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+[data-font="system"] {
+  --font-sans-stack: ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono-stack: ui-monospace, "SFMono-Regular", monospace;
+}
+
+[data-charts="rotate"] { --chart-turn: 1; }
+[data-charts="mono"]   { --chart-turn: 0; }
+
+[data-focus="hue"]     { --focus-chroma: 1; }
+[data-focus="neutral"] { --focus-chroma: 0; }
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * DAS TERMINAL — Paket B6, Etappe E4 (#5)
+ *
+ * Die Werte stehen vollständig in `.remember/orchestration-b6/terminal-farben.md`;
+ * sie sind dort entschieden und GEMESSEN, nicht hier erfunden. Der Wächter
+ * `web/tests/terminal-contrast.test.mjs` rechnet sie aus DIESER Datei nach.
+ *
+ * DREI FLÄCHENTIEFEN, KEINE FREIE FARBE. `card` ist die Karte, auf der der
+ * Reiter sitzt, `sunken` eine Stufe tiefer, `ink` die tiefste. Zwei davon sind
+ * Aliasse auf bestehende Token (`--card`, `--background`), die dritte ist neu:
+ * `--terminal-ink` liegt eine Stufe unter dem Grund und gibt es sonst nirgends.
+ * Eine frei wählbare Farbe stünde neben dem Wertesatz des Schemas statt darin —
+ * und der Kontrast der sechzehn ANSI-Töne wäre gegen sie nicht gemessen.
+ *
+ * ⚠️ DIE SECHZEHN ANSI-TÖNE STEHEN ALS HEX UND NICHT IN oklch, und das ist
+ * kein Geschmack. `@xterm` bekommt sie als Zeichenkette aus `getComputedStyle`
+ * und parst `oklch(…)` nicht. Ein oklch-Wert wäre hier eine Farbe, die im
+ * Terminal einfach nicht ankommt — und kein Test sähe es, weil im Stylesheet
+ * alles richtig aussieht. Die FLÄCHEN dürfen dagegen oklch bleiben: wie das
+ * Terminal an sie kommt, entscheidet die Etappe, die es baut.
+ *
+ * ⚠️ WARUM DIE ANSI-TÖNE ÜBERHAUPT FEST STEHEN und nicht aus dem Farbtonkreis
+ * abgeleitet sind: sie sind ein Vertrag mit den Programmen im Container.
+ * `git diff` schreibt Entferntes in Rot, `ls` färbt Verzeichnisse blau, ein
+ * Fehler kommt in Rot. Wer sie mit dem Markenton mitdreht, dreht die BEDEUTUNG
+ * mit.
+ *
+ * ⚠️ DIE REIHENFOLGE DER DREI FARBBLÖCKE IST TRAGEND:
+ *
+ *   1. `:root` trägt den dunklen Satz. Er gilt, solange nichts anderes greift.
+ *   2. `[data-scheme="light"]` trägt den hellen. Dieser Block MUSS hinter dem
+ *      `:root`-Block stehen: beide sind (0,1,0), und bei gleicher Spezifität
+ *      gewinnt die spätere Deklaration. Wer die zwei tauscht, schaltet den
+ *      hellen Satz ab, ohne dass ein Test rot wird — dieselbe Falle, vor der
+ *      der Kopf des hellen Wertesatzes weiter oben warnt.
+ *   3. `[data-scheme="light"][data-terminal-scheme="dark"]` schaltet auf den
+ *      dunklen Satz zurück: ein Terminal darf dunkel bleiben, auch wenn der
+ *      Hub hell steht (Vorgabe `dark`). Dieser Block ist (0,2,0) und gewinnt
+ *      damit auch unabhängig von der Reihenfolge — er steht trotzdem zuletzt,
+ *      damit die Datei in der Richtung gelesen werden kann, in der sie wirkt.
+ *
+ * BEIDE ATTRIBUTE SITZEN AM SELBEN ELEMENT, dem `<html>`: `GlobalThemeProvider`
+ * setzt jede Stellschraube mit `scope: ["global"]` als Attribut auf die Wurzel.
+ * Deshalb ist der dritte Selektor eine Verkettung ohne Kombinator und kein
+ * Nachfahrenselektor — mit einem Leerzeichen dazwischen träfe er nichts.
+ *
+ * „follow" hat keine eigene Regel, und das ist der ganze Sinn der Stufe: das
+ * Terminal folgt dann dem Hub, also genau dem, was die Blöcke 1 und 2 ohnehin
+ * sagen.
+ * ────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Die Tiefen. `card` und `sunken` sind Aliasse und folgen damit jedem
+   * Schemawechsel von selbst; `--terminal-ink` ist der neue Wert. */
+  --terminal-card: var(--card);
+  --terminal-sunken: var(--background);
+  --terminal-ink: oklch(0.115 0.006 265);
+
+  /* Die Vorgabe der Stellschrauben: sunken, 13px, 5.000 Zeilen. Sie stehen
+   * hier UND als eigene Regel unten — dieselbe Bauart wie bei `--radius` und
+   * `--chroma`: `:root` trägt den Wert, der ohne Attribut gilt, und jede Stufe
+   * hat trotzdem ihren Umschalter. */
+  --terminal-surface: var(--terminal-sunken);
+  --terminal-size: 13px;
+  --terminal-scrollback: 5000;
+
+  /* Vordergrund, Rahmen, Cursor und Auswahl kommen aus den Token des Hubs und
+   * sind keine eigenen Farben.
+   *
+   * Der Cursor trägt den Vordergrund und nicht den Fokuston: `--ring` läuft
+   * auf 45 % Deckung (palette.css), und ein zu 45 % durchsichtiger Cursor ist
+   * ein blasser Cursor. Die AUSWAHL ist dagegen genau die Fläche, für die eine
+   * durchscheinende Überlagerung gedacht ist — sie liegt über Text, der lesbar
+   * bleiben soll. */
+  --terminal-foreground: var(--card-foreground);
+  --terminal-border: var(--border);
+  --terminal-cursor: var(--terminal-foreground);
+  --terminal-selection: var(--ring);
+
+  /* Satz „dunkel". Kontrast gegen card / sunken / ink, gemessen: schlechtester
+   * Wert ohne die zwei Schwarztöne ist Magenta mit 7,26.
+   *
+   * ⚠️ DIE ZAHL GILT FÜR DEN HEX, DER HIER STEHT — nicht für den ungerundeten
+   * oklch-Ton, aus dem er entstanden ist. Genau diese Unterscheidung war
+   * verlorengegangen: bis zum 2026-09-08 stand hier 7,28, und das ist die Zahl
+   * des Messskripts, das auf der ungerundeten oklch-Farbe rechnet und daneben
+   * nur den gerundeten Hex druckt. In der Datei steht der Hex, der Wächter
+   * liest den Hex — also muss die Prosa daneben denselben lesen, sonst zitiert
+   * sie eine Farbe, die nie in dieser Datei gelandet ist.
+   *
+   * Neu gerechnet am 2026-09-08 mit dem repo-eigenen Modul
+   * `web/tests/ansi-contrast.mjs` (`hexToLinearSrgb` → `contrastRatio`) über
+   * dieselbe Kaskade, die `web/tests/terminal-contrast.test.mjs` nachbaut:
+   * Magenta gegen `--terminal-card` = 7,261. Die drei Flächentiefen dieses
+   * Satzes sind card 7,261 / sunken 7,810 / ink 8,260; card ist die
+   * schlechteste. */
+  --terminal-ansi-black: #3b3d41;
+  --terminal-ansi-red: #f9837c;
+  --terminal-ansi-green: #6bc26f;
+  --terminal-ansi-yellow: #cea51d;
+  --terminal-ansi-blue: #7caaff;
+  --terminal-ansi-magenta: #dd87d6;
+  --terminal-ansi-cyan: #0cc3c3;
+  --terminal-ansi-white: #cfd1d4;
+  --terminal-ansi-bright-black: #67696e;
+  --terminal-ansi-bright-red: #ffbfb8;
+  --terminal-ansi-bright-green: #a1e5a2;
+  --terminal-ansi-bright-yellow: #eece74;
+  --terminal-ansi-bright-blue: #b9d2fe;
+  --terminal-ansi-bright-magenta: #fcb5f5;
+  --terminal-ansi-bright-cyan: #65e9e8;
+  --terminal-ansi-bright-white: #f4f5f7;
+}
+
+[data-scheme="light"] {
+  /* `--terminal-card` und `--terminal-sunken` stehen hier NICHT noch einmal:
+   * sie zeigen auf `--card` und `--background`, und die tragen im hellen
+   * Schema bereits die hellen Werte. Nur die neue Tiefe braucht ihren
+   * eigenen. */
+  --terminal-ink: oklch(0.925 0.004 265);
+
+  /* Satz „hell". Schlechtester Wert ohne die zwei Weißtöne: green mit 4,92 —
+   * und die zwei Weißtöne sind hier die benannte Ausnahme, wie im Dunklen die
+   * zwei Schwarztöne.
+   *
+   * ⚠️ ZWEI FEHLER IN EINEM SATZ, beide am 2026-09-08 berichtigt.
+   *
+   * Erstens nannte er als schlechtesten Wert „ohne die zwei Weißtöne"
+   * ausgerechnet `brightWhite` — einen der zwei Weißtöne, die er ausschließt.
+   * Die Zahl stammt aus dem Messskript des Leitstands, dessen Ausschlussliste
+   * für BEIDE Sätze fest auf die zwei Schwarztöne steht; beim Abschreiben
+   * wurde die Beschriftung geändert und die Zahl nicht neu gerechnet. Der
+   * Satz sah damit nach einer Reserve aus, die es nicht gibt.
+   *
+   * Zweitens galt die Zahl für die ungerundete oklch-Farbe und nicht für den
+   * Hex, der hier steht — dieselbe Verwechslung wie im dunklen Satz oben.
+   *
+   * Neu gerechnet am 2026-09-08 aus den Hex-Werten dieser Datei, mit
+   * `web/tests/ansi-contrast.mjs` über die Kaskade des Wächters. Die drei
+   * schwächsten Töne des hellen Satzes, jeweils gegen die schlechteste der
+   * drei Flächen (`--terminal-ink`):
+   *
+   *     bright-white  4,819   (Weißton, benannte Ausnahme)
+   *     green         4,917   ← der schlechteste ohne die zwei Weißtöne
+   *     cyan          5,006
+   *
+   * Kein Ton fällt unter 4,5; die Ausnahme trägt heute nichts, sie hält nur
+   * die Entscheidung offen. */
+  --terminal-ansi-black: #1d1f23;
+  --terminal-ansi-red: #a5292b;
+  --terminal-ansi-green: #00721b;
+  --terminal-ansi-yellow: #735a00;
+  --terminal-ansi-blue: #2757b6;
+  --terminal-ansi-magenta: #8c3287;
+  --terminal-ansi-cyan: #006c6c;
+  --terminal-ansi-white: #515255;
+  --terminal-ansi-bright-black: #4b4d52;
+  --terminal-ansi-bright-red: #800613;
+  --terminal-ansi-bright-green: #005211;
+  --terminal-ansi-bright-yellow: #524000;
+  --terminal-ansi-bright-blue: #0f3a90;
+  --terminal-ansi-bright-magenta: #6b1667;
+  --terminal-ansi-bright-cyan: #004d4d;
+  --terminal-ansi-bright-white: #626365;
+}
+
+[data-scheme="light"][data-terminal-scheme="dark"] {
+  /* Zurück auf Dunkel — und zwar VOLLSTÄNDIG. Die drei Tiefen stehen hier
+   * wörtlich und nicht als `var(--card)`: die Aliasse zeigten sonst auf die
+   * HELLEN Flächen des Hubs, und die sechzehn Töne darauf sind nicht gemessen.
+   * Das ist der eine Fall, in dem eine Farbe zweimal in dieser Datei steht,
+   * und er ist der Grund, warum `terminal-contrast.test.mjs` beide Sätze gegen
+   * beide Flächensätze rechnet statt gegen einen. */
+  --terminal-card: oklch(0.205 0.009 265);
+  --terminal-sunken: oklch(0.165 0.008 265);
+  --terminal-ink: oklch(0.115 0.006 265);
+  --terminal-foreground: oklch(0.945 0.005 265);
+  --terminal-border: oklch(1 0 0 / 9%);
+
+  --terminal-ansi-black: #3b3d41;
+  --terminal-ansi-red: #f9837c;
+  --terminal-ansi-green: #6bc26f;
+  --terminal-ansi-yellow: #cea51d;
+  --terminal-ansi-blue: #7caaff;
+  --terminal-ansi-magenta: #dd87d6;
+  --terminal-ansi-cyan: #0cc3c3;
+  --terminal-ansi-white: #cfd1d4;
+  --terminal-ansi-bright-black: #67696e;
+  --terminal-ansi-bright-red: #ffbfb8;
+  --terminal-ansi-bright-green: #a1e5a2;
+  --terminal-ansi-bright-yellow: #eece74;
+  --terminal-ansi-bright-blue: #b9d2fe;
+  --terminal-ansi-bright-magenta: #fcb5f5;
+  --terminal-ansi-bright-cyan: #65e9e8;
+  --terminal-ansi-bright-white: #f4f5f7;
+}
+
+/* Die drei Tiefen als Wahl. Jede Stufe hat ihre Regel, auch die vorgegebene —
+ * dieselbe Bauart wie `[data-radius="soft"]`. */
+[data-terminal-surface="card"]   { --terminal-surface: var(--terminal-card); }
+[data-terminal-surface="sunken"] { --terminal-surface: var(--terminal-sunken); }
+[data-terminal-surface="ink"]    { --terminal-surface: var(--terminal-ink); }
+
+/* Schriftgröße und Verlauf. Die ZAHLEN stehen in
+ * `contract/src/presets.ts` (`TERMINAL_SIZE_STEPS`,
+ * `TERMINAL_SCROLLBACK_STEPS`) — dort ohne Einheit, weil `@xterm` sie als Zahl
+ * nimmt. `web/tests/theme-presets.test.mjs` hält beide Seiten gegeneinander;
+ * eine Größe, die hier und dort auseinanderläuft, wird dort rot.
+ *
+ * Der Verlauf ist Speicher im BROWSER und keine Angabe an den Agenten — der
+ * kennt keinen Verlauf, er schickt, was kommt. Er steht trotzdem hier und
+ * nicht nur im Programm: dann liegt jede Stufe jeder Stellschraube an einer
+ * Stelle, und der Deckungswächter zwischen Stufenliste und Stylesheet gilt
+ * auch für ihn. */
+[data-terminal-size="small"]  { --terminal-size: 12px; }
+[data-terminal-size="normal"] { --terminal-size: 13px; }
+[data-terminal-size="large"]  { --terminal-size: 15px; }
+
+[data-terminal-scrollback="short"]  { --terminal-scrollback: 1000; }
+[data-terminal-scrollback="normal"] { --terminal-scrollback: 5000; }
+[data-terminal-scrollback="long"]   { --terminal-scrollback: 20000; }
+
+
+/* Keine Zeile hier trägt einen eigenen Farbwert — jede ist eine Zuordnung auf
+ * eine Variable von oben oder aus der Ableitung in palette.css. Das ist die
+ * Bedingung dafür, dass `inline` überhaupt etwas nützt. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-firm: var(--accent-firm);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-line: var(--accent-line);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-state-ok: var(--state-ok);
+  --color-state-warn: var(--state-warn);
+  --color-state-down: var(--state-down);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-head-face: var(--head-face);
+  --color-body-face: var(--body-face);
+  --color-card-line: var(--card-line);
+  --color-mark-face: var(--mark-face);
+  --color-mark-ink: var(--mark-ink);
+  --color-mark-line: var(--mark-line);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-sans-stack);
+  --font-mono: var(--font-mono-stack);
+  --spacing-stack-indent: var(--stack-indent);
+}
+
+@layer base {
+  /* `:root` trägt den dunklen Satz des Artboards; er gilt, solange nichts
+   * gespeichert ist, und braucht deshalb keine eigene `[data-scheme="dark"]`-
+   * Regel — das Attribut hat immer genau einen Wert, und ohne `light` steht
+   * ohnehin der dunkle Satz. Der helle Satz kommt aus D7a und steht oben.
+   *
+   * ⚠️ Auch hier zählt die Reihenfolge: gleiche Spezifität, die spätere
+   * Deklaration gewinnt. */
+  :root { color-scheme: dark; }
+  [data-scheme="light"] { color-scheme: light; }
+
+  /* Ohne diese Regel wäre die Token-Schicht keine: der Grund bliebe weiß und
+   * jedes Bauteil müsste ihn selbst setzen. */
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans-stack);
+    font-size: var(--density-size);
+    line-height: var(--density-leading);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Neuentwurf: D0 hat gemessen, dass das Artboard `--ring` definiert, aber
+   * keinen Fokusstil kennt. Der Ring gehört in die Token-Schicht, weil er
+   * sonst in keinem Paket entsteht. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
