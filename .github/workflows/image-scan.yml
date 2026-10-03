@@ -5,16 +5,17 @@
 #
 #   - The agent has no runtime dependency tree worth the name (zod, pinned
 #     exactly). What there is, is the BASE: `node:24-alpine` with `docker-cli`,
-#     `docker-cli-compose`, `wireguard-tools` and `iproute2`. It only gets
-#     current when the image is rebuilt, and without this run nobody would
-#     notice that a rebuild is due.
-#   - The hub carries its production dependencies and a base image pinned to a
-#     digest, which only moves when somebody moves it.
+#     `docker-cli-compose`, `wireguard-tools` and `iproute2`.
+#   - The hub carries its production dependencies.
+#
+# Both bases are pinned to a digest that Dependabot moves weekly; the apk
+# packages of the agent are current at every build.
 #
 # The scan therefore builds anew instead of pulling a published release: the
-# question is "does the current base have gaps?", not "did the base of the
-# release tag have some?". A finding usually means: cut a release without a code
-# change, so that the hosts get a patched base.
+# question is "does the current main have gaps?", not "did the release tag have
+# some?". A finding in the base usually means: merge the pending Dependabot
+# digest PR, or raise the digest by hand, then cut a release so that the hosts
+# get a patched base. A release without that change ships the same base.
 #
 # A failed run IS the report — GitHub notifies about failed scheduled runs.
 # That is the reason for `--exit-code 1`.

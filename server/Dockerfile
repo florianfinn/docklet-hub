@@ -7,13 +7,13 @@
 # einordnen müsste — für Dateien, die der Server ohnehin ausliefern kann.
 #
 # Das Basisimage ist auf Tag UND Digest gepinnt (AGENTS.md, „Abhängigkeiten
-# und Images"). Digest abgerufen am 2026-09-01.
+# und Images"). Dependabot zieht den Digest wöchentlich nach.
 #
 # Node 24 und nicht 22: die 22er Linie ist seit 2025-10-21 im Wartungsmodus
 # (nur noch Sicherheits- und kritische Korrekturen) und endet 2027-04-30, die
 # 24er ist die aktive LTS bis 2028-04-30. Quelle: nodejs/Release, schedule.json,
 # abgerufen am 2026-09-01.
-FROM node:24-alpine@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS build
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
 
 # Corepack zieht die in package.json gepinnte pnpm-Fassung. Ohne die
 # Abschaltung der Rückfrage bleibt der Bau an einer Eingabeaufforderung stehen,
@@ -53,7 +53,7 @@ RUN pnpm run build
 RUN pnpm install --frozen-lockfile --prod --config.confirm-modules-purge=false
 
 
-FROM node:24-alpine@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS runtime
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runtime
 
 ENV NODE_ENV=production
 # Der Port steht im Image, damit der Healthcheck unten denselben Wert benutzt
