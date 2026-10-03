@@ -92,12 +92,20 @@ function problem(status: number, error: string, message: string): { ok: false; f
   return { ok: false, failure: { kind: "problem", status, error, message } };
 }
 
-/** Host, reachability, version, container — or the refusal, as data. */
-export async function openContainerAccess(
+/** Which host a request is about, and who asks. */
+export type HostRouteRequest = { hostId: string; userId: string };
+
+/** What stands after the host part of the chain. */
+export type HostRouteAccess = Pick<ContainerAccess, "host" | "target" | "options" | "writable">;
+
+export type HostRouteAccessResult = { ok: true; access: HostRouteAccess } | { ok: false; failure: RouteFailure };
+
+/** Host, reachability, version — the chain for routes without a container. */
+export async function openHostAccess(
   deps: ContainerAccessDeps,
-  request: ContainerAccessRequest,
+  request: HostRouteRequest,
   writing: RouteWriting
-): Promise<ContainerAccessResult> {
+): Promise<HostRouteAccessResult> {
   const host = await deps.hosts.find(request.hostId);
   if (!host) return problem(404, "host-unknown", "Diesen Arm führt der Hub nicht.");
 
@@ -138,6 +146,18 @@ export async function openContainerAccess(
 
   const target = await deps.hosts.connect(host);
   const options = { actor: { kind: "user" as const, id: request.userId } };
+  return { ok: true, access: { host, target, options, writable: status !== "outdated" } };
+}
+
+/** Host, reachability, version, container — or the refusal, as data. */
+export async function openContainerAccess(
+  deps: ContainerAccessDeps,
+  request: ContainerAccessRequest,
+  writing: RouteWriting
+): Promise<ContainerAccessResult> {
+  const opened = await openHostAccess(deps, request, writing);
+  if (!opened.ok) return opened;
+  const { host, target, options, writable } = opened.access;
 
   let containers: ContainerOverviewEntry[];
   try {
@@ -152,5 +172,5 @@ export async function openContainerAccess(
   // another arm of the inventory keeps it.
   if (!container) return problem(404, "container-unknown", "Diesen Container führt dieser Arm nicht.");
 
-  return { ok: true, access: { host, target, container, options, containers, writable: status !== "outdated" } };
+  return { ok: true, access: { host, target, container, options, containers, writable } };
 }

@@ -114,7 +114,8 @@ export const COMPOSE_REASONS: Readonly<Record<ComposeRawFailureReason, ReasonEnt
   },
   // Only on creation (`POST /stacks/raw`), like `directory-taken`.
   "external-source-confirmation-missing": {
-    message: "Das neue Projekt bindet Verzeichnisse außerhalb seines Projektordners ein. Der Arm verlangt, dass jede Quelle bestätigt wird."
+    message: "Das neue Projekt bindet Verzeichnisse außerhalb seines Projektordners ein. Der Arm verlangt, dass jede Quelle bestätigt wird.",
+    question: (body) => ({ kind: "external-sources", sources: asTextList(body.externalSources) })
   },
   "image-not-local": {
     message: "Für diese Datei fehlen Images auf dem Host. Der Arm verlangt, dass das Ziehen bestätigt wird.",

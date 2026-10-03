@@ -152,6 +152,8 @@ export type ComposeApplyInput = {
 export type ComposeQuestion =
   | { kind: "services"; added: readonly string[]; removed: readonly string[] }
   | { kind: "images"; missing: readonly string[] }
+  // Only when creating a project (#3): every bind source outside its directory.
+  | { kind: "external-sources"; sources: readonly string[] }
   | { kind: "hardening"; newViolations: readonly string[]; rolledBack: boolean }
   | { kind: "changed-elsewhere"; actualHash: string }
   | { kind: "start-failed"; detail: string; rolledBack: boolean }
