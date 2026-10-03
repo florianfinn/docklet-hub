@@ -1,13 +1,12 @@
-// Creating a hub-owned project (#3, decisions in #128): the raw compose chain
-// plus what only a create needs — occupancy under the project lock, the
-// ownership marker and cleanup of an empty directory after a failure.
+// Creating a project (#3, decisions in #128 and #136): the raw compose chain
+// plus what only a create needs — occupancy under the project lock and
+// cleanup of an empty directory after a failure.
 
 import type { ComposeConfirmations } from "contract";
 import { COMPOSE_FILE_NAME, locationFor } from "../compose.js";
 import { validateRawContent } from "../compose-raw.js";
 import { directoryOccupied, ensureProjectDir, removeEmptyProjectDir } from "../compose-store.js";
 import { externalSourcesOf } from "../mount-sources.js";
-import { writeProjectMarker } from "../project-marker.js";
 import { inspectRawApply, planFromInspection, type RawLocation } from "../raw-apply.js";
 import { forcedManagement } from "../stacks.js";
 import { composeBasePath } from "./containers.js";
@@ -84,28 +83,7 @@ export async function createProject(operation: ProjectCreation): Promise<Outcome
       stackName: operation.name
     });
 
-    if (result.status === 200) {
-      // The stack runs either way; a marker that cannot be written only
-      // withholds the ownership claim.
-      let hubOwned = true;
-      let markerError: string | null = null;
-      try {
-        writeProjectMarker(location.projectDir, composeBasePath);
-      } catch (error) {
-        hubOwned = false;
-        markerError = (error as NodeJS.ErrnoException).code ?? "unknown";
-      }
-      audit.write({
-        action: "project-marker",
-        containerId: null,
-        containerName: operation.name,
-        actor: operation.actor,
-        networkTier: operation.tier,
-        outcome: hubOwned ? "allowed" : "error",
-        reason: hubOwned ? location.projectDir : `${location.projectDir}: ${markerError}`
-      });
-      return { status: 200, body: { ...result.body, hubOwned } };
-    }
+    if (result.status === 200) return result;
 
     // A failed rollback may leave containers behind; then nothing is removed.
     if (result.body.rolledBack === false) return result;

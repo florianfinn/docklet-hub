@@ -69,7 +69,7 @@ function setup(
     },
     createProjectOnAgent: async (_target, input) => {
       seen.creates.push(input);
-      const result = options.create ?? { ok: true, body: { ok: true, hubOwned: true } };
+      const result = options.create ?? { ok: true, body: { ok: true } };
       if (result instanceof AgentError) throw result;
       return result;
     }
@@ -153,7 +153,7 @@ test("create passes only the confirmations as lists and reconciles afterwards", 
   assert.equal(seen.resyncs, 1);
   assert.deepEqual(result.ok && result.outcome, {
     kind: "created",
-    project: { ok: true, hubOwned: true },
+    project: { ok: true },
     resync: { status: "ok", error: null }
   });
 });

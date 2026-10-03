@@ -15,7 +15,6 @@ import {
   servicesFromComposeConfig
 } from "../compose.js";
 import { discoverStacks, forcedManagement } from "../stacks.js";
-import { isHubOwnedProject } from "../project-marker.js";
 import {
   composeConfig,
   composeDependencySafeRestart,
@@ -72,7 +71,6 @@ export async function handleStackList(ctx: RouteContext): Promise<void> {
   const result = discoverStacks({
     containers: await engine.listWithComposeLabels(),
     basePath: composeBasePath,
-    isHubOwned: (projectDir) => isHubOwnedProject(projectDir, composeBasePath),
     directoryHasFile: hasComposeFile,
     directoriesWithFile: directoriesWithComposeFile(composeBasePath)
   });

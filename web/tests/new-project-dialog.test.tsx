@@ -112,7 +112,7 @@ function createDisabled(): boolean {
 
 test("create stays locked until every new service is confirmed", async () => {
   const { hub, done } = await mount([
-    { status: 200, body: { outcome: { kind: "created", project: { projectDir: "/home/docker/notes", hubOwned: true }, resync: { status: "synced", error: null } } } }
+    { status: 200, body: { outcome: { kind: "created", project: { projectDir: "/home/docker/notes" }, resync: { status: "synced", error: null } } } }
   ]);
   try {
     await openAndCheck();
@@ -141,7 +141,7 @@ test("a follow-up question is answered with the agent's list and sent again", as
       status: 200,
       body: { outcome: { kind: "question", question: { kind: "external-sources", sources: ["/mnt/user/media"] }, projectDirRemoved: true } }
     },
-    { status: 200, body: { outcome: { kind: "created", project: { hubOwned: true }, resync: { status: "synced", error: null } } } }
+    { status: 200, body: { outcome: { kind: "created", project: { ok: true }, resync: { status: "synced", error: null } } } }
   ]);
   try {
     await openAndCheck();

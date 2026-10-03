@@ -214,14 +214,14 @@ test("the preview asks the agent by name with the session's actor and is not cac
 
 test("a create reconciles the registry and answers with the project", async () => {
   await withHub(async (agent, hub) => {
-    agent.replies.set("POST /stacks/raw", { status: 200, body: { ok: true, hubOwned: true } });
+    agent.replies.set("POST /stacks/raw", { status: 200, body: { ok: true } });
     const answer = await post(hub, CREATE, "admin", { name: "notes", content: DRAFT, confirmNew: ["app"] });
     assert.equal(answer.status, 200);
     assert.equal(answer.cache, "no-store");
     assert.deepEqual(answer.json, {
       outcome: {
         kind: "created",
-        project: { ok: true, hubOwned: true },
+        project: { ok: true },
         resync: { status: "synced", error: null }
       }
     });

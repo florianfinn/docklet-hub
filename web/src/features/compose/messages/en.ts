@@ -195,8 +195,6 @@ export const enCompose = {
     "The arm creates and starts the project. Pulling images can take several minutes; closing does not stop it.",
   projectCreated: "The project is created.",
   projectRestartLooping: "{count, plural, one {# service is} other {# services are}} restarting repeatedly.",
-  projectMarkerMissing:
-    "The arm could not write the ownership marker. The project runs but does not count as hub-owned.",
   projectResyncWarning:
     "The arm''s allowlist is not reconciled yet. Until the next reconciliation it refuses actions on the new containers.",
   projectDirectoryLeft:
