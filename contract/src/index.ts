@@ -50,6 +50,8 @@ export type {
   ThemeKnobName
 } from "./presets.js";
 export { MARK_IDS_MAX, MARK_NAME_MAX } from "./marks.js";
+export { HOST_NAME_MAX, hasControlOrLineSeparator, hostNameProblem } from "./host-input.js";
+export type { HostNameProblem } from "./host-input.js";
 export { markViewSchema } from "./api/marks.js";
 export type { MarkView } from "./api/marks.js";
 export {

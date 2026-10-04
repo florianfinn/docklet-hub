@@ -53,6 +53,8 @@ export const enHosts = {
     "Remember as the address of this hub. Every further external arm then gets it automatically, and changing it later means changing it in one place. Uncheck if it should apply to this one arm only.",
   hostCreateSubmit: "Create",
   hostErrorNameTaken: "The name is already taken.",
+  hostErrorNameInvalid:
+    "The name must not contain control characters such as line breaks or tabs and may be at most {max} characters long.",
   hostErrorPoolExhausted: "The tunnel network is full — no room for another host.",
   hostErrorInvalidInput: "The input is not usable.",
   hostCreateFailed: "The host could not be created.",

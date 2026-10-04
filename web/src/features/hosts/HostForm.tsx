@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "use-intl";
+import { HOST_NAME_MAX, hostNameProblem } from "contract";
 
 import { setHubExternalEndpoint, useHubNetwork, type DockerHost } from "../../domain/hosts";
 import { queryKeys } from "../../platform/query/query-keys";
@@ -93,6 +94,12 @@ export function HostForm({ onCreated }: { onCreated: (host: DockerHost, setup: H
   const offerRemember = kind === "external" && override !== "" && network?.externalEndpoint == null;
 
   const submit = () => {
+    // Same rule as the hub (`contract/src/host-input.ts`); empty is left to `required`.
+    const nameProblem = hostNameProblem(name);
+    if (nameProblem === "control-character" || nameProblem === "too-long") {
+      setError(t("hostErrorNameInvalid", { max: HOST_NAME_MAX }));
+      return;
+    }
     // ⚠️ `Number.isInteger` auf dem getrimmten Text und nicht `Number(x) >= 0`:
     // `Number("")` ist 0 und `Number(" ")` auch. Ohne diese Schranke ginge ein
     // leeres Feld als Gruppe root hinaus — und der Agent auf dem Zielhost
@@ -168,7 +175,13 @@ export function HostForm({ onCreated }: { onCreated: (host: DockerHost, setup: H
           `LabelPrimitive.Root` und umschließt sein Feld nicht. */}
       <div className="space-y-2">
         <Label htmlFor="host-name">{t("hostNameLabel")}</Label>
-        <Input id="host-name" value={name} onChange={(event) => setName(event.target.value)} required />
+        <Input
+          id="host-name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          maxLength={HOST_NAME_MAX}
+          required
+        />
       </div>
 
       <div className="space-y-2">

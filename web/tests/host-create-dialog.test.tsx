@@ -74,7 +74,7 @@ async function click(element: HTMLElement): Promise<void> {
 }
 
 /** Der Hub antwortet auf das Anlegen mit einem Arm — mehr braucht der Fall nicht. */
-function stubCreate(): { bodies: unknown[]; restore: () => void } {
+function stubCreate(refusal?: { status: number; body: unknown }): { bodies: unknown[]; restore: () => void } {
   const original = globalThis.fetch;
   const bodies: unknown[] = [];
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
@@ -92,6 +92,14 @@ function stubCreate(): { bodies: unknown[]; restore: () => void } {
       );
     }
     if (typeof init?.body === "string") bodies.push(JSON.parse(init.body));
+    if (refusal) {
+      return Promise.resolve(
+        new Response(JSON.stringify(refusal.body), {
+          status: refusal.status,
+          headers: { "content-type": "application/json" }
+        })
+      );
+    }
     return Promise.resolve(
       new Response(
         JSON.stringify({
@@ -117,12 +125,12 @@ function stubCreate(): { bodies: unknown[]; restore: () => void } {
 }
 
 /** Den Dialog öffnen, ausfüllen und absenden. `path` leer heißt: Feld leeren. */
-async function createArm(path: string): Promise<void> {
+async function createArm(path: string, name = "unraid"): Promise<void> {
   const trigger = document.body.querySelector("button");
   assert.ok(trigger instanceof HTMLElement, "der Auslöser des Dialogs steht da");
   await click(trigger);
 
-  await typeInto(field(NAME_ID), "unraid");
+  await typeInto(field(NAME_ID), name);
   await typeInto(field(GID_ID), "281");
   await typeInto(field(PATH_ID), path);
 
@@ -214,6 +222,42 @@ test("der Prompt steht vor dem Befehl, aber nicht im kopierbaren Text", async ()
       assert.equal(prompt?.textContent?.trim() === "$", true, `„${text}" hat keinen Prompt davor`);
       assert.equal(prompt?.getAttribute("aria-hidden") === "true", true, "der Prompt wird vorgelesen");
     }
+  } finally {
+    await mounted.unmount();
+    server.restore();
+  }
+});
+
+test("a name with a control character is refused before anything is sent", async () => {
+  const server = stubCreate();
+  const mounted = await renderInDom(
+    <AppLanguageProvider>
+      <HostCreateDialog onCreated={() => {}} />
+    </AppLanguageProvider>
+  );
+  try {
+    await createArm("/mnt/cache/docker", `arm${String.fromCharCode(9)}x`);
+    assert.equal(server.bodies.length, 0, "no request left the form");
+    const alert = document.body.querySelector("[role=alert]");
+    assert.equal(alert?.textContent?.includes("control characters") === true, true, `shown: ${alert?.textContent ?? ""}`);
+  } finally {
+    await mounted.unmount();
+    server.restore();
+  }
+});
+
+test("the hub's name-invalid code becomes its own text, not the generic one", async () => {
+  const server = stubCreate({ status: 400, body: { error: "name-invalid", message: "Serversatz" } });
+  const mounted = await renderInDom(
+    <AppLanguageProvider>
+      <HostCreateDialog onCreated={() => {}} />
+    </AppLanguageProvider>
+  );
+  try {
+    await createArm("/mnt/cache/docker");
+    const alert = document.body.querySelector("[role=alert]");
+    const text = alert?.textContent ?? "";
+    assert.equal(text.includes("control characters") && !text.includes("Serversatz"), true, `shown: ${text}`);
   } finally {
     await mounted.unmount();
     server.restore();

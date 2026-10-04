@@ -1,11 +1,13 @@
-import type { HostLoad } from "contract";
+import { hostNameProblem, type HostLoad } from "contract";
 
 import { fetchContainers, withoutHistory, type ContainerOverviewEntry } from "../../domain/containers/index.js";
 import {
   ARM_AGENT_IMAGE,
   fetchSelfUpdateStatus,
+  hostNameMessage,
   isValidDockerGid,
   normalizeBindBasePath,
+  normalizeExternalEndpoint,
   probeAgent,
   requestSelfUpdate,
   toHostView,
@@ -71,7 +73,7 @@ export type HostContainersResult =
 
 export type NewHostInput =
   | { kind: "ok"; input: EnrollHostInput }
-  | { kind: "invalid-input"; message: string };
+  | { kind: "invalid-input"; error: "invalid-input" | "name-invalid"; message: string };
 
 export type AgentUpdateStart =
   | { kind: "host-unknown" }
@@ -183,19 +185,26 @@ export function createHostsService({ hosts, probe, markSeen, readHostInfo, hostL
 
   // Der Rumpf von `POST /hosts`, geprüft, bevor ein Datensatz entsteht.
   function parseNewHost(body: unknown): NewHostInput {
-    const invalid = (message: string): NewHostInput => ({ kind: "invalid-input", message });
+    const invalid = (message: string): NewHostInput => ({ kind: "invalid-input", error: "invalid-input", message });
     if (typeof body !== "object" || body === null || Array.isArray(body)) {
       return invalid("Der Rumpf der Anfrage ist kein JSON-Objekt.");
     }
     const { name, kind, endpointOverride, dockerGid, bindBasePath } = body as Record<string, unknown>;
     if (typeof name !== "string" || !name.trim()) return invalid("Der Name des Hosts fehlt.");
+    const nameProblem = hostNameProblem(name);
+    if (nameProblem !== null && nameProblem !== "empty") {
+      return { kind: "invalid-input", error: "name-invalid", message: hostNameMessage(nameProblem) };
+    }
     if (kind !== "internal" && kind !== "external") {
       return invalid(
         "„kind“ ist „internal“ oder „external“. „local“ gibt es genau einmal und wird eingetragen, nicht angelegt."
       );
     }
-    if (endpointOverride !== undefined && endpointOverride !== null && typeof endpointOverride !== "string") {
-      return invalid("„endpointOverride“ ist eine Adresse oder leer.");
+    // Same rule as the hub's own external address: it ends up in `wg0.conf`
+    // and in a copyable `nc` command of the README.
+    const endpoint = normalizeExternalEndpoint(endpointOverride);
+    if (!endpoint.ok) {
+      return invalid("„endpointOverride“ ist ein Hostname oder eine IP, wahlweise mit Port — ohne Schema, ohne Leerzeichen und ohne Steuerzeichen.");
     }
     // ⚠️ `isValidDockerGid` und nicht `!dockerGid`: 0 ist die Gruppe root
     // und auf einem Host, der Docker als root fährt, die richtige Antwort.
@@ -218,7 +227,7 @@ export function createHostsService({ hosts, probe, markSeen, readHostInfo, hostL
         kind,
         dockerGid,
         bindBasePath: path as string,
-        endpointOverride: typeof endpointOverride === "string" ? endpointOverride : null
+        endpointOverride: endpoint.value
       }
     };
   }

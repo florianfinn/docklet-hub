@@ -1,6 +1,8 @@
 import { gzip } from "node:zlib";
 import { promisify } from "node:util";
 
+import { hasControlOrLineSeparator } from "contract";
+
 import { renderComposeFile } from "./host-archive-compose.js";
 import { renderEnvFile } from "./host-archive-env.js";
 import { renderReadme } from "./host-archive-readme.js";
@@ -65,6 +67,19 @@ function inCidr(address: string, cidr: string): boolean {
 }
 
 function check(input: HostArchiveInput): void {
+  // Second guard behind `createHost`: name, path and endpoint end up in comment
+  // lines and copyable commands of every file below. Records from before that
+  // rule fail here instead of shipping an injected line. The message leaves the
+  // name out on purpose.
+  if (hasControlOrLineSeparator(input.host.name)) {
+    throw new Error("Archiv nicht erzeugt: der Hostname enthält ein Steuerzeichen.");
+  }
+  if (input.host.bindBasePath !== null && hasControlOrLineSeparator(input.host.bindBasePath)) {
+    throw new Error(`Archiv für „${input.host.name}" nicht erzeugt: der Basispfad enthält ein Steuerzeichen.`);
+  }
+  if (hasControlOrLineSeparator(input.hub.endpoint)) {
+    throw new Error(`Archiv für „${input.host.name}" nicht erzeugt: der Endpoint enthält ein Steuerzeichen.`);
+  }
   const fail = (message: string): never => {
     throw new Error(`Archiv für „${input.host.name}" nicht erzeugt: ${message}`);
   };

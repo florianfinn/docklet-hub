@@ -1,6 +1,8 @@
 import type { useTranslations } from "use-intl";
 
-import { ApiError } from "../../platform/http/transport";
+import { HOST_NAME_MAX } from "contract";
+
+import { ApiError, errorCode } from "../../platform/http/transport";
 
 // Diese Datei ist keine Komponente und darf den Hook der Bibliothek deshalb
 // nicht selbst rufen — `t` kommt als erstes Argument von den Aufrufern
@@ -40,6 +42,7 @@ export function describeCreateHostError(t: Translate, error: unknown): string {
     case 507:
       return t("hostErrorPoolExhausted");
     case 400:
+      if (errorCode(error) === "name-invalid") return t("hostErrorNameInvalid", { max: HOST_NAME_MAX });
       return readMessage(error) ?? t("hostErrorInvalidInput");
     default:
       return t("hostCreateFailed");
