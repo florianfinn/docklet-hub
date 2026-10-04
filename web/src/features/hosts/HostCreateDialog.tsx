@@ -1,5 +1,5 @@
-import { Download, Plus } from "lucide-react";
-import { useState } from "react";
+import { Download, Plus, TriangleAlert } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { useTranslations } from "use-intl";
 
 import type { DockerHost } from "../../domain/hosts";
@@ -52,6 +52,7 @@ export function HostCreateDialog({ onCreated }: { onCreated: (host: DockerHost) 
   // `created`: `HostView` trägt ihn bewusst nicht (#89). Ohne ihn könnte der
   // Schritt unten nur „in ein Verzeichnis" sagen — und das ist keine Anleitung.
   const [setup, setSetup] = useState<HostSetup | null>(null);
+  const target = `${setup?.bindBasePath ?? ""}/${DIRECTORY_NAME}`;
 
   return (
     <Dialog
@@ -103,37 +104,29 @@ export function HostCreateDialog({ onCreated }: { onCreated: (host: DockerHost) 
           />
         ) : (
           <div className="flex flex-col gap-4">
-            {/* ⚠️ WAS HIER BIS JETZT FEHLTE: der Dialog sagte, was ein erneuter
-                Klick anrichtet, und mit keinem Wort, was mit der Datei zu
-                geschehen hat. Der Betreiber stand mit einem Archiv da und ohne
-                Anleitung — gemeldet beim ersten echten Arm. Die ausführliche
-                Fassung liegt IM Paket (`host-archive-readme.ts`), nur liest
-                man die erst, wenn man das Paket bereits am richtigen Ort
-                ausgepackt hat. Genau dieser eine Schritt gehört deshalb hierhin
-                und nicht dorthin.
-
-                Drei Schritte und nicht mehr: der Ort, die Rechte, der Start.
-                Alles Weitere steht in der README daneben. */}
-            <ol className="flex list-decimal flex-col gap-3 pl-4 text-sm text-muted-foreground">
-              <li>
-                {t("hostArchiveStepUnpack")}
-                {/* Der Pfad, den der Betreiber gerade selbst eingetragen hat,
-                    und nicht ein erfundener: unterhalb DIESES Verzeichnisses
-                    darf der Agent Bind-Mounts anlegen, und der Compose-Stack
-                    des Arms liegt sinnvollerweise darin. */}
-                <CommandLine>{`sudo mkdir -p ${setup?.bindBasePath ?? ""}/${DIRECTORY_NAME}`}</CommandLine>
-              </li>
-              <li>
-                {t("hostArchiveStepPermissions")}
-                <CommandLine>{t("hostArchiveStepPermissionsCommand")}</CommandLine>
-              </li>
-              <li>
-                {t("hostArchiveStepStart")}
-                <CommandLine>{t("hostArchiveStepStartCommand")}</CommandLine>
-              </li>
+            {/* Only the first three steps on the target host: location, permissions,
+                start. The README in the archive carries the rest. */}
+            <ol className="flex flex-col gap-4">
+              {/* The path the operator just entered, not an invented one: the
+                  agent may create bind mounts below it. */}
+              <ArchiveStep number={1} title={t("hostArchiveStepUnpackTitle")} text={t("hostArchiveStepUnpack")}>
+                <CommandLine prompt highlight={target}>{`sudo mkdir -p ${target}`}</CommandLine>
+              </ArchiveStep>
+              <ArchiveStep number={2} title={t("hostArchiveStepPermissionsTitle")} text={t("hostArchiveStepPermissions")}>
+                <CommandLine prompt>{t("hostArchiveStepPermissionsCommand")}</CommandLine>
+              </ArchiveStep>
+              <ArchiveStep number={3} title={t("hostArchiveStepStartTitle")} text={t("hostArchiveStepStart")}>
+                <CommandLine prompt>{t("hostArchiveStepStartCommand")}</CommandLine>
+              </ArchiveStep>
             </ol>
 
-            <p className="text-sm text-muted-foreground">{t("hostArchiveHint")}</p>
+            <p
+              role="note"
+              className="flex items-start gap-2 rounded-md border border-state-warn/40 bg-state-warn/10 px-3 py-2 text-sm text-foreground"
+            >
+              <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-state-warn" />
+              <span>{t("hostArchiveHint")}</span>
+            </p>
             {/* Kein `fetch` + Blob: das verlöre den Dateinamen aus
                 `Content-Disposition` und in manchen Browsern die Sitzung.
                 Deshalb ein `<a download>`, das die Sitzung wie jede andere
@@ -157,5 +150,35 @@ export function HostCreateDialog({ onCreated }: { onCreated: (host: DockerHost) 
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+// One step on the target host: number and title carry the sequence, the muted
+// text the reason, the command what to type.
+function ArchiveStep({
+  number,
+  title,
+  text,
+  children
+}: {
+  number: number;
+  title: string;
+  text: string;
+  children: ReactNode;
+}) {
+  return (
+    <li className="flex gap-3">
+      <span
+        aria-hidden="true"
+        className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary"
+      >
+        {number}
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="text-sm font-semibold text-foreground">{title}</span>
+        <span className="text-xs text-muted-foreground">{text}</span>
+        {children}
+      </div>
+    </li>
   );
 }

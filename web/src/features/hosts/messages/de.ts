@@ -90,11 +90,14 @@ export const deHosts = {
   // im Paket — nur liest die niemand, bevor er das Paket ausgepackt hat, und
   // genau dieser Schritt ist der erste. Deshalb hier: der Ort, die Rechte, der
   // Start. Mehr nicht; alles Weitere steht daneben in der README.
+  hostArchiveStepUnpackTitle: "Verzeichnis anlegen und Archiv entpacken",
   hostArchiveStepUnpack:
     "Lege auf dem Zielhost ein Verzeichnis an und entpacke das Archiv hinein. Der Ort muss einen Neustart überstehen — darin liegen der private Schlüssel und das Agent-Geheimnis, und ein zweites Exemplar gibt es nicht.",
+  hostArchiveStepPermissionsTitle: "Geheimnisse schützen",
   hostArchiveStepPermissions:
     "Nimm .env und wg0.conf die Leserechte für alle anderen. Beide tragen Geheimnisse; wer sie lesen kann, kann sich als dieser Host ausgeben.",
   hostArchiveStepPermissionsCommand: "sudo chmod 600 .env wg0.conf",
+  hostArchiveStepStartTitle: "Agent starten",
   hostArchiveStepStart:
     "Starte den Stack in diesem Verzeichnis. Der Agent meldet sich danach von selbst bei diesem Hub an — die Karte hier zeigt ihn nach einem Klick auf „Erneut prüfen“ als online. Die README im Archiv nennt die Gegenproben, falls er es nicht tut.",
   hostArchiveStepStartCommand: "sudo docker compose up -d",

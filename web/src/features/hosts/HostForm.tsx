@@ -215,7 +215,7 @@ export function HostForm({ onCreated }: { onCreated: (host: DockerHost, setup: H
         />
         <span id="host-docker-gid-hint" className="block text-xs text-muted-foreground">
           {t("hostDockerGidHint")}
-          <CommandLine>{t("hostDockerGidCommand")}</CommandLine>
+          <CommandLine prompt>{t("hostDockerGidCommand")}</CommandLine>
         </span>
       </div>
 
@@ -230,7 +230,7 @@ export function HostForm({ onCreated }: { onCreated: (host: DockerHost, setup: H
         />
         <span id="host-bind-base-path-hint" className="block text-xs text-muted-foreground">
           {t("hostBindBasePathHint")}
-          <CommandLine>{t("hostBindBasePathCommand")}</CommandLine>
+          <CommandLine prompt>{t("hostBindBasePathCommand")}</CommandLine>
         </span>
       </div>
 

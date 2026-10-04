@@ -60,11 +60,14 @@ export const enHosts = {
   hostArchiveReload: "Reload archive",
   hostArchiveHint: "Every click rotates the key pair, agent secret, and token anew. A running agent with the old archive is locked out in the process.",
   hostArchiveReadyHint: "The archive is ready. It can only be downloaded in this form right now — clicking again generates a new one and invalidates the old one.",
+  hostArchiveStepUnpackTitle: "Create the directory and unpack the archive",
   hostArchiveStepUnpack:
     "Create a directory on the target host and unpack the archive into it. The place must survive a reboot — it holds the private key and the agent secret, and there is no second copy.",
+  hostArchiveStepPermissionsTitle: "Protect the secrets",
   hostArchiveStepPermissions:
     "Take away everyone else’s read access to .env and wg0.conf. Both carry secrets; whoever can read them can impersonate this host.",
   hostArchiveStepPermissionsCommand: "sudo chmod 600 .env wg0.conf",
+  hostArchiveStepStartTitle: "Start the agent",
   hostArchiveStepStart:
     "Start the stack in that directory. The agent then enrols with this hub on its own — the card here shows it as online after a click on “Check again”. The README in the archive names the counter-checks in case it does not.",
   hostArchiveStepStartCommand: "sudo docker compose up -d",
