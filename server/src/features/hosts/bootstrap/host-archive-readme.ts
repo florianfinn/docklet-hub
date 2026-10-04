@@ -1,4 +1,3 @@
-import { COMPOSE_PROJECT, LEGACY_COMPOSE_PROJECT } from "./host-archive-compose.js";
 import { DEFAULT_BIND_BASE_PATH, type HostArchiveInput } from "./host-archive-input.js";
 
 // Die README im Archiv. Ihr Text ist ENGLISCH, die Kommentare hier bleiben
@@ -225,24 +224,7 @@ export function renderReadme(input: HostArchiveInput): string {
     "   sudo docker compose config >/dev/null && echo ok",
     "   ```",
     "",
-    `5. **Stop an agent from an older archive, if one runs here.** Archives up`,
-    `   to v0.32.0 named the stack \`${LEGACY_COMPOSE_PROJECT}\`; this one is`,
-    `   \`${COMPOSE_PROJECT}\`. Without this step both run side by side. On a`,
-    "   fresh host the command finds nothing and changes nothing.",
-    "",
-    "   ```bash",
-    `   sudo docker compose -p ${LEGACY_COMPOSE_PROJECT} down`,
-    "   ```",
-    "",
-    "   The new agent starts with an empty state volume; the hub fills its",
-    "   container registry again. The old audit log and monitor settings stay in",
-    "   the old volume. Once nothing from it is needed any more:",
-    "",
-    "   ```bash",
-    `   sudo docker volume rm ${LEGACY_COMPOSE_PROJECT}_docker-agent-state`,
-    "   ```",
-    "",
-    "6. **Start.**",
+    "5. **Start.**",
     "",
     "   ```bash",
     "   sudo docker compose up -d",

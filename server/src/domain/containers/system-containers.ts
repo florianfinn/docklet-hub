@@ -10,7 +10,7 @@
 // ⚠️ ZWEI MERKMALE, und eines genügt:
 //
 //   1. Das IMAGE. Hub und Agent tragen feste Repository-Namen
-//      (`docklet-hub`, `dashboard-docker-agent` — `docker-compose.yml`
+//      (`docklet-hub`, `docklet-hub-agent` — `docker-compose.yml`
 //      und `server/src/features/hosts/bootstrap/host-archive-compose.ts`). Registry, Tag und
 //      Digest davor und dahinter sind frei: die Images sind über
 //      Umgebungsvariablen übersteuerbar (AGENTS.md, „Abhängigkeiten und
@@ -23,25 +23,18 @@
 // neben dem Hub gehört zum Hub, auch wenn der Projektname übersteuert wurde
 // (`COMPOSE_PROJECT_NAME`) und nur das Image des Hubs ihn verrät.
 
-// `dashboard-docker-agent` is the image name up to v0.31.0 and stays here for
-// arms that still run it; since #279 the agent image is `docklet-hub-agent`.
-const SYSTEM_IMAGE_REPOSITORIES = new Set(["docklet-hub", "docklet-hub-agent", "dashboard-docker-agent"]);
+const SYSTEM_IMAGE_REPOSITORIES = new Set(["docklet-hub", "docklet-hub-agent"]);
 
-// Projects of the generated arm archive (`host-archive-compose.ts`) and the
-// templates in agent/deploy/; the `dashboard-docker-agent*` names stay for arms
-// installed before the rename.
-const SYSTEM_PROJECTS = new Set([
-  "docklet-hub",
-  "docklet-hub-agent-remote",
-  "docklet-hub-agent-unraid",
-  "dashboard-docker-agent",
-  "dashboard-docker-agent-remote"
-]);
+// The hub's own project, and every agent stack: the generated arm archive
+// names it `docklet-hub-agent-<host>` (`host-archive-compose.ts`), the
+// templates in agent/deploy/ `docklet-hub-agent-remote` and `-unraid`.
+const SYSTEM_PROJECTS = new Set(["docklet-hub", "docklet-hub-agent"]);
+const AGENT_PROJECT_PREFIX = "docklet-hub-agent-";
 
 /**
  * Der Name des Repositorys aus einer Image-Referenz, ohne Registry, Tag und
- * Digest (`ghcr.io/owner/dashboard-docker-agent:v0.30.0@sha256:…` →
- * `dashboard-docker-agent`).
+ * Digest (`ghcr.io/owner/docklet-hub-agent:v0.32.0@sha256:…` →
+ * `docklet-hub-agent`).
  */
 export function imageRepository(image: string): string {
   const withoutDigest = image.split("@")[0];
@@ -56,5 +49,6 @@ export function isSystemImage(image: string): boolean {
 }
 
 export function isSystemProject(project: string): boolean {
-  return SYSTEM_PROJECTS.has(project.toLowerCase());
+  const name = project.toLowerCase();
+  return SYSTEM_PROJECTS.has(name) || name.startsWith(AGENT_PROJECT_PREFIX);
 }

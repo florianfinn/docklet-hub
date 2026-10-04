@@ -37,12 +37,24 @@ const IMAGE = "${DOCKER_AGENT_IMAGE:?DOCKER_AGENT_IMAGE is missing}";
 const IMAGE_WIREGUARD = `\${DOCKER_AGENT_WIREGUARD_IMAGE:-${IMAGE}}`;
 const IMAGE_WATCHER = `\${DOCKER_AGENT_WATCHER_IMAGE:-${IMAGE}}`;
 
-// Compose project of the generated stack. It prefixes the state volume, and
-// `SYSTEM_PROJECTS` in server/src/domain/containers/system-containers.ts must
-// list it. `LEGACY_COMPOSE_PROJECT` is the name of archives up to v0.32.0; the
-// README tells the operator to stop that project before the new one starts.
-export const COMPOSE_PROJECT = "docklet-hub-agent-remote";
-export const LEGACY_COMPOSE_PROJECT = "dashboard-docker-agent-remote";
+// Compose project of the generated stack: `docklet-hub-agent-<host>`, so each
+// arm's stack carries its host name. Compose allows lowercase letters, digits,
+// `-` and `_`; everything else in the operator's name becomes `-`.
+// `isSystemProject` in server/src/domain/containers/system-containers.ts
+// recognises the prefix.
+export const COMPOSE_PROJECT_PREFIX = "docklet-hub-agent";
+
+export function composeProjectName(hostName: string): string {
+  const slug = hostName
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^[-_]+|[-_]+$/g, "")
+    .slice(0, 40)
+    .replace(/[-_]+$/, "");
+  return slug ? `${COMPOSE_PROJECT_PREFIX}-${slug}` : COMPOSE_PROJECT_PREFIX;
+}
 
 export function renderComposeFile(input: HostArchiveInput): string {
   const lines = [
@@ -53,7 +65,7 @@ export function renderComposeFile(input: HostArchiveInput): string {
     "# WARNING: do not edit anything here by hand that also lives in the hub. A",
     "# new archive replaces this file completely, and the hub knows nothing",
     "# about a change made here.",
-    `name: ${COMPOSE_PROJECT}`,
+    `name: ${composeProjectName(input.host.name)}`,
     "",
     "services:",
     "  # The hub end of this tunnel is a sidecar in the hub stack. This one is",

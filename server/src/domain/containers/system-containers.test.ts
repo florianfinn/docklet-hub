@@ -23,8 +23,6 @@ function entry(name: string, image: string, project: string | null): ContainerOv
   };
 }
 
-// The agent image is `docklet-hub-agent` since #279; arms below v0.32.0
-// still run the old name, and both count as the control plane.
 const AGENT = "ghcr.io/florianfinn/docklet-hub-agent:v0.32.0";
 const OLD_AGENT = "ghcr.io/florianfinn/dashboard-docker-agent:v0.31.0@sha256:42c4f162f1bba2d0ce2ccf9619dfc856a86d2567bd4a9015d30abff8850511c3";
 
@@ -38,7 +36,7 @@ test("der Repository-Name ignoriert Registry, Tag und Digest", () => {
 
 test("Hub und Agent sind am Image erkennbar, ein ähnlicher Name nicht", () => {
   assert.equal(isSystemImage(AGENT), true);
-  assert.equal(isSystemImage(OLD_AGENT), true);
+  assert.equal(isSystemImage(OLD_AGENT), false, "der frühere Image-Name zählt nicht mehr");
   assert.equal(isSystemImage("docklet-hub:local"), true);
   assert.equal(isSystemImage("example/dashboard-docker-agent-fork:1"), false);
   assert.equal(isSystemImage("example/docklet-hub-agent-fork:1"), false);
@@ -47,9 +45,10 @@ test("Hub und Agent sind am Image erkennbar, ein ähnlicher Name nicht", () => {
 
 test("die Projekte des Leitstands sind erkennbar, ein fremdes nicht", () => {
   assert.equal(isSystemProject("docklet-hub"), true);
-  assert.equal(isSystemProject("dashboard-docker-agent-remote"), true);
+  assert.equal(isSystemProject("docklet-hub-agent-nas"), true);
   assert.equal(isSystemProject("docklet-hub-agent-unraid"), true);
-  assert.equal(isSystemProject("docklet-hub-agent-remote"), true);
+  assert.equal(isSystemProject("dashboard-docker-agent-remote"), false);
+  assert.equal(isSystemProject("docklet-hub-agentur"), false);
   assert.equal(isSystemProject("nextcloud"), false);
 });
 
