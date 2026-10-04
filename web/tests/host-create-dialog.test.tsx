@@ -228,6 +228,40 @@ test("der Prompt steht vor dem Befehl, aber nicht im kopierbaren Text", async ()
   }
 });
 
+// Shell characters in the base path (#61). The stub accepts what the hub would
+// refuse (a space), so the quoting is checked on its own.
+test("the base path reaches the copyable command quoted, and the highlight marks the quoted path", async () => {
+  const cases: [string, string][] = [
+    ["/mnt/cache/docker", "sudo mkdir -p /mnt/cache/docker/docklet-agent"],
+    ["/mnt/my disk", "sudo mkdir -p '/mnt/my disk/docklet-agent'"],
+    ["/mnt/it's", String.raw`sudo mkdir -p '/mnt/it'\''s/docklet-agent'`],
+    ['/mnt/a"b', "sudo mkdir -p '/mnt/a\"b/docklet-agent'"],
+    ["/mnt/$(id)", "sudo mkdir -p '/mnt/$(id)/docklet-agent'"],
+    ["/mnt/a`id`", "sudo mkdir -p '/mnt/a`id`/docklet-agent'"],
+    ["/mnt/a;b&c", "sudo mkdir -p '/mnt/a;b&c/docklet-agent'"]
+  ];
+  for (const [path, expected] of cases) {
+    const server = stubCreate();
+    const mounted = await renderInDom(
+      <AppLanguageProvider>
+        <HostCreateDialog onCreated={() => {}} />
+      </AppLanguageProvider>
+    );
+    try {
+      await createArm(path);
+      const line = [...document.body.querySelectorAll("code")].find((code) =>
+        (code.textContent ?? "").startsWith("sudo mkdir")
+      );
+      assert.equal(line?.textContent, expected, `path ${JSON.stringify(path)}`);
+      const highlight = line?.querySelector("span");
+      assert.equal(highlight?.textContent, expected.slice("sudo mkdir -p ".length), "the highlight is the quoted path");
+    } finally {
+      await mounted.unmount();
+      server.restore();
+    }
+  }
+});
+
 test("a name with a control character is refused before anything is sent", async () => {
   const server = stubCreate();
   const mounted = await renderInDom(
