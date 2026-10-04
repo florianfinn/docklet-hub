@@ -1,27 +1,50 @@
-// Ein Befehl, den der Betreiber auf einem ANDEREN Rechner eintippt.
+import type { ReactNode } from "react";
+
+import { cn } from "./lib/cn";
+
+// A command or value the operator copies to ANOTHER machine, character for
+// character. Own row, own surface, `select-all` so one click marks all of it.
 //
-// ⚠️ Warum das eine eigene Fläche ist und kein `<code>` im Fließtext. Bis
-// hierher standen die Befehle in den Hinweisen unter den Feldern so:
+// `overflow-x-auto` with `max-w-full`/`min-w-0` lets a long line scroll inside
+// its own row instead of pushing the surrounding dialog open.
 //
-//     … Abzulesen dort mit: stat -c %g /var/run/docker.sock
-//
-// Gemessen am 2026-09-06 am Anlege-Dialog: der Befehl unterschied sich vom
-// Satz davor nur durch die Schriftart, brach mitten im Wort um und ging in
-// der Zeile unter. Der Betreiber muss ihn aber nicht LESEN, sondern
-// abschreiben oder kopieren — und zwar Zeichen für Zeichen, auf einem Rechner,
-// auf dem dieser Hub nicht läuft. Ein Zeichen daneben, und die Antwort ist
-// entweder ein Fehler oder, schlimmer, eine falsche Zahl.
-//
-// Deshalb: eigene Zeile, eigene Fläche, eigener Rahmen — und `select-all`,
-// damit ein Klick den ganzen Befehl markiert statt eines Wortes daraus.
-//
-// ⚠️ `overflow-x-auto` und `max-w-full` sind kein Beiwerk. Ohne sie schiebt
-// ein langer Befehl den Dialog auf, statt in seiner eigenen Zeile zu rollen —
-// auf einem schmalen Fenster reißt damit die ganze Maske aus.
-export function CommandLine({ children }: { children: string }) {
+// `prompt` marks a shell command with a `$` that is neither selected nor read
+// out, so `code` holds exactly what gets typed. `highlight` colours the first
+// occurrence of a substring, typically the path the operator has to check.
+export function CommandLine({
+  children,
+  prompt = false,
+  highlight
+}: {
+  children: string;
+  prompt?: boolean;
+  highlight?: string;
+}) {
+  const index = highlight ? children.indexOf(highlight) : -1;
+  const content: ReactNode =
+    highlight && index >= 0 ? (
+      <>
+        {children.slice(0, index)}
+        <span className="font-semibold text-primary">{highlight}</span>
+        {children.slice(index + highlight.length)}
+      </>
+    ) : (
+      children
+    );
+
   return (
-    <code className="mt-1.5 block max-w-full select-all overflow-x-auto rounded-md border border-border bg-muted px-2 py-1.5 font-mono text-[12px] whitespace-pre text-foreground">
-      {children}
-    </code>
+    <span
+      className={cn(
+        "mt-1.5 flex max-w-full items-baseline gap-2 rounded-md border border-border bg-muted px-2.5 py-1.5 font-mono text-[12px] text-foreground",
+        prompt && "border-l-2 border-l-primary"
+      )}
+    >
+      {prompt ? (
+        <span aria-hidden="true" className="select-none font-semibold text-primary">
+          $
+        </span>
+      ) : null}
+      <code className="block min-w-0 flex-1 select-all overflow-x-auto whitespace-pre">{content}</code>
+    </span>
   );
 }

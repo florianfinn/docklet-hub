@@ -31,7 +31,7 @@ function containerOf(name: string, project: string | null, system: boolean): Ove
   return {
     id: `id-${name}`,
     name,
-    image: system ? "ghcr.io/example/dashboard-docker-agent:v0.30.0" : "demo:latest",
+    image: system ? "ghcr.io/example/docklet-hub-agent:v0.32.0" : "demo:latest",
     status: "Up 2 hours",
     running: true,
     startedAt: null,
@@ -87,10 +87,10 @@ function hostOf(id: string, stacks: StackView[], loose: OverviewContainer[]): Ho
 const HOSTS: HostOverview[] = [
   hostOf(
     "h1",
-    [stackOf("website", false, ["web-app"]), stackOf("dashboard-docker-agent-remote", true, ["agent-main", "watcher-main"])],
+    [stackOf("website", false, ["web-app"]), stackOf("docklet-hub-agent-nas", true, ["agent-main", "watcher-main"])],
     [containerOf("loose-tool", null, false)]
   ),
-  hostOf("h2", [stackOf("dashboard-docker-agent-remote", true, ["agent-bare"])], [])
+  hostOf("h2", [stackOf("docklet-hub-agent-nas", true, ["agent-bare"])], [])
 ];
 
 function stubHub(showSystem: boolean): () => void {
@@ -136,7 +136,7 @@ test("scopeHosts trennt Leitstand und Rest und zählt, was ausgeblendet ist", ()
   const system = scopeHosts(HOSTS, "system");
   assert.deepEqual(
     system[0].stacks.map((stack) => stack.project),
-    ["dashboard-docker-agent-remote"]
+    ["docklet-hub-agent-nas"]
   );
   assert.equal(system[0].loose.length, 0);
 

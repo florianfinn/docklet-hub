@@ -27,11 +27,11 @@ import { DEFAULT_BIND_BASE_PATH, type HostArchiveInput } from "./host-archive-in
 // nach dem nächsten Neustart weg, mitsamt seinem privaten Schlüssel, und ein
 // zweites Exemplar des Archivs gibt es nicht. Deshalb steht die Anforderung
 // jetzt im Text neben dem Pfad, und nicht nur der Pfad.
-const SUGGESTED_DIRECTORY = "/opt/dashboard-docker-agent";
+const SUGGESTED_DIRECTORY = "/opt/docklet-agent";
 
 // Der Name des Verzeichnisses, das der Arm bekommt — unterhalb des Pfades, den
 // der Betreiber beim Anlegen genannt hat.
-const DIRECTORY_NAME = "dashboard-docker-agent";
+const DIRECTORY_NAME = "docklet-agent";
 
 // Die Gegenprobe auf eine Wurzel, die den Neustart NICHT übersteht.
 //

@@ -32,7 +32,7 @@ import { DEFAULT_BIND_BASE_PATH } from "../src/features/hosts/HostForm.js";
 //      als der Agent ihn erwartet.
 //   2. DAS LEERE FELD. Der Pfad ist vorbelegt, aber löschbar. Ein Dialog, der
 //      den ROHWERT anzeigte statt des gerechneten, schriebe dann
-//      `/dashboard-docker-agent` — also ein Verzeichnis direkt in der Wurzel,
+//      `/docklet-agent` — also ein Verzeichnis direkt in der Wurzel,
 //      mit einem führenden Schrägstrich, der wie Absicht aussieht.
 //
 // Beide Fassungen übersetzen und bündeln sich; kein Wächter über Dateitexte
@@ -177,9 +177,8 @@ test("ein geleertes Pfadfeld zeigt die Vorgabe und nicht die Wurzel", async () =
   try {
     await createArm("");
 
-    // Der Server bekommt die Vorgabe — dieselbe muss der Dialog nennen. Ein
-    // Dialog auf dem Rohwert schriebe hier `/dashboard-docker-agent`, also ein
-    // Verzeichnis in der Wurzel, und das sähe nach Absicht aus.
+    // The server receives the default, so the dialog must show it too. A dialog
+    // on the raw value would show `/docklet-agent`, a directory in the root.
     const sent = server.bodies.at(0) as { bindBasePath?: string } | undefined;
     assert.equal(sent?.bindBasePath, DEFAULT_BIND_BASE_PATH, "leer heißt: die Vorgabe geht hinaus");
 
@@ -189,6 +188,32 @@ test("ein geleertes Pfadfeld zeigt die Vorgabe und nicht die Wurzel", async () =
       shown[0]?.includes(`${DEFAULT_BIND_BASE_PATH}/${DIRECTORY_NAME}`),
       `die Zeile nennt die Vorgabe: „${shown[0] ?? ""}"`
     );
+  } finally {
+    await mounted.unmount();
+    server.restore();
+  }
+});
+
+test("der Prompt steht vor dem Befehl, aber nicht im kopierbaren Text", async () => {
+  const server = stubCreate();
+  const mounted = await renderInDom(
+    <AppLanguageProvider>
+      <HostCreateDialog onCreated={() => {}} />
+    </AppLanguageProvider>
+  );
+
+  try {
+    await createArm("/mnt/cache/docker");
+
+    const lines = [...document.body.querySelectorAll("code")];
+    assert.equal(lines.length, 3, "drei Befehlszeilen im zweiten Schritt");
+    for (const code of lines) {
+      const text = code.textContent ?? "";
+      assert.equal(text.startsWith("$"), false, `„${text}" enthält den Prompt`);
+      const prompt = code.previousElementSibling;
+      assert.equal(prompt?.textContent?.trim() === "$", true, `„${text}" hat keinen Prompt davor`);
+      assert.equal(prompt?.getAttribute("aria-hidden") === "true", true, "der Prompt wird vorgelesen");
+    }
   } finally {
     await mounted.unmount();
     server.restore();

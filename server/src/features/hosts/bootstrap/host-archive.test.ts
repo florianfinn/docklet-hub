@@ -7,7 +7,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 
+import { groupIntoStacks, type ContainerOverviewEntry } from "../../../domain/containers/index.js";
 import { ARCHIVE_FILE_NAMES, buildHostArchive, type HostArchiveInput } from "./host-archive.js";
+import { composeProjectName } from "./host-archive-compose.js";
 import { renderEnvFile } from "./host-archive-env.js";
 import { DEFAULT_BIND_BASE_PATH } from "./host-archive-input.js";
 import { renderTunnelConfig } from "./host-archive-wireguard.js";
@@ -453,6 +455,34 @@ test("die README nennt die Handgriffe auf dem Zielhost", async () => {
   assert.ok(readme.includes("given-up"));
 });
 
+test("das Compose-Projekt trägt den Namen des Hosts", async () => {
+  const unpacked = await unpackOnce();
+  assert.match(unpacked.read("docker-compose.yml"), /^name: docklet-hub-agent-remote-host$/m);
+  assert.equal(composeProjectName("NAS Küche"), "docklet-hub-agent-nas-kuche");
+  assert.equal(composeProjectName("  proxy.example.org "), "docklet-hub-agent-proxy-example-org");
+  assert.equal(composeProjectName("---"), "docklet-hub-agent", "ohne verwertbares Zeichen bleibt das Präfix");
+  assert.equal(composeProjectName("x".repeat(80)).length, "docklet-hub-agent-".length + 40);
+});
+
+test("der Hub erkennt den Stack des Archivs als eigenen", () => {
+  // Even with a foreign image reference, or it offers the stack for editing.
+  const project = composeProjectName("remote-host");
+  const member: ContainerOverviewEntry = {
+    id: "id-wireguard",
+    name: "wireguard",
+    image: "example/wireguard:1",
+    status: "Up 2 hours",
+    running: true,
+    startedAt: null,
+    health: null,
+    compose: { project, service: "wireguard" },
+    stats: null,
+    externalManagement: null
+  };
+  const { stacks } = groupIntoStacks([member]);
+  assert.equal(stacks[0]?.system, true);
+});
+
 test("die README beschreibt den Umstieg eines älteren Arms auf diesen Agenten (R38)", async () => {
   const input = makeInput();
   const unpacked = await unpack(input);
@@ -496,10 +526,10 @@ test("kennt der Hub das Arbeitsverzeichnis, schlägt die README es als Ablageort
   const unpacked = await unpackOnce();
   const readme = unpacked.read("README.md");
   assert.ok(
-    readme.includes("sudo mkdir -p /mnt/user/appdata/dashboard-docker-agent"),
+    readme.includes("sudo mkdir -p /mnt/user/appdata/docklet-agent"),
     "die README legt den Arm nicht unter dem genannten Arbeitsverzeichnis an"
   );
-  assert.ok(!readme.includes("/opt/dashboard-docker-agent"), "die README schlägt weiterhin /opt vor");
+  assert.ok(!readme.includes("/opt/docklet-agent"), "die README schlägt weiterhin /opt vor");
 });
 
 test("auch mit bekanntem Pfad bleibt die Gegenprobe auf Dauerhaftigkeit stehen", async () => {
@@ -521,7 +551,7 @@ test("auch mit bekanntem Pfad bleibt die Gegenprobe auf Dauerhaftigkeit stehen",
     host: { ...input.host, bindBasePath: "/opt/docker" }
   });
   const readme = unpacked.read("README.md");
-  assert.ok(readme.includes("sudo mkdir -p /opt/docker/dashboard-docker-agent"), "der Pfad wird übernommen");
+  assert.ok(readme.includes("sudo mkdir -p /opt/docker/docklet-agent"), "der Pfad wird übernommen");
   assert.ok(readme.includes("findmnt -no FSTYPE,SOURCE /"), "die Gegenprobe fehlt beim bekannten Pfad");
   assert.ok(
     readme.indexOf("findmnt -no FSTYPE,SOURCE /") < readme.indexOf("tar -xzf"),
@@ -533,7 +563,7 @@ test("kennt der Hub ihn nicht, bleibt /opt der Vorschlag", async () => {
   const input = makeInput();
   const unpacked = await unpack({ ...input, host: { ...input.host, bindBasePath: null } });
   const readme = unpacked.read("README.md");
-  assert.ok(readme.includes("sudo mkdir -p /opt/dashboard-docker-agent"), "der Rückfall auf /opt fehlt");
+  assert.ok(readme.includes("sudo mkdir -p /opt/docklet-agent"), "der Rückfall auf /opt fehlt");
   assert.ok(readme.includes("findmnt -no FSTYPE,SOURCE /"), "die Gegenprobe fehlt");
 });
 
