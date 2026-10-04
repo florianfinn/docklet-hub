@@ -306,7 +306,7 @@ function ImageTable({ images }: { images: ImageResourceView[] }) {
                 {image.tags.length > 0 ? <span className="text-xs text-subtle-foreground">{shortId(image.id)}</span> : null}
               </span>
             </TableCell>
-            <TableCell className="text-right font-mono tabular-nums">{bytes(image.sizeBytes)}</TableCell>
+            <TableCell className="text-right font-mono tabular-nums">{bytes(image.sizeBytes) ?? <Unknown />}</TableCell>
             <TableCell>
               <Users usedBy={image.usedBy} />
             </TableCell>

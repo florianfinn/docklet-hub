@@ -30,7 +30,7 @@ export type ResourceUser = z.output<typeof resourceUserSchema>;
 export const imageResourceSchema = z.object({
   id: z.string(),
   tags: z.array(z.string()),
-  sizeBytes: z.number(),
+  sizeBytes: z.nullable(z.number()),
   sharedSizeBytes: z.nullable(z.number()),
   createdAt: z.nullable(z.string()),
   usedBy: z.nullable(z.array(resourceUserSchema))

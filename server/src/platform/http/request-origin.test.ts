@@ -388,9 +388,8 @@ test("GET_ROUTES_WITH_EFFECT trägt beide Sorten und keinen Pfad mit /api", () =
   // Einzelansicht des Agenten schreibt bei einer Ablehnung einen Audit-Eintrag
   // unter dem Namen des angemeldeten Menschen.
   //
-  // Seit #10 steht `…/resources` am Ende — Sorte 2: der Agent schreibt für
-  // jeden Aufruf einen Audit-Eintrag unter dem Namen des angemeldeten
-  // Menschen und liest dafür die Größe jedes Volumes von der Platte.
+  // `…/resources` (#10) is sort 2: the agent writes an audit entry under the
+  // signed-in person for every read and sums every volume on disk for it.
   assert.deepEqual(
     [...GET_ROUTES_WITH_EFFECT],
     [

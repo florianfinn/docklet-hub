@@ -102,10 +102,15 @@ function size(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
+// An empty list sums to 0; only entries without any known size make it unknown.
 function sum(values: Array<number | null>): number | null {
   const known = values.filter((value): value is number => value !== null);
-  return known.length === 0 ? null : known.reduce((total, value) => total + value, 0);
+  if (values.length > 0 && known.length === 0) return null;
+  return known.reduce((total, value) => total + value, 0);
 }
+
+// The states `docker system df` counts as active.
+const ACTIVE_STATES = new Set(["running", "paused", "restarting"]);
 
 function composeProjectOf(labels: Labels): string | null {
   const project = labels?.[COMPOSE_PROJECT_LABEL];
@@ -161,7 +166,7 @@ function imagesOf(raw: RawImage[], df: RawSystemDf | null, usage: Usage | null):
       return {
         id,
         tags: (image.RepoTags ?? []).filter((tag) => tag !== "<none>:<none>"),
-        sizeBytes: size(image.Size) ?? 0,
+        sizeBytes: size(image.Size),
         sharedSizeBytes: shared.get(id) ?? null,
         createdAt: typeof image.Created === "number" ? new Date(image.Created * 1000).toISOString() : null,
         usedBy: usage ? (usage.images.get(id) ?? []) : null
@@ -223,7 +228,7 @@ export function storageSummaryOf(df: RawSystemDf): StorageSummary {
   const images = df.Images ?? [];
   const layers = size(df.LayersSize);
   const usedImageBytes = images
-    .filter((image) => (image.Containers ?? 0) > 0)
+    .filter((image) => (image.Containers ?? 0) !== 0)
     .reduce((total, image) => {
       const imageSize = size(image.Size);
       const sharedSize = size(image.SharedSize);
@@ -242,7 +247,7 @@ export function storageSummaryOf(df: RawSystemDf): StorageSummary {
     containers: usage(
       containers.length,
       sum(containers.map((container) => size(container.SizeRw))),
-      sum(containers.filter((container) => container.State !== "running").map((container) => size(container.SizeRw)))
+      sum(containers.filter((container) => !ACTIVE_STATES.has(container.State ?? "")).map((container) => size(container.SizeRw)))
     ),
     volumes: usage(
       volumes.length,
@@ -251,10 +256,18 @@ export function storageSummaryOf(df: RawSystemDf): StorageSummary {
     ),
     buildCache: usage(
       cache.length,
-      sum(cache.map((entry) => size(entry.Size))),
+      sum(cache.filter((entry) => !entry.Shared).map((entry) => size(entry.Size))),
       sum(cache.filter((entry) => !entry.InUse && !entry.Shared).map((entry) => size(entry.Size)))
     )
   };
+}
+
+// API 1.52 deprecates the per-object lists of `/system/df` in favour of
+// summaries. Without them the answer counts as unreadable instead of zero.
+function hasLegacyUsage(value: unknown): value is RawSystemDf {
+  if (value === null || typeof value !== "object") return false;
+  const df = value as RawSystemDf;
+  return typeof df.LayersSize === "number" && Array.isArray(df.Images);
 }
 
 type Settled<T> = { ok: true; value: T } | { ok: false; reason: ResourceReadFailure };
@@ -285,7 +298,7 @@ export async function readHostResources(read: ResourceReader, now: () => Date = 
     settle(async () => arrayOf<RawResourceContainer>(await read("/containers/json?all=1")))
   ]);
   const usage = containers.ok ? usageOf(containers.value) : null;
-  const dfValue = df.ok && df.value !== null && typeof df.value === "object" ? df.value : null;
+  const dfValue = df.ok && hasLegacyUsage(df.value) ? df.value : null;
   return {
     readAt: now().toISOString(),
     storage: dfValue

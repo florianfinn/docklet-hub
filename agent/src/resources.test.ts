@@ -197,3 +197,46 @@ test("classifies read failures by cause", () => {
   assert.equal(resourceReadFailure(new EngineError("x", 503)), "engine-refused");
   assert.equal(resourceReadFailure(new SyntaxError("x")), "unreadable");
 });
+
+test("empty or fully used parts sum to zero, not to unknown", () => {
+  const summary = storageSummaryOf({
+    LayersSize: 0,
+    Images: [],
+    Containers: [
+      { State: "running", SizeRw: 10 },
+      { State: "paused", SizeRw: 20 },
+      { State: "restarting", SizeRw: 30 }
+    ],
+    Volumes: [{ Name: "a", UsageData: { Size: 5, RefCount: 1 } }],
+    BuildCache: []
+  });
+  // Paused and restarting containers count as active, as in docker system df.
+  assert.deepEqual(summary.containers, { count: 3, sizeBytes: 60, unusedBytes: 0 });
+  assert.deepEqual(summary.volumes, { count: 1, sizeBytes: 5, unusedBytes: 0 });
+  assert.deepEqual(summary.buildCache, { count: 0, sizeBytes: 0, unusedBytes: 0 });
+  assert.deepEqual(summary.images, { count: 0, sizeBytes: 0, unusedBytes: 0 });
+});
+
+test("shared build cache counts in neither total", () => {
+  const summary = storageSummaryOf({ LayersSize: 0, Images: [], BuildCache: [{ Size: 7, Shared: true }, { Size: 3 }] });
+  assert.deepEqual(summary.buildCache, { count: 2, sizeBytes: 3, unusedBytes: 3 });
+});
+
+test("a disk usage answer without the per-object lists is unreadable, not zero", async () => {
+  const resources = await readHostResources(
+    reader({ "/system/df": async () => ({ ImagesUsage: { TotalSize: 1000 } }) }).read,
+    NOW
+  );
+  assert.deepEqual(resources.storage, { ok: false, reason: "unreadable" });
+  assert.ok(resources.volumes.ok);
+  assert.ok(resources.volumes.items.every((volume) => volume.sizeBytes === null));
+});
+
+test("an image without a size stays unknown", async () => {
+  const resources = await readHostResources(
+    reader({ "/images/json": async () => [{ Id: IMAGE_OLD, RepoTags: null }] }).read,
+    NOW
+  );
+  assert.ok(resources.images.ok);
+  assert.equal(resources.images.items[0].sizeBytes, null);
+});
