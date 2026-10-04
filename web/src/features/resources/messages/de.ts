@@ -1,0 +1,60 @@
+// German texts of the feature `resources` (#10): the storage overview and the
+// lists of images, volumes and networks of one host. German is the source of
+// the message type; `en.ts` closes with `satisfies typeof deResources`.
+
+export const deResources = {
+  resourcesTitle: "Ressourcen",
+  resourcesOpen: "Ressourcen",
+  resourcesBack: "Zurück zu den Hosts",
+  resourcesReadOnly: "Nur lesend: Diese Seite ändert nichts auf dem Host.",
+  resourcesReadAt: "Gelesen um {time}",
+  resourcesReload: "Neu lesen",
+  resourcesAdminOnly: "Die Ressourcen eines Hosts sieht nur ein Admin.",
+  resourcesFailed: "Die Ressourcen ließen sich nicht laden.",
+  resourcesOutdated: "Der Agent dieses Hosts ist zu alt für die Ressourcenübersicht.",
+  resourcesUnreachable: "Der Agent dieses Hosts antwortet nicht.",
+  resourcesHostUnknown: "Diesen Host führt der Hub nicht.",
+
+  resourcesStorageTitle: "Speicher",
+  resourcesStorageHint: "Wie docker system df. „Ungenutzt“ heißt: kein Container verwendet es gerade.",
+  resourcesStorageKind: "Art",
+  resourcesStorageCount: "Anzahl",
+  resourcesStorageSize: "Belegt",
+  resourcesStorageUnused: "Davon ungenutzt",
+  resourcesStorageImages: "Images",
+  resourcesStorageContainers: "Container (Schreibschicht)",
+  resourcesStorageVolumes: "Volumes",
+  resourcesStorageBuildCache: "Build-Cache",
+
+  resourcesImagesTitle: "Images",
+  resourcesVolumesTitle: "Volumes",
+  resourcesNetworksTitle: "Netze",
+  resourcesVolumesHint: "Ein ungenutztes Volume kann trotzdem wichtige Daten enthalten.",
+  resourcesEmpty: "Keine Einträge.",
+  resourcesColumnName: "Name",
+  resourcesColumnSize: "Größe",
+  resourcesColumnDriver: "Treiber",
+  resourcesColumnUsedBy: "Verwendet von",
+  resourcesColumnMarks: "Merkmale",
+  resourcesSizeUnknown: "nicht ermittelt",
+  resourcesStopped: "{name} (gestoppt)",
+  resourcesUsageUnknownNote: "Die Containerliste ließ sich nicht lesen ({reason}). Ob etwas verwendet wird, ist deshalb unbekannt.",
+
+  resourcesMarkInUse: "in Verwendung",
+  resourcesMarkUnused: "ungenutzt",
+  resourcesMarkUnknown: "Verwendung unbekannt",
+  resourcesMarkShared: "geteilt",
+  resourcesMarkSystem: "Hub/Agent",
+  resourcesMarkPredefined: "von Docker",
+  resourcesMarkAnonymous: "anonym",
+  resourcesMarkInternal: "intern",
+  resourcesMarkUntagged: "ohne Tag",
+  resourcesMarkSharedLayers: "{size} geteilte Schichten",
+
+  resourcesSectionFailed: "{section} ließen sich nicht lesen: {reason}",
+  resourcesReasonTimeout: "Docker hat nicht rechtzeitig geantwortet.",
+  resourcesReasonUnreachable: "Docker war nicht erreichbar.",
+  resourcesReasonRefused: "Docker hat die Abfrage abgelehnt.",
+  resourcesReasonUnreadable: "Die Antwort von Docker war nicht lesbar.",
+  resourcesReasonOther: "Grund „{reason}“."
+};

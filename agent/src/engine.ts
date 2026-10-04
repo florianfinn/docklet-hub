@@ -5,6 +5,7 @@ import { LogDemuxer, renderDemuxedLines, type DemuxedLine } from "./log-demux.js
 import { resolveLogTail } from "./log-tail.js";
 import { UNRAID_MANAGED_LABEL } from "./external-management.js";
 import { EngineError, EnginePullError, EngineAbortError } from "./engine-errors.js";
+import type { ResourcePath } from "./resources.js";
 import {
   type EngineRegistryAuth,
   registryAuthHeader,
@@ -591,6 +592,12 @@ export class DockerEngine {
       if (error instanceof EngineError) return null;
       throw error;
     }
+  }
+
+  // The fixed read paths of the storage overview (#10). `/system/df` sums the
+  // volume sizes on disk and therefore gets a longer window.
+  async readResource(path: ResourcePath): Promise<unknown> {
+    return this.json<unknown>({ method: "GET", path, timeoutMs: path === "/system/df" ? 60_000 : undefined });
   }
 
   // The two host values the engine knows without a /proc or host mount.

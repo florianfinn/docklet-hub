@@ -10,7 +10,7 @@ import { setHostColor, type AppearanceDeps } from "./service.js";
 // it was asked. The HTTP side of the same route runs against the whole router
 // in `app/theme-routes.test.ts`.
 
-const REACHABLE: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 9, readOnly: false, entries: 3 };
+const REACHABLE: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 10, readOnly: false, entries: 3 };
 const COLOURED: HostThemePreset = { ...DEFAULT_HOST_THEME, hue: "teal", ink: "head" };
 
 function host(overrides: Partial<HostRecord> = {}): HostRecord {

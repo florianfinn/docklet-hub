@@ -1,0 +1,60 @@
+import type { deResources } from "./de";
+
+// English texts of the feature `resources` (#10).
+
+export const enResources = {
+  resourcesTitle: "Resources",
+  resourcesOpen: "Resources",
+  resourcesBack: "Back to hosts",
+  resourcesReadOnly: "Read only: this page changes nothing on the host.",
+  resourcesReadAt: "Read at {time}",
+  resourcesReload: "Read again",
+  resourcesAdminOnly: "Only an admin sees the resources of a host.",
+  resourcesFailed: "The resources could not be loaded.",
+  resourcesOutdated: "The agent of this host is too old for the resource overview.",
+  resourcesUnreachable: "The agent of this host does not answer.",
+  resourcesHostUnknown: "The hub does not keep this host.",
+
+  resourcesStorageTitle: "Storage",
+  resourcesStorageHint: "As docker system df. “Unused” means: no container uses it right now.",
+  resourcesStorageKind: "Kind",
+  resourcesStorageCount: "Count",
+  resourcesStorageSize: "Used space",
+  resourcesStorageUnused: "Of which unused",
+  resourcesStorageImages: "Images",
+  resourcesStorageContainers: "Containers (writable layer)",
+  resourcesStorageVolumes: "Volumes",
+  resourcesStorageBuildCache: "Build cache",
+
+  resourcesImagesTitle: "Images",
+  resourcesVolumesTitle: "Volumes",
+  resourcesNetworksTitle: "Networks",
+  resourcesVolumesHint: "An unused volume can still hold important data.",
+  resourcesEmpty: "No entries.",
+  resourcesColumnName: "Name",
+  resourcesColumnSize: "Size",
+  resourcesColumnDriver: "Driver",
+  resourcesColumnUsedBy: "Used by",
+  resourcesColumnMarks: "Marks",
+  resourcesSizeUnknown: "not computed",
+  resourcesStopped: "{name} (stopped)",
+  resourcesUsageUnknownNote: "The container list could not be read ({reason}), so whether anything is in use is unknown.",
+
+  resourcesMarkInUse: "in use",
+  resourcesMarkUnused: "unused",
+  resourcesMarkUnknown: "usage unknown",
+  resourcesMarkShared: "shared",
+  resourcesMarkSystem: "hub/agent",
+  resourcesMarkPredefined: "Docker''s own",
+  resourcesMarkAnonymous: "anonymous",
+  resourcesMarkInternal: "internal",
+  resourcesMarkUntagged: "untagged",
+  resourcesMarkSharedLayers: "{size} shared layers",
+
+  resourcesSectionFailed: "{section} could not be read: {reason}",
+  resourcesReasonTimeout: "Docker did not answer in time.",
+  resourcesReasonUnreachable: "Docker could not be reached.",
+  resourcesReasonRefused: "Docker refused the query.",
+  resourcesReasonUnreadable: "Docker''s answer could not be read.",
+  resourcesReasonOther: "Reason “{reason}”."
+} satisfies typeof deResources;

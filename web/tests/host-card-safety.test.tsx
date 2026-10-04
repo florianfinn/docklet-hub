@@ -8,6 +8,7 @@ import { renderInDom, settle } from "./dom-harness.js";
 // (`React.createElement`). Die Begründung samt Messung steht im Kopf von
 // `language-switch.test.tsx`.
 import React from "react";
+import { MemoryRouter } from "react-router";
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -258,7 +259,9 @@ test("„Erneut prüfen“ misst wirklich neu", async () => {
   const server = stubHub({ hosts: [hostOf()] });
   const mounted = await renderInDom(
     <AppLanguageProvider>
-      <HostsScreen role="admin" />
+      <MemoryRouter>
+        <HostsScreen role="admin" />
+      </MemoryRouter>
     </AppLanguageProvider>
   );
 
@@ -281,7 +284,9 @@ test("die Liste bleibt während der Messung stehen", async () => {
   const server = stubHub({ hosts: [hostOf()] });
   const mounted = await renderInDom(
     <AppLanguageProvider>
-      <HostsScreen role="admin" />
+      <MemoryRouter>
+        <HostsScreen role="admin" />
+      </MemoryRouter>
     </AppLanguageProvider>
   );
 
@@ -321,7 +326,9 @@ test("eine geglückte Messung nimmt die Fehlermeldung zurück", async () => {
   const server = stubHub({ hosts: [hostOf()], failFirst: true });
   const mounted = await renderInDom(
     <AppLanguageProvider>
-      <HostsScreen role="admin" />
+      <MemoryRouter>
+        <HostsScreen role="admin" />
+      </MemoryRouter>
     </AppLanguageProvider>
   );
 
