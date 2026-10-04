@@ -136,6 +136,8 @@ in docs/design/ und sind dort im Index verlinkt.
 ## Git und Veröffentlichungen
 
 - Kein direkter Push auf main.
+- Ein Feature wird zuerst fertig gebaut, besprochen und lokal getestet. Push
+  und PR folgen erst auf ausdrückliche Anweisung.
 - Commits sind Conventional Commits mit deutschem Betreff. Sobald ein Issue
   existiert, steht (#<number>) am Ende. Öffentliche Noreply-Absender verwenden.
 - Commit-Text über git commit -F, PR-Text über --body-file und Titel/Merge-Text
