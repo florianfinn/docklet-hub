@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateMerge } from "../../scripts/merge-evidence.mjs";
+import { mergeArguments, validateMerge } from "../../scripts/merge-evidence.mjs";
 const report={reviewer:"review-agent",headSha:"a".repeat(40),baseSha:"b".repeat(40),mergeSha:"c".repeat(40),result:"approved",summary:"Reviewed synthetic fixture"};
 const pr={number:1,state:"open",draft:false,head:{sha:report.headSha},base:{sha:report.baseSha},merge_commit_sha:report.mergeSha};
 const checks=[{id:10,name:"checks",app:{id:15368},head_sha:report.headSha,status:"completed",conclusion:"success"}];
@@ -21,4 +21,7 @@ test("Merge lehnt fremden Head, private Texte und mehrdeutige CI-Belege ab",()=>
   assert.throws(()=>validateMerge(report,pr,checks,statuses,log,{...payload,commit_title:"fix: Synthetic test\nSecond line"}),/single-line/);
   const path=["C:","Users","synthetic-operator","file.txt"].join(String.fromCharCode(92));
   assert.throws(()=>validateMerge(report,pr,checks,statuses,log,{...payload,commit_message:path}),/non-public/);
+});
+test("Merge-Argumente binden den geprüften Head und übernehmen den Merge-Text unverändert",()=>{
+  assert.deepEqual(mergeArguments(1,payload),{pullNumber:1,expectedHeadSha:report.headSha,merge_method:"squash",commit_title:payload.commit_title,commit_message:payload.commit_message});
 });

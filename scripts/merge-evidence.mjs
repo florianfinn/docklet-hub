@@ -20,3 +20,9 @@ export function validateMerge(report,pr,checks,statuses,log,payload) {
   if(findTransliterations(text).length || findMojibake(text).length)throw new Error("The merge text has invalid German spelling or encoding");
   return latest;
 }
+
+// The arguments of a merge through the session's GitHub connection: the same
+// values as the REST payload, with the head bound as expectedHeadSha.
+export function mergeArguments(number,payload) {
+  return {pullNumber:number,expectedHeadSha:payload.sha,merge_method:payload.merge_method,commit_title:payload.commit_title,commit_message:payload.commit_message};
+}
