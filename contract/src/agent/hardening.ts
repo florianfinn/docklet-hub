@@ -68,7 +68,8 @@ export type HardeningFinding = {
 };
 
 const RULE_CHARACTER = /[a-z0-9-]/;
-const LEADING_SEPARATOR = /^[^A-Za-z0-9/]+/;
+// The separator: whitespace, one run of punctuation, whitespace.
+const LEADING_SEPARATOR = /^\s+[^\sA-Za-z0-9]+\s+/;
 
 // Compose service names cannot contain ":", so the first one ends the service.
 export function parseHardeningFinding(key: string): HardeningFinding {

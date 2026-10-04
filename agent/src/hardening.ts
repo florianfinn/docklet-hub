@@ -6,6 +6,7 @@
 
 import {
   DELEGATION_LOCK_RULES,
+  HARDENING_RULE_SEVERITY,
   type HardeningRule,
   type HardeningSeverity
 } from "contract";
@@ -344,7 +345,7 @@ export function findHardeningViolations(
   for (const name of new Set(container.unresolvedVolumes ?? [])) {
     violations.push({
       rule: "volume-unresolved",
-      severity: "delegation-lock",
+      severity: HARDENING_RULE_SEVERITY["volume-unresolved"],
       detail: `volume ${name} could not be checked`
     });
   }
@@ -366,7 +367,7 @@ export function findHardeningViolations(
       // mounted in" is the sentence that tells the operator what is at stake.
       violations.push({
         rule: "dashboard-self-mount",
-        severity: "delegation-lock",
+        severity: HARDENING_RULE_SEVERITY["dashboard-self-mount"],
         detail: bind,
         hostPath: normalizedHostPath
       });
@@ -375,14 +376,14 @@ export function findHardeningViolations(
       // delegable — it stays operable for the operator internally (§4.2).
       violations.push({
         rule: "docker-socket-mount",
-        severity: "delegation-lock",
+        severity: HARDENING_RULE_SEVERITY["docker-socket-mount"],
         detail: bind,
         hostPath: normalizedHostPath
       });
     } else if (isSensitiveHostPath(hostPath)) {
       // The denylist beats the allowlist: /etc lies outside the base path,
       // /var/lib/docker partly inside it — both remain a finding.
-      violations.push({ rule: "sensitive-host-path", severity: "warning", detail: bind, hostPath: normalizedHostPath });
+      violations.push({ rule: "sensitive-host-path", severity: HARDENING_RULE_SEVERITY["sensitive-host-path"], detail: bind, hostPath: normalizedHostPath });
     } else if (
       options.bindBasePath &&
       hostPath.startsWith("/") &&
@@ -390,7 +391,7 @@ export function findHardeningViolations(
     ) {
       violations.push({
         rule: "bind-outside-base",
-        severity: "notice",
+        severity: HARDENING_RULE_SEVERITY["bind-outside-base"],
         detail:
           `${bind} (allowed only below a container directory, ` +
           `i.e. ${options.bindBasePath}/<name>/<...>)`,
@@ -407,7 +408,7 @@ export function findHardeningViolations(
     ) {
       violations.push({
         rule: "bind-outside-universe",
-        severity: "notice",
+        severity: HARDENING_RULE_SEVERITY["bind-outside-universe"],
         detail:
           `${bind} (protected container: allowed only below its own ` +
           `directory ${options.secureUniverse}/<...>)`,
@@ -417,7 +418,7 @@ export function findHardeningViolations(
   }
 
   if (container.privileged) {
-    violations.push({ rule: "privileged", severity: "delegation-lock", detail: "privileged=true" });
+    violations.push({ rule: "privileged", severity: HARDENING_RULE_SEVERITY["privileged"], detail: "privileged=true" });
   }
 
   // ⚠️ Level lowered in S9 (§4.2): tailscale carries NET_ADMIN, SYS_PTRACE and
@@ -426,7 +427,7 @@ export function findHardeningViolations(
   // set at once.
   for (const capability of container.capAdd) {
     if (FORBIDDEN_CAPABILITIES.has(normalizeCapability(capability))) {
-      violations.push({ rule: "dangerous-capability", severity: "notice", detail: capability });
+      violations.push({ rule: "dangerous-capability", severity: HARDENING_RULE_SEVERITY["dangerous-capability"], detail: capability });
     }
   }
 
@@ -436,17 +437,17 @@ export function findHardeningViolations(
     ["network", container.networkMode]
   ] as const) {
     if (mode === "host") {
-      violations.push({ rule: "host-namespace", severity: "delegation-lock", detail: `${label}=host` });
+      violations.push({ rule: "host-namespace", severity: HARDENING_RULE_SEVERITY["host-namespace"], detail: `${label}=host` });
     }
   }
 
   for (const option of container.securityOpt) {
     const normalized = option.toLowerCase().replace(/\s+/g, "");
     if (normalized === "apparmor=unconfined" || normalized === "apparmor:unconfined") {
-      violations.push({ rule: "apparmor-or-seccomp-disabled", severity: "notice", detail: option });
+      violations.push({ rule: "apparmor-or-seccomp-disabled", severity: HARDENING_RULE_SEVERITY["apparmor-or-seccomp-disabled"], detail: option });
     }
     if (normalized === "seccomp=unconfined" || normalized === "seccomp:unconfined") {
-      violations.push({ rule: "apparmor-or-seccomp-disabled", severity: "notice", detail: option });
+      violations.push({ rule: "apparmor-or-seccomp-disabled", severity: HARDENING_RULE_SEVERITY["apparmor-or-seccomp-disabled"], detail: option });
     }
   }
 
@@ -456,7 +457,7 @@ export function findHardeningViolations(
     // operator from their own container.
     violations.push({
       rule: "device-passthrough",
-      severity: "notice",
+      severity: HARDENING_RULE_SEVERITY["device-passthrough"],
       detail: container.devices.join(", ")
     });
   }
@@ -468,7 +469,7 @@ export function findHardeningViolations(
   if (!hasNoNewPrivileges(container.securityOpt)) {
     violations.push({
       rule: "no-new-privileges-missing",
-      severity: "notice",
+      severity: HARDENING_RULE_SEVERITY["no-new-privileges-missing"],
       detail: "security_opt: no-new-privileges:true missing"
     });
   }
@@ -480,7 +481,7 @@ export function findHardeningViolations(
   if (!container.capDrop.some((capability) => normalizeCapability(capability) === "ALL")) {
     violations.push({
       rule: "capabilities-not-dropped",
-      severity: "notice",
+      severity: HARDENING_RULE_SEVERITY["capabilities-not-dropped"],
       detail: "cap_drop: ALL missing"
     });
   }
@@ -492,7 +493,7 @@ export function findHardeningViolations(
   if (missingLimits.length > 0) {
     violations.push({
       rule: "resource-limit-missing",
-      severity: "notice",
+      severity: HARDENING_RULE_SEVERITY["resource-limit-missing"],
       detail: `no limit: ${missingLimits.join(", ")}`
     });
   }
@@ -503,7 +504,7 @@ export function findHardeningViolations(
   if (isLoggingUnlimited(container.logDriver, container.logOptions)) {
     violations.push({
       rule: "logging-unbounded",
-      severity: "notice",
+      severity: HARDENING_RULE_SEVERITY["logging-unbounded"],
       detail: `${container.logDriver || "json-file"} without max-size`
     });
   }

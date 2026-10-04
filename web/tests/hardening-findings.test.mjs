@@ -65,3 +65,10 @@ test("only the agent's own findings count as confirmed", () => {
   assert.equal(unconfirmedCount(keys, new Set(["a:privileged — privileged=true", "c:other"])), 1);
   assert.equal(unconfirmedCount(keys, new Set(keys)), 0);
 });
+
+test("only the separator is stripped, not punctuation the subject starts with", () => {
+  const [relative] = findingsOf(["web:bind-outside-base — ./data"]);
+  assert.equal(relative?.subject, "./data");
+  const [unknown] = findingsOf(["web:future-rule — -x"]);
+  assert.equal(unknown?.subject, "-x");
+});
