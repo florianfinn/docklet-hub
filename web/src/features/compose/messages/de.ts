@@ -164,7 +164,7 @@ export const deCompose = {
   composeQuestionServices: "Neue Services: {added}. Entfallende: {removed}.",
   composeQuestionImages: "Diese Images liegen auf dem Host nicht vor und werden geholt: {list}",
   composeQuestionHardening:
-    "{count, plural, one {Dieser Entwurf führt einen neuen Härtungsbefund ein} other {Dieser Entwurf führt # neue Härtungsbefunde ein}}. Der Agent übernimmt ihn erst, wenn jeder Befund einzeln bestätigt ist.",
+    "{count, plural, one {Dieser Entwurf führt einen neuen Härtungsbefund ein} other {Dieser Entwurf führt # neue Härtungsbefunde ein}}. Der Agent übernimmt ihn erst, wenn genau diese Befunde bestätigt sind.",
   composeQuestionChangedElsewhere:
     "Die Datei hat sich geändert, seit sie geladen wurde. Der Entwurf steht noch im Editor — neu laden zeigt den fremden Stand.",
   composeQuestionStartFailed: "Der Stack ist nicht hochgekommen: {detail}",

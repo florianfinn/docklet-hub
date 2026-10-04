@@ -125,7 +125,7 @@ export const enCompose = {
   composeQuestionServices: "New services: {added}. Going away: {removed}.",
   composeQuestionImages: "These images are not on the host and will be pulled: {list}",
   composeQuestionHardening:
-    "{count, plural, one {This draft introduces a new hardening finding} other {This draft introduces # new hardening findings}}. The agent only takes it once every finding is confirmed one by one.",
+    "{count, plural, one {This draft introduces a new hardening finding} other {This draft introduces # new hardening findings}}. The agent only takes it once exactly these findings are confirmed.",
   composeQuestionChangedElsewhere:
     "The file has changed since it was loaded. The draft is still in the editor — reloading shows the other state.",
   composeQuestionStartFailed: "The stack did not come up: {detail}",

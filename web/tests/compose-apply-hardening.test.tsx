@@ -41,7 +41,7 @@ const QUESTION = [
   JSON.stringify({ kind: "question", question: { kind: "hardening", newViolations: NEW, rolledBack: true } })
 ].join("\n");
 
-function stubHub(): { bodies: Record<string, unknown>[]; restore: () => void } {
+function stubHub(replies: string[] = [QUESTION]): { bodies: Record<string, unknown>[]; restore: () => void } {
   const original = globalThis.fetch;
   const bodies: Record<string, unknown>[] = [];
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
@@ -51,7 +51,8 @@ function stubHub(): { bodies: Record<string, unknown>[]; restore: () => void } {
       );
     }
     bodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
-    return Promise.resolve(new Response(`${QUESTION}\n`, { status: 200 }));
+    const reply = replies[Math.min(bodies.length - 1, replies.length - 1)] ?? QUESTION;
+    return Promise.resolve(new Response(`${reply}\n`, { status: 200 }));
   }) as typeof fetch;
   return {
     bodies,
@@ -79,9 +80,8 @@ function answerLocked(): boolean {
   return button instanceof HTMLButtonElement && button.disabled;
 }
 
-test("existing findings are explained, new ones are confirmed one by one", async () => {
-  const hub = stubHub();
-  const mounted = await renderInDom(
+async function mountApply() {
+  return renderInDom(
     <AppLanguageProvider>
       <ComposeApply
         hostId="host-1"
@@ -95,6 +95,12 @@ test("existing findings are explained, new ones are confirmed one by one", async
       />
     </AppLanguageProvider>
   );
+}
+
+test("existing findings are explained, new ones are confirmed one by one", async () => {
+  const hub = stubHub();
+  const mounted = await mountApply();
+
   try {
     assert.equal(await waitFor(() => at("compose-existing-violations") !== null), true, "the inventory is explained");
     assert.equal(at("compose-existing-violations")?.textContent?.includes("/var/run/docker.sock"), true);
@@ -116,6 +122,37 @@ test("existing findings are explained, new ones are confirmed one by one", async
     assert.equal(await waitFor(() => hub.bodies.length === 2), true, "the draft goes out again");
     assert.deepEqual(hub.bodies[0]?.acknowledgeHardening, []);
     assert.deepEqual(hub.bodies[1]?.acknowledgeHardening, NEW);
+  } finally {
+    await mounted.unmount();
+    hub.restore();
+  }
+});
+
+test("a second question starts with no ticks, even for a finding confirmed before", async () => {
+  const further = [...NEW, "web:host-namespace — pid=host"];
+  const second = [
+    JSON.stringify({ kind: "start", live: true, stackName: "site" }),
+    JSON.stringify({ kind: "question", question: { kind: "hardening", newViolations: further, rolledBack: true } })
+  ].join("\n");
+  const hub = stubHub([QUESTION, second]);
+  const mounted = await mountApply();
+  try {
+    assert.equal(await waitFor(() => at("compose-apply") !== null), true);
+    await click("compose-apply");
+    assert.equal(await waitFor(() => at("compose-new-violations") !== null), true);
+    for (const key of NEW) await click(`compose-new-violations-check-${key}`);
+    await click("compose-answer");
+
+    assert.equal(
+      await waitFor(() => document.body.querySelectorAll('[data-testid="compose-new-violations-item"]').length === 3),
+      true,
+      "the second question is shown"
+    );
+    for (const key of further) {
+      const box = at(`compose-new-violations-check-${key}`);
+      assert.equal(box instanceof HTMLInputElement && box.checked, false, `${key} starts unticked`);
+    }
+    assert.equal(answerLocked(), true);
   } finally {
     await mounted.unmount();
     hub.restore();
