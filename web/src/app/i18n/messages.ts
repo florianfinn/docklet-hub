@@ -25,6 +25,7 @@ import { deHosts, enHosts } from "../../features/hosts";
 import { deLogs, enLogs } from "../../features/logs";
 import { deMarks, enMarks } from "../../features/marks";
 import { deMetrics, enMetrics } from "../../features/metrics";
+import { deResources, enResources } from "../../features/resources";
 import { deSettingsPage, enSettingsPage } from "../../features/settings";
 import { deShell, enShell } from "../../features/shell";
 
@@ -38,6 +39,7 @@ export const de = {
   ...deHosts,
   ...deMarks,
   ...deMetrics,
+  ...deResources,
   ...deAppearance,
   ...deAccount,
   ...deSettingsPage
@@ -53,6 +55,7 @@ export const en = {
   ...enHosts,
   ...enMarks,
   ...enMetrics,
+  ...enResources,
   ...enAppearance,
   ...enAccount,
   ...enSettingsPage

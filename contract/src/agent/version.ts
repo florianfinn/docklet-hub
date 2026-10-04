@@ -31,8 +31,10 @@ import * as z from "zod/mini";
  *       `unraid`, `unraid-compose` and `unknown` (#5)
  *   9 — new stacks get a dry run `POST /stacks/raw-preview`, mount sources
  *       and per-source confirmation of external binds (#3)
+ *  10 — the storage overview reads images, volumes and networks with
+ *       `GET /resources` (#10)
  */
-export const CONTRACT_VERSION = 9;
+export const CONTRACT_VERSION = 10;
 
 /** What a field added after the first numbered contract carries. */
 export type ContractSince = { since: number };

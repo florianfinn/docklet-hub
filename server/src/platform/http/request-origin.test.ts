@@ -387,6 +387,9 @@ test("GET_ROUTES_WITH_EFFECT trägt beide Sorten und keinen Pfad mit /api", () =
   // Seit #213 steht `…/stats` hinter dem Log-Strom — Sorte 2: die
   // Einzelansicht des Agenten schreibt bei einer Ablehnung einen Audit-Eintrag
   // unter dem Namen des angemeldeten Menschen.
+  //
+  // `…/resources` (#10) is sort 2: the agent writes an audit entry under the
+  // signed-in person for every read and sums every volume on disk for it.
   assert.deepEqual(
     [...GET_ROUTES_WITH_EFFECT],
     [
@@ -400,7 +403,8 @@ test("GET_ROUTES_WITH_EFFECT trägt beide Sorten und keinen Pfad mit /api", () =
       "/hosts/:hostId/containers/:containerId/share",
       "/hosts/:hostId/containers/:containerId/compose",
       "/hosts/:hostId/containers/:containerId/compose/env",
-      "/hosts/:hostId/containers/:containerId/compose/candidates"
+      "/hosts/:hostId/containers/:containerId/compose/candidates",
+      "/hosts/:hostId/resources"
     ]
   );
   const withPrefix = GET_ROUTES_WITH_EFFECT.filter((path) => path.startsWith("/api/"));

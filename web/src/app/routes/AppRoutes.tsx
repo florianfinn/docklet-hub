@@ -6,6 +6,7 @@ import { useLanguage, type LanguageContextValue } from "../../platform/i18n";
 import { AccountScreen } from "../screens/AccountScreen";
 import { ContainerScreen } from "../screens/ContainerScreen";
 import { ContainersScreen } from "../screens/ContainersScreen";
+import { HostResourcesScreen } from "../screens/HostResourcesScreen";
 import { HostsScreen } from "../screens/HostsScreen";
 import { OverviewScreen } from "../screens/OverviewScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
@@ -237,6 +238,14 @@ function standaloneRoutesFor(user: SessionUser, language: LanguageContextValue):
       screen: "ContainerScreen",
       area: "operations",
       element: <ContainerScreen tab="shell" />
+    },
+    // The resources of one host (#10), reached from its card. A host is
+    // operations, so this path stays out of `managementPaths`.
+    {
+      path: "/hosts/:hostId/resources",
+      screen: "HostResourcesScreen",
+      area: "operations",
+      element: <HostResourcesScreen role={user.role} />
     },
     { path: "/account", screen: "AccountScreen", area: "management", element: <AccountScreen user={user} /> },
     {

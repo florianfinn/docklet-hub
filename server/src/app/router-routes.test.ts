@@ -82,6 +82,7 @@ const EXPECTED_LAYERS = [
   "PUT /hosts/:hostId/stacks/:project/display",
   "PUT /hosts/:hostId/stacks/:project/hidden",
   "PUT /hosts/:hostId/containers/:name/marks",
+  "GET /hosts/:hostId/resources",
   // The JSON 404 for everything under `/api` that matched nothing.
   "use <anonymous>"
 ];

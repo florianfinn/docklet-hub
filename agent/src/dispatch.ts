@@ -53,6 +53,7 @@ import {
   handleStackAction
 } from "./routes/stack-routes.js";
 import { handleExecInput, handleExec } from "./routes/exec-routes.js";
+import { handleResources } from "./routes/resource-routes.js";
 import {
   handleContainerDetail,
   handleUpdateCheck,
@@ -297,6 +298,11 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
 
     if (request.method === "GET" && url.pathname === "/host-info") {
       await handleHostInfo(ctx);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/resources") {
+      await handleResources(ctx);
       return;
     }
 

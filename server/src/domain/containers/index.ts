@@ -32,3 +32,4 @@ export {
   type RegistryEntryInput
 } from "./registry-sync.js";
 export { normalizeSharePath, readShare, readShares, removeShare, setShare } from "./shares.js";
+export { isSystemImage, isSystemProject } from "./system-containers.js";

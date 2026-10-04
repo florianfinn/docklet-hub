@@ -10,6 +10,7 @@ import { registerHostRoutes } from "../features/hosts/index.js";
 import { readLogSettings, registerLogRoutes } from "../features/logs/index.js";
 import { readHostDecoration, registerMarkRoutes } from "../features/marks/index.js";
 import { hostLoad, registerMetricsRoutes } from "../features/metrics/index.js";
+import { registerResourcesRoutes } from "../features/resources/index.js";
 import { registerSettingsRoutes } from "../features/settings/index.js";
 import { registerShellRoutes } from "../features/shell/index.js";
 
@@ -127,5 +128,8 @@ export const FEATURES: readonly RegisterFeature[] = [
   // theme and the colour of an arm used to stand between it and `POST /marks`.
   // No other registered pattern can match `GET /marks`, so the order changes no
   // answer; `app/router-routes.test.ts` holds that (`MOVED_BY_FEATURES`).
-  registerMarkRoutes
+  registerMarkRoutes,
+  // The feature `resources`: images, volumes and networks of one host (#10).
+  // Its one pattern matches no other route, so its place moves nothing.
+  registerResourcesRoutes
 ];

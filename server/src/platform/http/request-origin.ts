@@ -254,7 +254,11 @@ export const GET_ROUTES_WITH_EFFECT: readonly string[] = [
   // then `GET /containers/:id/compose-candidates` at the arm, which logs the
   // call under the name of the signed-in person (`audit: "compose-candidates"`
   // in `agent/src/route-policy.ts`). Sort 2, like the two above.
-  "/hosts/:hostId/containers/:containerId/compose/candidates"
+  "/hosts/:hostId/containers/:containerId/compose/candidates",
+  // The resources of one host (#10): `GET /resources` at the arm logs the call
+  // under the name of the signed-in person (`audit: "resources"`) and walks
+  // every volume on disk for its size. Sort 2, behind `requireAdmin`.
+  "/hosts/:hostId/resources"
 ];
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
