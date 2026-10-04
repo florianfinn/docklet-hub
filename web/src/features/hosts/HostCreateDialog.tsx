@@ -34,14 +34,10 @@ import { HostForm, type HostSetup } from "./HostForm";
 // des zuletzt angelegten Hosts — ein Herunterladen dort rotierte die
 // Zugangsdaten eines Arms, den gerade niemand angefasst hat.
 
-// Der Name des Verzeichnisses, das der Arm auf dem Zielhost bekommt.
-//
-// ⚠️ ZWEITE FASSUNG — die erste ist `DIRECTORY_NAME` in
-// `server/src/features/hosts/bootstrap/host-archive-readme.ts`. Dieser Dialog sagt „lege es
-// hier an", die README im Paket sagt „hier liegt es"; nennen beide
-// verschiedene Orte, sucht der Betreiber im zweiten Schritt an einer Stelle,
-// an der nichts ist. Web und Server teilen keinen Code, die Abschrift ist
-// unvermeidlich — `web/tests/host-form-defaults.test.mjs` hält sie zusammen.
+// The directory the arm gets on the target host. Second copy of
+// `DIRECTORY_NAME` in `server/src/features/hosts/bootstrap/host-archive-readme.ts`:
+// the dialog says where to create it, the README where it lies. Web and server
+// share no code; `web/tests/host-form-defaults.test.mjs` keeps both equal.
 export const DIRECTORY_NAME = "docklet-agent";
 
 export function HostCreateDialog({ onCreated }: { onCreated: (host: DockerHost) => void }) {
@@ -106,7 +102,8 @@ export function HostCreateDialog({ onCreated }: { onCreated: (host: DockerHost) 
           <div className="flex flex-col gap-4">
             {/* Only the first three steps on the target host: location, permissions,
                 start. The README in the archive carries the rest. */}
-            <ol className="flex flex-col gap-4">
+            {/* `role="list"`: without list-style Safari drops the list semantics. */}
+            <ol role="list" className="flex flex-col gap-4">
               {/* The path the operator just entered, not an invented one: the
                   agent may create bind mounts below it. */}
               <ArchiveStep number={1} title={t("hostArchiveStepUnpackTitle")} text={t("hostArchiveStepUnpack")}>
