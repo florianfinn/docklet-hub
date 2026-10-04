@@ -1,25 +1,8 @@
-// Container escape hardening (stage plan 3.8). This check is the last line of
-// defence before every action — it deliberately sits in the agent and not
-// (only) in the main API: in exactly the attack the socket isolation protects
-// against, a check in the API would already have been bypassed.
-//
-// Just as deliberately it runs before EVERY action against a fresh `inspect`,
-// not once when the container is added to the allowlist: containers change
-// afterwards, not least because Dockge can keep editing alongside until it is
-// switched off.
-//
-// Pure, imports only the shared rule vocabulary — fully testable without a
-// running Docker daemon.
-//
-// Stage 4 adds the three rules from 3.8 that were missing until then
-// (no-new-privileges, cap_drop: ALL, resource limits) — and deliberately NOT
-// as a block. See HardeningSeverity.
-//
-// ⚠️ S9 (K4/K4b, CONTAINER_ETAPPENPLAN_LOCAL.md §4) changes the two classes
-// "blocking"/"advisory" into THREE levels. The mandate behind it: hardening
-// findings should no longer stop the operator at the internal access path but
-// inform them. The only thing that stays hard is HANDING ON — see
-// HardeningSeverity.
+// Container escape hardening: the last check before every action, run in the
+// agent against a fresh `inspect`, because a check in the hub alone would be
+// bypassed by exactly the attack it guards against, and containers change
+// after they are allowlisted. Pure apart from the shared rule vocabulary in
+// contract/, so it is testable without a Docker daemon.
 
 import {
   DELEGATION_LOCK_RULES,
@@ -60,28 +43,12 @@ export type InspectedContainer = {
   logOptions: Record<string, string>;
 };
 
-// Three levels (S9, §4.2), and the difference carries the whole stage:
-//
-// "delegation-lock" = this container IS the host. Whoever may start it may
-// do anything — including rewriting the allowlist through which all other
-// rights run. For the operator at the INTERNAL access path this changes
-// nothing: they have these rights anyway, and a tool that cannot restart
-// traefik is useless. What is locked is HANDING ON — no grant to others, no
-// external control, no web FTP for third parties (§19.7).
-//
-// "warning" = an operational or system directory of the host is mounted in. Not
-// an escape path in the sense above, but nothing to skim over casually:
-// destructive actions ask for confirmation.
-//
-// "notice" = hardening hygiene. Missing limits, a passed-through device, a
-// capability, a mount outside the convention. Blocks nothing, appears in the
-// "Sicherheitshinweise" (security notices) list and can (S9) be reported.
-//
-// ⚠️ The semantic list of delegation locks deliberately stays narrow: four
-// container properties with the same meaning. `volume-unresolved` does not
-// widen this risk class; it is its fail-closed backstop as long as one of
-// these properties cannot be checked because volume metadata is missing.
-// The levels and their rules live in contract/src/agent/hardening.ts.
+// Severity levels and their rules live in contract/src/agent/hardening.ts:
+// "delegation-lock" means the container effectively is the host; the agent
+// then refuses mutating actions from every tier but internal (runtime/gate.ts).
+// "warning" marks a mounted host system directory, "notice" hygiene; neither
+// blocks operation. `volume-unresolved` is the fail-closed stand-in while a
+// volume's host source cannot be checked.
 
 // Options of the check. Deliberately passed in instead of imported from
 // config.ts, so this module stays pure and testable without an environment.
