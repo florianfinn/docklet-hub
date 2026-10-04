@@ -6,6 +6,7 @@ import { HOST_NAME_MAX, hostNameProblem } from "contract";
 import { HostError, normalizeBindBasePath } from "../../domain/hosts/index.js";
 import { buildHostArchive, type HostArchiveInput } from "./bootstrap/host-archive.js";
 import { generateWireGuardKeyPair } from "./bootstrap/wireguard-keys.js";
+import { EnrollmentError } from "./enrollment.js";
 import { handleHostError } from "./host-errors.js";
 import { createHostsService } from "./service.js";
 
@@ -101,4 +102,32 @@ test("an endpoint override with a control character or whitespace is refused", (
   assert.equal(parsed.kind === "ok" && parsed.input.endpointOverride, "hub.example.test:51821");
   const empty = service.parseNewHost(body(""));
   assert.equal(empty.kind === "ok" && empty.input.endpointOverride, null);
+});
+
+test("the base path refuses $, backtick, quotes and backslash, which .env and compose would reinterpret", () => {
+  for (const path of ["/mnt/a$b", "/mnt/a`b", "/mnt/it's", '/mnt/a"b', `/mnt/a${char(92)}b`]) {
+    assert.equal(normalizeBindBasePath(path), null, path);
+  }
+  for (const path of ["/mnt/user/appdata", "/srv/docker-data_1", "/mnt/..data", "/mnt/a&b", "/mnt/a;b"]) {
+    assert.equal(normalizeBindBasePath(path), path, path);
+  }
+  const service = createHostsService({} as never);
+  assert.equal(service.parseNewHost({ name: "arm", kind: "external", dockerGid: 1, bindBasePath: "/mnt/a$b" }).kind, "invalid-input");
+});
+
+test("a refused stored record leaves as 409 host-record-invalid", () => {
+  const sent: { status?: number; body?: unknown } = {};
+  const response = {
+    status(code: number) {
+      sent.status = code;
+      return this;
+    },
+    json(body: unknown) {
+      sent.body = body;
+      return this;
+    }
+  } as unknown as Response;
+  assert.equal(handleHostError(new EnrollmentError("host-record-invalid", "x"), response), true);
+  assert.equal(sent.status, 409);
+  assert.equal((sent.body as { error?: string }).error, "host-record-invalid");
 });

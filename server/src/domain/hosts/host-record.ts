@@ -158,7 +158,9 @@ export function normalizeBindBasePath(value: unknown): string | null {
   const candidate = value.trim();
   if (!candidate.startsWith("/")) return null;
   // `\s` misses NUL, DEL and C1; none of them belongs in `.env` or a command.
-  if (/[\s:]/.test(candidate) || hasControlOrLineSeparator(candidate)) return null;
+  // Compose reads `$`, quotes and `\` in the unquoted `.env` value, and a
+  // backtick has no place in a path either.
+  if (/[\s:$`'"\\]/.test(candidate) || hasControlOrLineSeparator(candidate)) return null;
   // `..` als eigener Abschnitt — `/mnt/..data` ist ein gewöhnlicher Name.
   if (candidate.split("/").includes("..")) return null;
   const trimmed = candidate.replace(/\/+$/, "");

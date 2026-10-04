@@ -311,7 +311,7 @@ export async function createHost(
     throw new HostError(
       "invalid-input",
       `„${String(input.bindBasePath)}" taugt nicht als Basispfad. Erwartet wird ein absoluter Pfad ohne ` +
-        "Leerzeichen, ohne Doppelpunkt und ohne `..` als Abschnitt. `/` selbst ist ausgeschlossen: es " +
+        "Leerzeichen, Doppelpunkt, $, `, Anführungszeichen und Backslash und ohne `..` als Abschnitt. `/` selbst ist ausgeschlossen: es " +
         "schaltet die Schranke des Agenten gegen beliebige Bind-Mounts ab."
     );
   }

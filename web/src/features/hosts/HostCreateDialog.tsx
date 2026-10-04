@@ -51,7 +51,8 @@ export function HostCreateDialog({ onCreated }: { onCreated: (host: DockerHost) 
   const [setup, setSetup] = useState<HostSetup | null>(null);
   // Quoted like the README in the archive: the path is the operator's input
   // and must reach `mkdir` as one argument, not as shell code.
-  const target = quoteShellArgument(`${setup?.bindBasePath ?? ""}/${DIRECTORY_NAME}`);
+  // Trailing slashes dropped like the hub stores the path (`normalizeBindBasePath`).
+  const target = quoteShellArgument(`${(setup?.bindBasePath ?? "").replace(/\/+$/, "")}/${DIRECTORY_NAME}`);
 
   return (
     <Dialog

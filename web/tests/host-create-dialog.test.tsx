@@ -233,6 +233,7 @@ test("der Prompt steht vor dem Befehl, aber nicht im kopierbaren Text", async ()
 test("the base path reaches the copyable command quoted, and the highlight marks the quoted path", async () => {
   const cases: [string, string][] = [
     ["/mnt/cache/docker", "sudo mkdir -p /mnt/cache/docker/docklet-agent"],
+    ["/mnt/cache/docker/", "sudo mkdir -p /mnt/cache/docker/docklet-agent"],
     ["/mnt/my disk", "sudo mkdir -p '/mnt/my disk/docklet-agent'"],
     ["/mnt/it's", String.raw`sudo mkdir -p '/mnt/it'\''s/docklet-agent'`],
     ['/mnt/a"b', "sudo mkdir -p '/mnt/a\"b/docklet-agent'"],

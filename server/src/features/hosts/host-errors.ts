@@ -29,7 +29,12 @@ export function handleHostError(error: unknown, response: Response): boolean {
     // Aufrufer hat etwas geschickt, das so nicht gehen kann, und die Meldung
     // sagt ihm, welche Angabe fehlt — kein 404 (der Arm ist nicht unbekannt)
     // und kein 409 (nichts steht im Widerspruch, es fehlt eine Adresse).
-    const status = error.reason === "host-is-local" ? 409 : error.reason === "endpoint-unreachable" ? 400 : 404;
+    const status =
+      error.reason === "host-is-local" || error.reason === "host-record-invalid"
+        ? 409
+        : error.reason === "endpoint-unreachable"
+          ? 400
+          : 404;
     failWith(response, status, error.reason, error.message);
     return true;
   }

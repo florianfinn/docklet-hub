@@ -628,3 +628,40 @@ test("das erneute Archiv wird abgewiesen, BEVOR der laufende Arm ausgesperrt ist
   );
   assert.ok(!calls.includes("rotate"), "es wurde rotiert, bevor die Adresse geprüft war");
 });
+
+test("a stored record the input rules now refuse gets no archive and keeps its credentials", async () => {
+  // Records from before the rule: a line break in the name, `$` in the path.
+  const stored: Partial<HostRecord>[] = [
+    { name: `arm${String.fromCharCode(10)}x` },
+    { bindBasePath: "/mnt/a$b" },
+    { endpointOverride: `hub.example.test${String.fromCharCode(10)}x` }
+  ];
+  for (const overrides of stored) {
+    const { repository, calls } = spyRepository([
+      {
+        id: "remote-host-1",
+        name: "remote-host",
+        agentUrl: "http://10.254.0.3:8099",
+        kind: "internal",
+        state: "registered",
+        tunnelAddress: "10.254.0.3",
+        wireguardPublicKey: "alter-schlüssel",
+        endpointOverride: null,
+        failedAttempts: 0,
+        dockerGid: 0,
+        bindBasePath: "/home/docker",
+        display: DEFAULT_HOST_THEME,
+        createdAt: new Date(),
+        registeredAt: new Date(),
+        lastSeenAt: null,
+        ...overrides
+      }
+    ]);
+    await assert.rejects(
+      () => createEnrollment({ repository, config: makeConfig() }).regenerateArchive("remote-host-1"),
+      (error: unknown) => error instanceof EnrollmentError && error.reason === "host-record-invalid",
+      JSON.stringify(overrides)
+    );
+    assert.equal(calls.includes("rotate"), false, `rotated before refusing: ${JSON.stringify(overrides)}`);
+  }
+});

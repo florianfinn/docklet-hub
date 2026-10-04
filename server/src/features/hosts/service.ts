@@ -217,7 +217,7 @@ export function createHostsService({ hosts, probe, markSeen, readHostInfo, hostL
     const path = bindBasePath === undefined || bindBasePath === null || bindBasePath === "" ? DEFAULT_BIND_BASE_PATH : bindBasePath;
     if (normalizeBindBasePath(path) === null) {
       return invalid(
-        "„bindBasePath“ ist ein absoluter Pfad ohne Leerzeichen, ohne Doppelpunkt und ohne „..“; „/“ selbst ist ausgeschlossen."
+        "„bindBasePath“ ist ein absoluter Pfad ohne Leerzeichen, Doppelpunkt, $, `, Anführungszeichen, Backslash und „..“; „/“ selbst ist ausgeschlossen."
       );
     }
     return {
