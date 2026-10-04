@@ -393,7 +393,8 @@ const LAZY_VIEWS = [
   "web/src/features/logs/StackLogView.tsx",
   "web/src/features/shell/ShellView.tsx",
   "web/src/features/files/FilesView.tsx",
-  "web/src/features/compose/ComposeView.tsx"
+  "web/src/features/compose/ComposeView.tsx",
+  "web/src/features/resources/ResourcesView.tsx"
 ];
 const TERMINAL_SURFACE = "web/src/features/shell/terminal-surface.ts";
 const isXterm = (source) => /(^|node_modules\/)@xterm\//.test(source);

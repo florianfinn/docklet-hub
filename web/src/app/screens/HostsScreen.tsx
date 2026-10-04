@@ -1,7 +1,11 @@
 import { lazy, Suspense } from "react";
+import { Link } from "react-router";
+import { useTranslations } from "use-intl";
 
 import { HostsView, type HostRole } from "../../features/hosts";
 import { ContainerLoad } from "../../features/metrics";
+import { hostResourcesPath } from "../../platform/routes/host-resources-path";
+import { buttonVariants } from "../../platform/ui/shadcn/button";
 
 // Loaded lazily: the dialog carries the compose editor (#3).
 const NewProjectDialog = lazy(() => import("../../features/compose/NewProjectDialog.lazy"));
@@ -15,16 +19,28 @@ const NewProjectDialog = lazy(() => import("../../features/compose/NewProjectDia
 // Karte kennt deshalb nur den Platz (`renderLoad`), und die Fläche, die beide
 // kennen darf, setzt die Ansicht ein.
 export function HostsScreen({ role }: { role: HostRole }) {
+  const t = useTranslations();
   return (
     <HostsView
       role={role}
       renderLoad={(hostId, load) => <ContainerLoad hostId={hostId} load={load} />}
       // A new project needs an arm that answers and speaks the current contract.
+      // The resource overview (#10) needs the same: its route came with the
+      // current contract.
       renderActions={(host) =>
         host.status === "online" ? (
-          <Suspense fallback={null}>
-            <NewProjectDialog hostId={host.id} hostName={host.name} />
-          </Suspense>
+          <>
+            <Link
+              to={hostResourcesPath(host.id)}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+              data-testid={`host-resources-${host.id}`}
+            >
+              {t("resourcesOpen")}
+            </Link>
+            <Suspense fallback={null}>
+              <NewProjectDialog hostId={host.id} hostName={host.name} />
+            </Suspense>
+          </>
         ) : null
       }
     />

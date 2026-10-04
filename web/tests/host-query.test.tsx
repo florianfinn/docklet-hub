@@ -186,7 +186,9 @@ test("der Host-Bildschirm zeigt erst das Laden, dann die Liste", async () => {
   hub.hold();
   const mounted = await renderInDom(
     <AppLanguageProvider>
-      <HostsScreen role="admin" />
+      <MemoryRouter>
+        <HostsScreen role="admin" />
+      </MemoryRouter>
     </AppLanguageProvider>
   );
   try {
@@ -209,7 +211,9 @@ test("der Host-Bildschirm zeigt seinen Fehler, nach genau einer Anfrage", async 
   const hub = stubHub(() => ({ status: 500, body: { error: "boom" } }));
   const mounted = await renderInDom(
     <AppLanguageProvider>
-      <HostsScreen role="admin" />
+      <MemoryRouter>
+        <HostsScreen role="admin" />
+      </MemoryRouter>
     </AppLanguageProvider>
   );
   try {
@@ -232,7 +236,9 @@ test("Host-Bildschirm und Farbtafel teilen sich eine Anfrage", async () => {
   const hub = stubHub(ok);
   const mounted = await renderInDom(
     <AppLanguageProvider>
-      <HostsScreen role="admin" />
+      <MemoryRouter>
+        <HostsScreen role="admin" />
+      </MemoryRouter>
       <HostColorPanel role="admin" />
     </AppLanguageProvider>
   );
@@ -259,7 +265,9 @@ test("ein Fensterfokus fragt den Hub nicht erneut", async () => {
   const hub = stubHub(ok);
   const mounted = await renderInDom(
     <AppLanguageProvider>
-      <HostsScreen role="admin" />
+      <MemoryRouter>
+        <HostsScreen role="admin" />
+      </MemoryRouter>
     </AppLanguageProvider>
   );
   try {

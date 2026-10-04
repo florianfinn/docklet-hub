@@ -178,7 +178,42 @@ export type {
   NdjsonReadOptions
 } from "./stream/ndjson.js";
 
+export {
+  hostResourcesResponseSchema,
+  hostResourcesViewSchema,
+  imageResourceViewSchema,
+  networkResourceViewSchema,
+  volumeResourceViewSchema
+} from "./api/resources.js";
+export type {
+  HostResourcesResponse,
+  HostResourcesView,
+  ImageResourceView,
+  NetworkResourceView,
+  VolumeResourceView
+} from "./api/resources.js";
+
 // The agent protocol (#272): one source for hub and agent.
+export {
+  hostResourcesSchema,
+  imageResourceSchema,
+  networkResourceSchema,
+  RESOURCE_READ_FAILURES,
+  resourceUserSchema,
+  storageSummarySchema,
+  storageUsageSchema,
+  volumeResourceSchema
+} from "./agent/resources.js";
+export type {
+  HostResources,
+  ImageResource,
+  NetworkResource,
+  ResourceReadFailure,
+  ResourceUser,
+  StorageSummary,
+  StorageUsage,
+  VolumeResource
+} from "./agent/resources.js";
 export { CONTRACT_VERSION, contractSince, since } from "./agent/version.js";
 export type { ContractSince } from "./agent/version.js";
 export { ACTOR_HEADER, agentTierSchema, HUB_TIER, SECRET_HEADER, TIER_HEADER } from "./agent/headers.js";

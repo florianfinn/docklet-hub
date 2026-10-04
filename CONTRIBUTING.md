@@ -55,6 +55,10 @@ independence.
 Merge only through scripts/merge-reviewed-pr.mjs with the current private
 review report and UTF-8 merge payload. It verifies the newest successful
 Actions run for exactly the reviewed integration and rechecks the PR SHAs.
+Both scripts read GitHub over REST with curl. Without a gh login, `--print`
+outputs the validated comment or merge arguments instead of writing; a session
+then posts or merges with exactly these values through its GitHub connection,
+the merge bound to `expectedHeadSha`.
 
 Open issues only for feature work, product or architecture decisions and
 findings that are not fixed in the current session. Small self-contained

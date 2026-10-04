@@ -172,6 +172,10 @@ export const ROUTES: readonly Route[] = [
   { methods: ["PUT"], pattern: "/monitors", tier: "intern-only", mutating: true, audit: "monitor-sync" },
   { methods: ["GET"], pattern: "/host-containers", tier: "intern-only", mutating: false, audit: "host-discovery" },
   { methods: ["GET"], pattern: "/host-info", tier: "intern-only", mutating: false, audit: "host-info" },
+  // Images, volumes and networks of the whole host with their users (#10).
+  // Intern-only for the same reason as `/host-containers`: it names containers
+  // outside the allowlist. Read only.
+  { methods: ["GET"], pattern: "/resources", tier: "intern-only", mutating: false, audit: "resources" },
   // The internal continuous stream. Additionally bound to the one caller that
   // runs it — a second reader would siphon off events without anyone
   // noticing, because ndjson lines are not delivered twice.

@@ -82,6 +82,10 @@ export const queryKeys = {
     /** `GET …/containers/:id/stats`, the measurements of one container with their history; polled every ten seconds (#283). */
     containerStats: (hostId: string, containerId: string) => ["metrics", hostId, containerId, "stats"] as const
   },
+  resources: {
+    /** `GET …/hosts/:id/resources`, images, volumes and networks of one host; read once per visit (#10). */
+    host: (hostId: string) => ["resources", hostId] as const
+  },
   settings: {
     /** The `containers` part of `GET /api/settings`: whether hub and agents show in the lists (#282). */
     containerView: () => ["settings", "container-view"] as const,
