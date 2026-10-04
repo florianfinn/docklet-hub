@@ -32,7 +32,7 @@ import { DEFAULT_BIND_BASE_PATH } from "../src/features/hosts/HostForm.js";
 //      als der Agent ihn erwartet.
 //   2. DAS LEERE FELD. Der Pfad ist vorbelegt, aber löschbar. Ein Dialog, der
 //      den ROHWERT anzeigte statt des gerechneten, schriebe dann
-//      `/docklet-agent` — a directory right in the root,
+//      `/docklet-agent` — also ein Verzeichnis direkt in der Wurzel,
 //      mit einem führenden Schrägstrich, der wie Absicht aussieht.
 //
 // Beide Fassungen übersetzen und bündeln sich; kein Wächter über Dateitexte
