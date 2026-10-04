@@ -25,11 +25,14 @@ export function handleHostError(error: unknown, response: Response): boolean {
     return true;
   }
   if (error instanceof EnrollmentError) {
-    // ⚠️ Drei Gründe, drei Codes. „endpoint-unreachable" ist ein 400: der
-    // Aufrufer hat etwas geschickt, das so nicht gehen kann, und die Meldung
-    // sagt ihm, welche Angabe fehlt — kein 404 (der Arm ist nicht unbekannt)
-    // und kein 409 (nichts steht im Widerspruch, es fehlt eine Adresse).
-    const status = error.reason === "host-is-local" ? 409 : error.reason === "endpoint-unreachable" ? 400 : 404;
+    // 409 for the local host and for a stored record today's rules refuse;
+    // 400 for a missing usable address, which the caller can supply; 404 else.
+    const status =
+      error.reason === "host-is-local" || error.reason === "host-record-invalid"
+        ? 409
+        : error.reason === "endpoint-unreachable"
+          ? 400
+          : 404;
     failWith(response, status, error.reason, error.message);
     return true;
   }

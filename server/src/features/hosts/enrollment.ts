@@ -1,13 +1,15 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-import { CONTRACT_VERSION } from "contract";
+import { CONTRACT_VERSION, hasControlOrLineSeparator, hostNameProblem } from "contract";
 
 import {
   ARM_AGENT_IMAGE,
   HostError,
   isAgentOutdated,
   MIN_AGENT_VERSION,
+  normalizeBindBasePath,
+  normalizeExternalEndpoint,
   probeAgent,
   speaksAgentContract,
   type HostKind,
@@ -92,7 +94,7 @@ export type EnrollmentConfig = Pick<
  * für unbekannt, 409 für den lokalen Host. An einer Meldung ließe sich das nur
  * über deren Text festmachen, und Texte werden umformuliert.
  */
-export type EnrollmentErrorReason = "host-unknown" | "host-is-local" | "endpoint-unreachable";
+export type EnrollmentErrorReason = "host-unknown" | "host-is-local" | "endpoint-unreachable" | "host-record-invalid";
 
 export class EnrollmentError extends Error {
   constructor(
@@ -344,6 +346,15 @@ export function createEnrollment({
     const external = kind === "external" ? await readExternalEndpoint() : null;
     // Wirft den ConfigError, wenn überhaupt keine Adresse dasteht.
     const endpoint = resolveWireguardEndpoint(config, override, external);
+    // The hub-wide address may come from the .env or a setting stored before
+    // today's rule; refused here, before any record or rotation. A leading `-`
+    // would read as an option in the README's `nc` check.
+    if (hasControlOrLineSeparator(endpoint) || endpoint.startsWith("-")) {
+      throw new ConfigError(
+        "Die Adresse dieses Hubs enthält ein Steuerzeichen oder beginnt mit „-“. Sie gehört in Einstellungen → Netz " +
+          "bzw. in HUB_WIREGUARD_ENDPOINT berichtigt, bevor ein Archiv entsteht."
+      );
+    }
     if (kind !== "external" || override?.trim()) return;
     if (!isUnreachableFromOutside(endpoint)) return;
     throw new EnrollmentError(
@@ -402,6 +413,7 @@ export function createEnrollment({
     // ⚠️ Auch hier VOR dem Rotieren. `repository.rotate` würfelt Schlüssel,
     // Secret und Token neu und sperrt damit den laufenden Agenten aus; ein
     // Fehler DANACH ließe einen Arm zurück, der weder alt noch neu ist.
+    requireValidRecord(existing);
     await requireUsableEndpoint(existing.kind, existing.endpointOverride);
 
     const keyPair = generateWireGuardKeyPair();
@@ -441,6 +453,23 @@ export function createEnrollment({
     await writeHubWireGuardConfig();
     if (!removed) {
       throw new EnrollmentError("host-unknown", `Den Host ${hostId} gibt es nicht.`);
+    }
+  }
+
+  // A record stored before today's input rules would fail while building the
+  // archive, after the rotation has already locked the running agent out.
+  // Checked before rotating; the message leaves the stored values out.
+  function requireValidRecord(record: HostRecord): void {
+    const valid =
+      hostNameProblem(record.name) === null &&
+      (record.bindBasePath === null || normalizeBindBasePath(record.bindBasePath) === record.bindBasePath) &&
+      (record.endpointOverride === null || normalizeExternalEndpoint(record.endpointOverride).ok);
+    if (!valid) {
+      throw new EnrollmentError(
+        "host-record-invalid",
+        `Der Arm ${record.id} trägt einen Namen, Basispfad oder Endpoint, den das Anlegen heute ablehnt. ` +
+          "Ein Archiv dafür entsteht nicht, die Zugangsdaten bleiben unverändert. Den Arm entfernen und neu anlegen."
+      );
     }
   }
 

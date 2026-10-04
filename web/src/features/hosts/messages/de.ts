@@ -79,6 +79,8 @@ export const deHosts = {
     "Als Adresse dieses Hubs merken. Dann bekommt sie jeder weitere externe Arm von selbst, und wer sie später ändert, ändert sie an einer Stelle. Abwählen, wenn sie nur für diesen einen Arm gelten soll.",
   hostCreateSubmit: "Anlegen",
   hostErrorNameTaken: "Der Name ist bereits vergeben.",
+  hostErrorNameInvalid:
+    "Der Name darf keine Steuerzeichen wie Zeilenumbruch oder Tabulator enthalten und höchstens {max} Zeichen lang sein.",
   hostErrorPoolExhausted: "Das Tunnelnetz ist voll — kein Platz für einen weiteren Arm.",
   hostErrorInvalidInput: "Die Eingabe ist unbrauchbar.",
   hostCreateFailed: "Der Host konnte nicht angelegt werden.",

@@ -1,5 +1,7 @@
 import type { Pool } from "pg";
 
+import { hasControlOrLineSeparator } from "contract";
+
 // Der Weg zur Tabelle `hub_network` — und sonst nichts. Muster und Begründungen
 // wie in `features/appearance/store.ts` (moved here from `hosts/` with #266: the hosts feature and the settings both read it); hier steht nur, was anders ist.
 
@@ -35,7 +37,8 @@ export function normalizeExternalEndpoint(value: unknown): { ok: true; value: st
   if (typeof value !== "string") return { ok: false };
   const candidate = value.trim();
   if (candidate === "") return { ok: true, value: null };
-  if (/[\s/]/.test(candidate)) return { ok: false };
+  // A leading `-` would read as an option in the README's `nc` check.
+  if (/[\s/]/.test(candidate) || candidate.startsWith("-") || hasControlOrLineSeparator(candidate)) return { ok: false };
   return { ok: true, value: candidate };
 }
 

@@ -17,6 +17,7 @@ export { createPoolRepository, type HostRepository } from "./host-repository.js"
 export {
   HostError,
   deriveHostStatus,
+  hostNameMessage,
   ensureLocalHost,
   markHostSeen,
   setHostDisplay,

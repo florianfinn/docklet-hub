@@ -113,7 +113,7 @@ export function registerHostRoutes(
     guarded(async (request, response) => {
       const parsed = service.parseNewHost(request.body);
       if (parsed.kind === "invalid-input") {
-        failWith(response, 400, "invalid-input", parsed.message);
+        failWith(response, 400, parsed.error, parsed.message);
         return;
       }
       try {

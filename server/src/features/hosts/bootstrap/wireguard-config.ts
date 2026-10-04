@@ -14,6 +14,8 @@
 // geprüft und nicht bereinigt — ein stillschweigend entschärfter Wert wäre ein
 // Datensatz, der im Hub anders aussieht als im Tunnel.
 
+import { HOST_NAME_MAX, hasControlOrLineSeparator } from "contract";
+
 /** Die Hub-Seite: der eigene Schlüssel, die eigene Adresse, der eigene Port. */
 export type WireGuardHub = {
   privateKey: string;
@@ -69,17 +71,9 @@ const KEY_PATTERN = /^[A-Za-z0-9+/]{43}=$/;
 // nicht ausgelegt (gleiche Regel wie in config.ts).
 const IPV4_PATTERN = /^(0|[1-9]\d{0,2})(\.(0|[1-9]\d{0,2})){3}$/;
 
-// Ein Name landet in einer Kommentarzeile. Alles, was eine Zeile beenden oder
-// einen Terminal-Ausgabestrom umlenken könnte, ist damit unzulässig: C0, DEL
-// und die beiden Zeilentrenner aus Unicode, die manche Leser ebenfalls als
-// Umbruch werten.
-// eslint-disable-next-line no-control-regex
-const CONTROL_PATTERN = /[\u0000-\u001f\u007f\u0085\u2028\u2029]/;
-
-// Ein Name, der länger ist als eine Terminalzeile, ist kein Name mehr. Die
-// Grenze ist großzügig; sie soll nur verhindern, dass ein einzelner Datensatz
-// die Datei unlesbar macht.
-const MAX_NAME_LENGTH = 200;
+// A name lands in a comment line. Same rule as `createHost`
+// (`contract/src/host-input.ts`), checked again because this file is the
+// tunnel of every arm.
 
 function checkKey(value: string, field: string): string {
   if (!KEY_PATTERN.test(value)) {
@@ -123,7 +117,7 @@ function checkHubAddress(value: string): string {
 }
 
 function checkName(value: string): string {
-  if (CONTROL_PATTERN.test(value)) {
+  if (hasControlOrLineSeparator(value)) {
     throw new WireGuardConfigError(
       "name enthält ein Steuerzeichen. In einer Kommentarzeile der wg0.conf wäre ein Zeilenumbruch der Anfang " +
         "einer eigenen Anweisung — ein Arm könnte sich darüber Rechte im Tunnel geben, die ihm niemand gegeben hat."
@@ -132,8 +126,8 @@ function checkName(value: string): string {
   if (value.trim().length === 0) {
     throw new WireGuardConfigError("name ist leer. Ein Peer ohne Namen ist in der Datei nicht zuzuordnen.");
   }
-  if (value.length > MAX_NAME_LENGTH) {
-    throw new WireGuardConfigError(`name ist länger als ${MAX_NAME_LENGTH} Zeichen (${value.length}).`);
+  if (value.length > HOST_NAME_MAX) {
+    throw new WireGuardConfigError(`name ist länger als ${HOST_NAME_MAX} Zeichen (${value.length}).`);
   }
   return value;
 }

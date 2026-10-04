@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
-import type { HostKind, HostState, HostStatus, HostThemePreset } from "contract";
+import { hasControlOrLineSeparator, type HostKind, type HostState, type HostStatus, type HostThemePreset } from "contract";
 
 // Der Datensatz eines Hosts — die Form, in der der Rest des Hubs ihn sieht.
 //
@@ -157,7 +157,10 @@ export function normalizeBindBasePath(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const candidate = value.trim();
   if (!candidate.startsWith("/")) return null;
-  if (/[\s:]/.test(candidate)) return null;
+  // `\s` misses NUL, DEL and C1; none of them belongs in `.env` or a command.
+  // Compose reads `$`, quotes and `\` in the unquoted `.env` value, and a
+  // backtick has no place in a path either.
+  if (/[\s:$`'"\\]/.test(candidate) || hasControlOrLineSeparator(candidate)) return null;
   // `..` als eigener Abschnitt — `/mnt/..data` ist ein gewöhnlicher Name.
   if (candidate.split("/").includes("..")) return null;
   const trimmed = candidate.replace(/\/+$/, "");

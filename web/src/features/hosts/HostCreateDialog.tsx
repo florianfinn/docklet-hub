@@ -1,6 +1,7 @@
 import { Download, Plus, TriangleAlert } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "use-intl";
+import { quoteShellArgument } from "contract";
 
 import type { DockerHost } from "../../domain/hosts";
 import { hostArchiveUrl } from "./api";
@@ -48,7 +49,10 @@ export function HostCreateDialog({ onCreated }: { onCreated: (host: DockerHost) 
   // `created`: `HostView` trägt ihn bewusst nicht (#89). Ohne ihn könnte der
   // Schritt unten nur „in ein Verzeichnis" sagen — und das ist keine Anleitung.
   const [setup, setSetup] = useState<HostSetup | null>(null);
-  const target = `${setup?.bindBasePath ?? ""}/${DIRECTORY_NAME}`;
+  // Quoted like the README in the archive: the path is the operator's input
+  // and must reach `mkdir` as one argument, not as shell code.
+  // Trailing slashes dropped like the hub stores the path (`normalizeBindBasePath`).
+  const target = quoteShellArgument(`${(setup?.bindBasePath ?? "").replace(/\/+$/, "")}/${DIRECTORY_NAME}`);
 
   return (
     <Dialog

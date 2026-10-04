@@ -1,3 +1,5 @@
+import { quoteShellArgument } from "contract";
+
 import { DEFAULT_BIND_BASE_PATH, type HostArchiveInput } from "./host-archive-input.js";
 
 // Die README im Archiv. Ihr Text ist ENGLISCH, die Kommentare hier bleiben
@@ -119,7 +121,8 @@ function unpackStep(bindBasePath: string | null): { directory: string; lines: st
 // und nicht am ersten.
 function splitEndpoint(endpoint: string): string {
   const separator = endpoint.lastIndexOf(":");
-  return separator < 0 ? endpoint : `${endpoint.slice(0, separator)} ${endpoint.slice(separator + 1)}`;
+  if (separator < 0) return quoteShellArgument(endpoint);
+  return `${quoteShellArgument(endpoint.slice(0, separator))} ${quoteShellArgument(endpoint.slice(separator + 1))}`;
 }
 
 // Schritt 2 hat zwei Fassungen, und der Unterschied ist der Punkt: kennt der
@@ -172,6 +175,8 @@ export function renderReadme(input: HostArchiveInput): string {
   const address = input.host.tunnelAddress;
   const port = input.agent.port;
   const unpack = unpackStep(input.host.bindBasePath);
+  // The path is the operator's input; quoted, sh hands it over as one argument.
+  const directory = quoteShellArgument(unpack.directory);
   const lines = [
     `# Docker agent for ${input.host.name}`,
     "",
@@ -201,9 +206,9 @@ export function renderReadme(input: HostArchiveInput): string {
     "",
     ...unpack.lines,
     "   ```bash",
-    `   sudo mkdir -p ${unpack.directory}`,
-    `   sudo tar -xzf <archive>.tar.gz -C ${unpack.directory}`,
-    `   cd ${unpack.directory}`,
+    `   sudo mkdir -p ${directory}`,
+    `   sudo tar -xzf <archive>.tar.gz -C ${directory}`,
+    `   cd ${directory}`,
     "   ```",
     "",
     ...gidStep(input.host.dockerGid),

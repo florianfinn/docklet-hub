@@ -6,7 +6,7 @@ import { agentUpdateOffer } from "./self-update.js";
 import { isAgentOutdated, speaksAgentContract } from "./version.js";
 import type { AgentHealth } from "./health.js";
 import type { TunnelNetwork } from "../../platform/config/config.js";
-import type { HostThemePreset, HostView, HueName, InkName } from "contract";
+import { HOST_NAME_MAX, hostNameProblem, type HostThemePreset, type HostView, type HueName, type InkName } from "contract";
 import { ARM_AGENT_IMAGE } from "./arm-agent-image.js";
 import {
   hashRegistrationToken,
@@ -114,7 +114,15 @@ function toRecord(row: HostRow): HostRecord {
 // muss aus dem Ergebnis einen Antwortcode machen (409 für einen vergebenen
 // Namen, 507 für ein volles Netz). An einer Meldung ließe sich das nur über
 // deren Text festmachen — und Texte werden umformuliert.
-export type HostErrorReason = "name-taken" | "address-pool-exhausted" | "invalid-input";
+export type HostErrorReason = "name-taken" | "name-invalid" | "address-pool-exhausted" | "invalid-input";
+
+// The name lands in comment lines of the generated archive files and of the
+// hub's peer list; a line break there would start a line of its own.
+export function hostNameMessage(problem: "control-character" | "too-long"): string {
+  return problem === "control-character"
+    ? "Der Name des Hosts enthält ein Steuerzeichen, etwa einen Zeilenumbruch oder Tabulator."
+    : `Der Name des Hosts ist länger als ${HOST_NAME_MAX} Zeichen.`;
+}
 
 export class HostError extends Error {
   constructor(
@@ -265,7 +273,9 @@ export async function createHost(
   input: CreateHostInput
 ): Promise<HostRecord> {
   const name = input.name.trim();
-  if (!name) throw new HostError("invalid-input", "Der Name des Hosts fehlt.");
+  const nameProblem = hostNameProblem(name);
+  if (nameProblem === "empty") throw new HostError("invalid-input", "Der Name des Hosts fehlt.");
+  if (nameProblem !== null) throw new HostError("name-invalid", hostNameMessage(nameProblem));
   if (input.registrationToken.length < MIN_REGISTRATION_TOKEN_LENGTH) {
     throw new HostError(
       "invalid-input",
@@ -301,7 +311,7 @@ export async function createHost(
     throw new HostError(
       "invalid-input",
       `„${String(input.bindBasePath)}" taugt nicht als Basispfad. Erwartet wird ein absoluter Pfad ohne ` +
-        "Leerzeichen, ohne Doppelpunkt und ohne `..` als Abschnitt. `/` selbst ist ausgeschlossen: es " +
+        "Leerzeichen, Doppelpunkt, $, `, Anführungszeichen und Backslash und ohne `..` als Abschnitt. `/` selbst ist ausgeschlossen: es " +
         "schaltet die Schranke des Agenten gegen beliebige Bind-Mounts ab."
     );
   }
