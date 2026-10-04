@@ -496,10 +496,10 @@ test("kennt der Hub das Arbeitsverzeichnis, schlägt die README es als Ablageort
   const unpacked = await unpackOnce();
   const readme = unpacked.read("README.md");
   assert.ok(
-    readme.includes("sudo mkdir -p /mnt/user/appdata/dashboard-docker-agent"),
+    readme.includes("sudo mkdir -p /mnt/user/appdata/docklet-agent"),
     "die README legt den Arm nicht unter dem genannten Arbeitsverzeichnis an"
   );
-  assert.ok(!readme.includes("/opt/dashboard-docker-agent"), "die README schlägt weiterhin /opt vor");
+  assert.ok(!readme.includes("/opt/docklet-agent"), "die README schlägt weiterhin /opt vor");
 });
 
 test("auch mit bekanntem Pfad bleibt die Gegenprobe auf Dauerhaftigkeit stehen", async () => {
@@ -521,7 +521,7 @@ test("auch mit bekanntem Pfad bleibt die Gegenprobe auf Dauerhaftigkeit stehen",
     host: { ...input.host, bindBasePath: "/opt/docker" }
   });
   const readme = unpacked.read("README.md");
-  assert.ok(readme.includes("sudo mkdir -p /opt/docker/dashboard-docker-agent"), "der Pfad wird übernommen");
+  assert.ok(readme.includes("sudo mkdir -p /opt/docker/docklet-agent"), "der Pfad wird übernommen");
   assert.ok(readme.includes("findmnt -no FSTYPE,SOURCE /"), "die Gegenprobe fehlt beim bekannten Pfad");
   assert.ok(
     readme.indexOf("findmnt -no FSTYPE,SOURCE /") < readme.indexOf("tar -xzf"),
@@ -533,7 +533,7 @@ test("kennt der Hub ihn nicht, bleibt /opt der Vorschlag", async () => {
   const input = makeInput();
   const unpacked = await unpack({ ...input, host: { ...input.host, bindBasePath: null } });
   const readme = unpacked.read("README.md");
-  assert.ok(readme.includes("sudo mkdir -p /opt/dashboard-docker-agent"), "der Rückfall auf /opt fehlt");
+  assert.ok(readme.includes("sudo mkdir -p /opt/docklet-agent"), "der Rückfall auf /opt fehlt");
   assert.ok(readme.includes("findmnt -no FSTYPE,SOURCE /"), "die Gegenprobe fehlt");
 });
 

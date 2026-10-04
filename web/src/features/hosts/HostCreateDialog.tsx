@@ -37,12 +37,12 @@ import { HostForm, type HostSetup } from "./HostForm";
 // Der Name des Verzeichnisses, das der Arm auf dem Zielhost bekommt.
 //
 // ⚠️ ZWEITE FASSUNG — die erste ist `DIRECTORY_NAME` in
-// `server/src/bootstrap/host-archive-readme.ts`. Dieser Dialog sagt „lege es
+// `server/src/features/hosts/bootstrap/host-archive-readme.ts`. Dieser Dialog sagt „lege es
 // hier an", die README im Paket sagt „hier liegt es"; nennen beide
 // verschiedene Orte, sucht der Betreiber im zweiten Schritt an einer Stelle,
 // an der nichts ist. Web und Server teilen keinen Code, die Abschrift ist
 // unvermeidlich — `web/tests/host-form-defaults.test.mjs` hält sie zusammen.
-export const DIRECTORY_NAME = "dashboard-docker-agent";
+export const DIRECTORY_NAME = "docklet-agent";
 
 export function HostCreateDialog({ onCreated }: { onCreated: (host: DockerHost) => void }) {
   const t = useTranslations();
@@ -71,7 +71,17 @@ export function HostCreateDialog({ onCreated }: { onCreated: (host: DockerHost) 
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-[440px]">
+      {/* `minmax(0,1fr)` keeps the grid column from growing to a long command's
+          min-content width; CommandLine scrolls inside its own row instead.
+          The archive step shows full paths and gets more room, capped well
+          below the viewport. */}
+      <DialogContent
+        className={
+          created === null
+            ? "grid-cols-[minmax(0,1fr)] sm:max-w-[440px]"
+            : "grid-cols-[minmax(0,1fr)] sm:max-w-[min(48rem,calc(100%-4rem))]"
+        }
+      >
         <DialogHeader>
           <DialogTitle>{t("hostCreateTitle")}</DialogTitle>
           {/* Die Beschreibung ist keine Zierde: `DialogContent` verbindet sie

@@ -32,7 +32,7 @@ import { DEFAULT_BIND_BASE_PATH } from "../src/features/hosts/HostForm.js";
 //      als der Agent ihn erwartet.
 //   2. DAS LEERE FELD. Der Pfad ist vorbelegt, aber löschbar. Ein Dialog, der
 //      den ROHWERT anzeigte statt des gerechneten, schriebe dann
-//      `/dashboard-docker-agent` — also ein Verzeichnis direkt in der Wurzel,
+//      `/docklet-agent` — also ein Verzeichnis direkt in der Wurzel,
 //      mit einem führenden Schrägstrich, der wie Absicht aussieht.
 //
 // Beide Fassungen übersetzen und bündeln sich; kein Wächter über Dateitexte
@@ -178,7 +178,7 @@ test("ein geleertes Pfadfeld zeigt die Vorgabe und nicht die Wurzel", async () =
     await createArm("");
 
     // Der Server bekommt die Vorgabe — dieselbe muss der Dialog nennen. Ein
-    // Dialog auf dem Rohwert schriebe hier `/dashboard-docker-agent`, also ein
+    // Dialog auf dem Rohwert schriebe hier `/docklet-agent`, also ein
     // Verzeichnis in der Wurzel, und das sähe nach Absicht aus.
     const sent = server.bodies.at(0) as { bindBasePath?: string } | undefined;
     assert.equal(sent?.bindBasePath, DEFAULT_BIND_BASE_PATH, "leer heißt: die Vorgabe geht hinaus");
