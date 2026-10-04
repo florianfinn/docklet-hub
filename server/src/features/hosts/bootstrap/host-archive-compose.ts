@@ -47,7 +47,7 @@ export const COMPOSE_PROJECT_PREFIX = "docklet-hub-agent";
 export function composeProjectName(hostName: string): string {
   const slug = hostName
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/^[-_]+|[-_]+$/g, "")
