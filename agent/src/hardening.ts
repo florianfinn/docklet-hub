@@ -8,7 +8,8 @@
 // afterwards, not least because Dockge can keep editing alongside until it is
 // switched off.
 //
-// Pure, no imports — fully testable without a running Docker daemon.
+// Pure, imports only the shared rule vocabulary — fully testable without a
+// running Docker daemon.
 //
 // Stage 4 adds the three rules from 3.8 that were missing until then
 // (no-new-privileges, cap_drop: ALL, resource limits) — and deliberately NOT
@@ -19,6 +20,14 @@
 // findings should no longer stop the operator at the internal access path but
 // inform them. The only thing that stays hard is HANDING ON — see
 // HardeningSeverity.
+
+import {
+  DELEGATION_LOCK_RULES,
+  type HardeningRule,
+  type HardeningSeverity
+} from "contract";
+
+export { DELEGATION_LOCK_RULES, type HardeningRule, type HardeningSeverity };
 
 export type InspectedContainer = {
   id: string;
@@ -72,7 +81,7 @@ export type InspectedContainer = {
 // container properties with the same meaning. `volume-unresolved` does not
 // widen this risk class; it is its fail-closed backstop as long as one of
 // these properties cannot be checked because volume metadata is missing.
-export type HardeningSeverity = "delegation-lock" | "warning" | "notice";
+// The levels and their rules live in contract/src/agent/hardening.ts.
 
 // Options of the check. Deliberately passed in instead of imported from
 // config.ts, so this module stays pure and testable without an environment.
@@ -111,38 +120,6 @@ export type HardeningOptions = {
   selfPaths?: readonly string[];
 };
 
-export type HardeningRule =
-  | "docker-socket-mount"
-  | "dashboard-self-mount"
-  | "volume-unresolved"
-  | "bind-outside-base"
-  | "bind-outside-universe"
-  | "privileged"
-  | "dangerous-capability"
-  | "host-namespace"
-  | "sensitive-host-path"
-  | "device-passthrough"
-  | "apparmor-or-seccomp-disabled"
-  | "no-new-privileges-missing"
-  | "capabilities-not-dropped"
-  | "resource-limit-missing"
-  | "logging-unbounded";
-
-// The four semantic core rules of the delegation lock (§4.2) plus the
-// fail-closed meta rule for a volume mount that cannot be checked. They stand
-// here as their own named set and not only scattered across the push() sites:
-// the
-// main API mirrors them (server/src/docker-hardening.ts) and the question "does
-// this container carry a lock?" is asked in several places. A list that has to
-// be maintained in two places is one that drifts apart.
-export const DELEGATION_LOCK_RULES: readonly HardeningRule[] = [
-  "docker-socket-mount",
-  "privileged",
-  "host-namespace",
-  "dashboard-self-mount",
-  "volume-unresolved"
-];
-
 export function isDelegationLockRule(rule: string): boolean {
   return (DELEGATION_LOCK_RULES as readonly string[]).includes(rule);
 }
@@ -160,6 +137,15 @@ export type HardeningViolation = {
   // recreate).
   hostPath?: string;
 };
+
+// "rule — subject", the comparison key of the compose paths. For bind-derived
+// rules the normalised host path, so a changed spelling (target, `:ro`) of the
+// same mount is not a new finding.
+export const SUBJECT_SEPARATOR = " — ";
+
+export function violationValue(violation: HardeningViolation): string {
+  return `${violation.rule}${SUBJECT_SEPARATOR}${violation.hostPath ?? violation.detail}`;
+}
 
 export type HardeningReport = {
   // The only list that still STOPS anything — and even that only for handing

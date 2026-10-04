@@ -16,7 +16,7 @@ export function questionText(t: ReturnType<typeof useTranslations>, question: Co
     case "external-sources":
       return t("composeQuestionExternalSources", { list: question.sources.join(", ") });
     case "hardening":
-      return t("composeQuestionHardening", { list: question.newViolations.join(", ") });
+      return t("composeQuestionHardening", { count: new Set(question.newViolations).size });
     case "changed-elsewhere":
       return t("composeQuestionChangedElsewhere");
     case "start-failed":

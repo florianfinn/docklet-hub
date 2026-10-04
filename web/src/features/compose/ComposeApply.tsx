@@ -14,6 +14,8 @@ import { Card } from "../../platform/ui/shadcn/card";
 import { composeErrorKey } from "./compose-errors";
 import { composeStepKey } from "./compose-steps";
 import { ConfirmList } from "./ConfirmList";
+import { HardeningFindings } from "./HardeningFindings";
+import { unconfirmedCount } from "./hardening-findings";
 import { questionText } from "./compose-question-text";
 import {
   NO_CONFIRMATIONS,
@@ -363,11 +365,7 @@ function PreviewCard({
         <div className="flex flex-col gap-1">
           <p className="text-[13px] font-medium">{t("composeExistingViolations")}</p>
           <p className="text-[12px] text-muted-foreground">{t("composeExistingViolationsNote")}</p>
-          <ul className="font-mono text-[12.5px] text-muted-foreground">
-            {preview.inventoryViolations.map((entry) => (
-              <li key={entry}>{entry}</li>
-            ))}
-          </ul>
+          <HardeningFindings findings={preview.inventoryViolations} testId="compose-existing-violations" />
         </div>
       ) : null}
       <p className="text-[12px] text-muted-foreground">{t("composeHardeningLater")}</p>
@@ -442,13 +440,27 @@ function QuestionCard({
   onClose: () => void;
 }) {
   const t = useTranslations();
+  const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
   const rolledBack =
     "rolledBack" in question ? question.rolledBack : null;
+  // A risky change is accepted finding by finding, never with one click (#8).
+  const missing = question.kind === "hardening" ? unconfirmedCount(question.newViolations, checked) : 0;
 
   return (
     <Card className="flex flex-col gap-3 p-4" data-testid="compose-question">
       <p className="text-[13px] font-medium">{t("composeQuestionTitle")}</p>
       <p className="text-[13px]">{questionText(t, question)}</p>
+      {question.kind === "hardening" ? (
+        <>
+          <HardeningFindings
+            findings={question.newViolations}
+            checked={checked}
+            onToggle={(key) => setChecked(toggled(checked, key))}
+            testId="compose-new-violations"
+          />
+          <p className="text-[12px] text-muted-foreground">{t("hardeningConfirmNote")}</p>
+        </>
+      ) : null}
 
       {/* ⚠️ `rolledBack: false` IST DIE WICHTIGSTE ZEILE DIESER KARTE. Bei den
           Fragen, die NACH dem Schreiben entstehen, steht der Host dann in einem
@@ -466,13 +478,18 @@ function QuestionCard({
 
       <div className="flex gap-3">
         {answerable ? (
-          <Button size="sm" data-testid="compose-answer" onClick={onAnswer}>
+          <Button size="sm" data-testid="compose-answer" disabled={missing > 0} onClick={onAnswer}>
             {t("composeAnswerAndRetry")}
           </Button>
         ) : null}
         <Button size="sm" variant="ghost" onClick={onClose}>
           {t("cancel")}
         </Button>
+        {missing > 0 ? (
+          <span className="text-[12px] text-muted-foreground" data-testid="compose-hardening-missing">
+            {t("hardeningConfirmMissing", { count: missing })}
+          </span>
+        ) : null}
       </div>
     </Card>
   );

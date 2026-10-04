@@ -163,7 +163,8 @@ export const deCompose = {
   composeQuestionTitle: "Der Arm fragt zurück",
   composeQuestionServices: "Neue Services: {added}. Entfallende: {removed}.",
   composeQuestionImages: "Diese Images liegen auf dem Host nicht vor und werden geholt: {list}",
-  composeQuestionHardening: "Dieser Entwurf führt neue Härtungsbefunde ein: {list}",
+  composeQuestionHardening:
+    "{count, plural, one {Dieser Entwurf führt einen neuen Härtungsbefund ein} other {Dieser Entwurf führt # neue Härtungsbefunde ein}}. Der Agent übernimmt ihn erst, wenn jeder Befund einzeln bestätigt ist.",
   composeQuestionChangedElsewhere:
     "Die Datei hat sich geändert, seit sie geladen wurde. Der Entwurf steht noch im Editor — neu laden zeigt den fremden Stand.",
   composeQuestionStartFailed: "Der Stack ist nicht hochgekommen: {detail}",
@@ -252,5 +253,59 @@ export const deCompose = {
     "{count, plural, one {# externe Quelle ist} other {# externe Quellen sind}} noch nicht bestätigt.",
   projectErrorDirectoryTaken: "Ein Ordner mit diesem Namen ist schon belegt.",
   projectErrorNameInvalid: "Dieser Name taugt nicht als Projekt- und Ordnername.",
-  projectErrorLocked: "Dieser Ordner ist gegen Selbstverwaltung gesperrt."
+  projectErrorLocked: "Dieser Ordner ist gegen Selbstverwaltung gesperrt.",
+  // ── Härtungsbefunde mit Erklärung (#8) ─────────────────────────────────────
+  hardeningSeverityDelegationLock: "Steuert den Host",
+  hardeningSeverityWarning: "Warnung",
+  hardeningSeverityNotice: "Hinweis",
+  hardeningSeverityUnknown: "Unbekannt",
+  hardeningService: "Service {service}",
+  hardeningConfirmFinding: "Befund an Service {service} bestätigen",
+  hardeningDelegationLockNote:
+    "Ein Container mit einem Befund der Art „Steuert den Host“ lässt sich praktisch wie der Host selbst bedienen. Der Agent erlaubt verändernde Aktionen daran nur über den internen Zugang und protokolliert sie gesondert; extern bleiben sie gesperrt.",
+  hardeningRuleDockerSocket: "Docker-Socket eingehängt",
+  hardeningRuleDockerSocketText:
+    "Über den Docker-Socket kann der Container weitere Container starten, auch privilegierte mit dem Dateisystem des Hosts. Das entspricht Root-Zugriff auf den Host.",
+  hardeningRuleSelfMount: "Verwaltungsverzeichnis eingehängt",
+  hardeningRuleSelfMountText:
+    "Der Mount erreicht ein Verzeichnis, das den Betrieb des Agenten oder Hubs trägt, etwa Geheimnisse und Schlüssel. Ein übergeordnetes Verzeichnis wie / zählt genauso. Der Container könnte damit die Verwaltung selbst umschreiben.",
+  hardeningRuleVolumeUnresolved: "Volume nicht prüfbar",
+  hardeningRuleVolumeUnresolvedText:
+    "Docker lieferte zu diesem benannten Volume keine Angaben. Ob es auf einen Pfad des Hosts zeigt, ist nicht belegt; der Agent behandelt es deshalb wie einen kritischen Mount.",
+  hardeningRulePrivileged: "Privilegierter Modus",
+  hardeningRulePrivilegedText:
+    "privileged: true gibt dem Container alle Capabilities und alle Geräte des Hosts und schaltet AppArmor und Seccomp ab. Ein Ausbruch auf den Host braucht dann keine weitere Lücke.",
+  hardeningRuleHostNamespace: "Namensraum des Hosts geteilt",
+  hardeningRuleHostNamespaceText:
+    "Mit pid, ipc oder network im Modus host teilt der Container diesen Namensraum mit dem Host. Er sieht dessen Prozesse, gemeinsamen Speicher oder Netzwerkschnittstellen und kann auf sie einwirken.",
+  hardeningRuleSensitivePath: "Systemverzeichnis eingehängt",
+  hardeningRuleSensitivePathText:
+    "Der Mount öffnet ein Betriebs- oder Systemverzeichnis des Hosts wie /etc, /root, /proc, /run oder /var/lib/docker. Auch schreibgeschützt gibt er Einblick in Konfiguration und Zugangsdaten.",
+  hardeningRuleOutsideBase: "Mount außerhalb der Projektordner",
+  hardeningRuleOutsideBaseText:
+    "Die Quelle liegt nicht unterhalb eines Projektordners im Basispfad des Agenten. Der Container erreicht damit Daten, die kein Projekt verwaltet.",
+  hardeningRuleOutsideUniverse: "Mount in einem fremden Projektordner",
+  hardeningRuleOutsideUniverseText:
+    "Dieser Container ist geschützt; für ihn sind nur Quellen unterhalb seines eigenen Projektordners vorgesehen.",
+  hardeningRuleCapability: "Gefährliche Capability",
+  hardeningRuleCapabilityText:
+    "Eine zusätzliche Linux-Capability wie SYS_ADMIN, NET_ADMIN oder SYS_PTRACE erweitert, was der Container am Kernel des Hosts tun darf.",
+  hardeningRuleDevice: "Gerät durchgereicht",
+  hardeningRuleDeviceText: "Der Container greift direkt auf ein Gerät des Hosts zu, etwa eine Grafikeinheit.",
+  hardeningRuleUnconfined: "AppArmor oder Seccomp abgeschaltet",
+  hardeningRuleUnconfinedText: "Ein Schutzprofil, das die Systemaufrufe des Containers begrenzt, ist ausgeschaltet.",
+  hardeningRuleNoNewPrivileges: "no-new-privileges fehlt",
+  hardeningRuleNoNewPrivilegesText: "Prozesse im Container können über setuid-Programme zusätzliche Rechte erlangen.",
+  hardeningRuleCapDrop: "Capabilities nicht abgelegt",
+  hardeningRuleCapDropText: "Ohne cap_drop: ALL behält der Container den vollständigen Standardsatz von Docker.",
+  hardeningRuleLimits: "Ressourcengrenze fehlt",
+  hardeningRuleLimitsText: "Ohne Grenze für Speicher, CPU oder Prozesse kann der Container den Host auslasten.",
+  hardeningRuleLogging: "Log ohne Größengrenze",
+  hardeningRuleLoggingText: "json-file ohne max-size lässt das Log unbegrenzt wachsen, bis der Datenträger voll ist.",
+  hardeningRuleUnknownText:
+    "Diese Regel kennt der Hub nicht. Der Befund steht so da, wie der Agent ihn meldet.",
+  hardeningConfirmNote:
+    "Bestätigt wird genau diese Liste. Bringt der nächste Versuch einen weiteren Befund, fragt der Agent erneut; seine Schutzregeln bleiben dabei unverändert.",
+  hardeningConfirmMissing:
+    "{count, plural, one {# Befund ist} other {# Befunde sind}} noch nicht einzeln bestätigt."
 };

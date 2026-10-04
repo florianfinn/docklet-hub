@@ -124,7 +124,8 @@ export const enCompose = {
   composeQuestionTitle: "The arm asks back",
   composeQuestionServices: "New services: {added}. Going away: {removed}.",
   composeQuestionImages: "These images are not on the host and will be pulled: {list}",
-  composeQuestionHardening: "This draft introduces new hardening findings: {list}",
+  composeQuestionHardening:
+    "{count, plural, one {This draft introduces a new hardening finding} other {This draft introduces # new hardening findings}}. The agent only takes it once every finding is confirmed one by one.",
   composeQuestionChangedElsewhere:
     "The file has changed since it was loaded. The draft is still in the editor — reloading shows the other state.",
   composeQuestionStartFailed: "The stack did not come up: {detail}",
@@ -207,5 +208,58 @@ export const enCompose = {
     "{count, plural, one {# external source is} other {# external sources are}} not confirmed yet.",
   projectErrorDirectoryTaken: "A folder with this name is already taken.",
   projectErrorNameInvalid: "This name cannot be used as a project and folder name.",
-  projectErrorLocked: "This folder is locked against self-management."
+  projectErrorLocked: "This folder is locked against self-management.",
+  // ── Hardening findings with explanation (#8) ──────────────────────────────
+  hardeningSeverityDelegationLock: "Controls the host",
+  hardeningSeverityWarning: "Warning",
+  hardeningSeverityNotice: "Notice",
+  hardeningSeverityUnknown: "Unknown",
+  hardeningService: "service {service}",
+  hardeningConfirmFinding: "Confirm finding on service {service}",
+  hardeningDelegationLockNote:
+    "A container with a “controls the host” finding can in practice be used like the host itself. The agent allows mutating actions on it only through internal access and logs them separately; externally they stay locked.",
+  hardeningRuleDockerSocket: "Docker socket mounted",
+  hardeningRuleDockerSocketText:
+    "Through the Docker socket the container can start further containers, including privileged ones with the host file system. That amounts to root access to the host.",
+  hardeningRuleSelfMount: "Management directory mounted",
+  hardeningRuleSelfMountText:
+    "The mount reaches a directory that carries the operation of the agent or hub, such as secrets and keys. A parent directory like / counts just the same. The container could rewrite the management itself.",
+  hardeningRuleVolumeUnresolved: "Volume cannot be checked",
+  hardeningRuleVolumeUnresolvedText:
+    "Docker returned no details for this named volume. Whether it points at a host path is not established, so the agent treats it like a critical mount.",
+  hardeningRulePrivileged: "Privileged mode",
+  hardeningRulePrivilegedText:
+    "privileged: true gives the container every capability and every host device and switches off AppArmor and seccomp. Escaping to the host then needs no further flaw.",
+  hardeningRuleHostNamespace: "Host namespace shared",
+  hardeningRuleHostNamespaceText:
+    "With pid, ipc or network in host mode the container shares that namespace with the host. It sees its processes, shared memory or network interfaces and can act on them.",
+  hardeningRuleSensitivePath: "System directory mounted",
+  hardeningRuleSensitivePathText:
+    "The mount opens an operational or system directory of the host such as /etc, /root, /proc, /run or /var/lib/docker. Even read-only it exposes configuration and credentials.",
+  hardeningRuleOutsideBase: "Mount outside the project directories",
+  hardeningRuleOutsideBaseText:
+    "The source does not lie below a project directory in the agent''s base path. The container reaches data that no project manages.",
+  hardeningRuleOutsideUniverse: "Mount in another project''s directory",
+  hardeningRuleOutsideUniverseText:
+    "This container is protected; only sources below its own project directory are intended for it.",
+  hardeningRuleCapability: "Dangerous capability",
+  hardeningRuleCapabilityText:
+    "An added Linux capability such as SYS_ADMIN, NET_ADMIN or SYS_PTRACE widens what the container may do to the host kernel.",
+  hardeningRuleDevice: "Device passed through",
+  hardeningRuleDeviceText: "The container accesses a host device directly, such as a graphics unit.",
+  hardeningRuleUnconfined: "AppArmor or seccomp disabled",
+  hardeningRuleUnconfinedText: "A protection profile that limits the container''s system calls is switched off.",
+  hardeningRuleNoNewPrivileges: "no-new-privileges missing",
+  hardeningRuleNoNewPrivilegesText: "Processes in the container can gain additional rights through setuid programs.",
+  hardeningRuleCapDrop: "Capabilities not dropped",
+  hardeningRuleCapDropText: "Without cap_drop: ALL the container keeps Docker''s full default set.",
+  hardeningRuleLimits: "Resource limit missing",
+  hardeningRuleLimitsText: "Without a limit for memory, CPU or processes the container can exhaust the host.",
+  hardeningRuleLogging: "Log without size limit",
+  hardeningRuleLoggingText: "json-file without max-size lets the log grow without bound until the disk is full.",
+  hardeningRuleUnknownText: "The hub does not know this rule. The finding is shown as the agent reports it.",
+  hardeningConfirmNote:
+    "Exactly this list is confirmed. If the next attempt brings a further finding, the agent asks again; its protection rules stay unchanged.",
+  hardeningConfirmMissing:
+    "{count, plural, one {# finding is} other {# findings are}} not yet confirmed one by one."
 } satisfies typeof deCompose;
