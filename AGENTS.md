@@ -123,6 +123,11 @@ in docs/design/ und sind dort im Index verlinkt.
   PR-SHAs unmittelbar vor dem Merge erneut. Währenddessen erfolgen keine
   parallelen Änderungen am Zielbranch. Direkte UI-/API-Merges sind untersagt.
   GitHub erzwingt den Helfer nicht; seine Merge-API bindet atomar nur den Head.
+- Ohne angemeldetes gh lesen beide Skripte über die REST-API und geben mit
+  --print den geprüften Beleg bzw. die Merge-Argumente aus. Die Sitzung
+  veröffentlicht den Beleg unverändert über ihre GitHub-Anbindung und mergt
+  unmittelbar danach mit genau diesen Argumenten samt expectedHeadSha. Das ist
+  der Helfer-Weg und kein direkter Merge; jeder andere Weg bleibt untersagt.
 - Für main gilt ein aktives Ruleset mit PR-Pflicht, erforderlichen checks
   und agent-review sowie strikter Aktualität zur Basis. Auf Feature-Branches
   gelten dieselben Schritte als Arbeitsregel; GitHub erzwingt sie dort nicht.
