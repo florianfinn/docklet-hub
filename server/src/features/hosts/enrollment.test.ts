@@ -686,11 +686,15 @@ test("a hub-wide address with a control character is refused before the rotation
       lastSeenAt: null
     }
   ]);
-  // NEL (U+0085): not covered by `\s`, which the setting checked before.
-  const readExternalEndpoint = async () => `hub${String.fromCharCode(0x85)}.example.test`;
-  await assert.rejects(
-    () => createEnrollment({ repository, config: makeConfig(), readExternalEndpoint }).regenerateArchive("remote-host-1"),
-    (error: unknown) => error instanceof ConfigError && error.message.includes("Steuerzeichen")
-  );
+  // NEL (U+0085) is not covered by `\s`, which the setting checked before; a
+  // leading `-` can still come from HUB_WIREGUARD_ENDPOINT.
+  for (const stored of [`hub${String.fromCharCode(0x85)}.example.test`, "-hub.example.test"]) {
+    const readExternalEndpoint = async () => stored;
+    await assert.rejects(
+      () => createEnrollment({ repository, config: makeConfig(), readExternalEndpoint }).regenerateArchive("remote-host-1"),
+      (error: unknown) => error instanceof ConfigError && error.message.includes("Steuerzeichen"),
+      JSON.stringify(stored)
+    );
+  }
   assert.equal(calls.includes("rotate"), false, "rotated before refusing");
 });

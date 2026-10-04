@@ -346,12 +346,13 @@ export function createEnrollment({
     const external = kind === "external" ? await readExternalEndpoint() : null;
     // Wirft den ConfigError, wenn überhaupt keine Adresse dasteht.
     const endpoint = resolveWireguardEndpoint(config, override, external);
-    // The hub-wide address may come from a setting stored before today's rule;
-    // refused here, before any record or rotation.
-    if (hasControlOrLineSeparator(endpoint)) {
+    // The hub-wide address may come from the .env or a setting stored before
+    // today's rule; refused here, before any record or rotation. A leading `-`
+    // would read as an option in the README's `nc` check.
+    if (hasControlOrLineSeparator(endpoint) || endpoint.startsWith("-")) {
       throw new ConfigError(
-        "Die Adresse dieses Hubs enthält ein Steuerzeichen. Sie gehört in Einstellungen → Netz bzw. in " +
-          "HUB_WIREGUARD_ENDPOINT berichtigt, bevor ein Archiv entsteht."
+        "Die Adresse dieses Hubs enthält ein Steuerzeichen oder beginnt mit „-“. Sie gehört in Einstellungen → Netz " +
+          "bzw. in HUB_WIREGUARD_ENDPOINT berichtigt, bevor ein Archiv entsteht."
       );
     }
     if (kind !== "external" || override?.trim()) return;
