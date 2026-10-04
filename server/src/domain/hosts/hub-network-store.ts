@@ -37,7 +37,8 @@ export function normalizeExternalEndpoint(value: unknown): { ok: true; value: st
   if (typeof value !== "string") return { ok: false };
   const candidate = value.trim();
   if (candidate === "") return { ok: true, value: null };
-  if (/[\s/]/.test(candidate) || hasControlOrLineSeparator(candidate)) return { ok: false };
+  // A leading `-` would read as an option in the README's `nc` check.
+  if (/[\s/]/.test(candidate) || candidate.startsWith("-") || hasControlOrLineSeparator(candidate)) return { ok: false };
   return { ok: true, value: candidate };
 }
 

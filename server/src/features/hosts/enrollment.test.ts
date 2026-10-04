@@ -665,3 +665,32 @@ test("a stored record the input rules now refuse gets no archive and keeps its c
     assert.equal(calls.includes("rotate"), false, `rotated before refusing: ${JSON.stringify(overrides)}`);
   }
 });
+
+test("a hub-wide address with a control character is refused before the rotation", async () => {
+  const { repository, calls } = spyRepository([
+    {
+      id: "remote-host-1",
+      name: "remote-host",
+      agentUrl: "http://10.254.0.3:8099",
+      kind: "external",
+      state: "registered",
+      tunnelAddress: "10.254.0.3",
+      wireguardPublicKey: "alter-schlüssel",
+      endpointOverride: null,
+      failedAttempts: 0,
+      dockerGid: 0,
+      bindBasePath: "/home/docker",
+      display: DEFAULT_HOST_THEME,
+      createdAt: new Date(),
+      registeredAt: new Date(),
+      lastSeenAt: null
+    }
+  ]);
+  // NEL (U+0085): not covered by `\s`, which the setting checked before.
+  const readExternalEndpoint = async () => `hub${String.fromCharCode(0x85)}.example.test`;
+  await assert.rejects(
+    () => createEnrollment({ repository, config: makeConfig(), readExternalEndpoint }).regenerateArchive("remote-host-1"),
+    (error: unknown) => error instanceof ConfigError && error.message.includes("Steuerzeichen")
+  );
+  assert.equal(calls.includes("rotate"), false, "rotated before refusing");
+});

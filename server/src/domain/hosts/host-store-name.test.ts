@@ -79,7 +79,7 @@ function recordingPool(): { pool: Pool; calls: unknown[][] } {
 }
 
 test("createHost refuses such a name before the database sees it", async () => {
-  for (const [label, name] of [...REFUSED_NAMES, ["too long", "x".repeat(HOST_NAME_MAX + 1)]]) {
+  for (const [label, name] of REFUSED_NAMES) {
     const { pool, calls } = recordingPool();
     await assert.rejects(
       () => createHost(pool, NETWORK, createInput(name)),

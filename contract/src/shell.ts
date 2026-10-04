@@ -1,7 +1,7 @@
-// Characters that need no quoting in POSIX sh. A leading `-`, `=` or `~` is
-// quoted anyway: `~` and (in zsh) `=` expand in that place, and a quoted `-`
-// at least shows that a value was meant.
-const PLAIN_WORD = /^[A-Za-z0-9_@%+:,./][A-Za-z0-9_@%+=:,./~-]*$/;
+// Characters that need no quoting in POSIX sh. `=` and `~` are always quoted:
+// bash expands `~` after `=` even in an argument. A leading `-` is quoted so
+// the value at least looks like one.
+const PLAIN_WORD = /^[A-Za-z0-9_@%+:,./][A-Za-z0-9_@%+:,./-]*$/;
 
 /**
  * One argument for a POSIX sh command line that the operator copies.
@@ -11,7 +11,7 @@ const PLAIN_WORD = /^[A-Za-z0-9_@%+:,./][A-Za-z0-9_@%+=:,./~-]*$/;
  * command receives the value unchanged as one argument.
  *
  * ⚠️ Quoting does not stop a command from reading `-x` as an option. Callers
- * pass absolute paths only.
+ * pass values that cannot start with `-` (absolute paths, endpoint hosts).
  */
 export function quoteShellArgument(value: string): string {
   if (PLAIN_WORD.test(value)) return value;

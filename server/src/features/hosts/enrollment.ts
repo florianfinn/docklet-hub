@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-import { CONTRACT_VERSION, hostNameProblem } from "contract";
+import { CONTRACT_VERSION, hasControlOrLineSeparator, hostNameProblem } from "contract";
 
 import {
   ARM_AGENT_IMAGE,
@@ -346,6 +346,14 @@ export function createEnrollment({
     const external = kind === "external" ? await readExternalEndpoint() : null;
     // Wirft den ConfigError, wenn überhaupt keine Adresse dasteht.
     const endpoint = resolveWireguardEndpoint(config, override, external);
+    // The hub-wide address may come from a setting stored before today's rule;
+    // refused here, before any record or rotation.
+    if (hasControlOrLineSeparator(endpoint)) {
+      throw new ConfigError(
+        "Die Adresse dieses Hubs enthält ein Steuerzeichen. Sie gehört in Einstellungen → Netz bzw. in " +
+          "HUB_WIREGUARD_ENDPOINT berichtigt, bevor ein Archiv entsteht."
+      );
+    }
     if (kind !== "external" || override?.trim()) return;
     if (!isUnreachableFromOutside(endpoint)) return;
     throw new EnrollmentError(
@@ -404,8 +412,8 @@ export function createEnrollment({
     // ⚠️ Auch hier VOR dem Rotieren. `repository.rotate` würfelt Schlüssel,
     // Secret und Token neu und sperrt damit den laufenden Agenten aus; ein
     // Fehler DANACH ließe einen Arm zurück, der weder alt noch neu ist.
-    await requireUsableEndpoint(existing.kind, existing.endpointOverride);
     requireValidRecord(existing);
+    await requireUsableEndpoint(existing.kind, existing.endpointOverride);
 
     const keyPair = generateWireGuardKeyPair();
     const agentSecret = randomSecret();

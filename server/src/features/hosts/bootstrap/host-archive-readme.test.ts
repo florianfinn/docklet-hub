@@ -25,6 +25,8 @@ const QUOTED: [string, string][] = [
   ["/mnt/a\nb", "'/mnt/a\nb'"],
   ["-rf", "'-rf'"],
   ["~/x", "'~/x'"],
+  ["a=~", "'a=~'"],
+  ["/mnt/a=b", "'/mnt/a=b'"],
   ["", "''"]
 ];
 

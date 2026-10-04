@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { Response } from "express";
 
 import { HOST_NAME_MAX, hostNameProblem } from "contract";
-import { HostError, normalizeBindBasePath } from "../../domain/hosts/index.js";
+import { HostError, normalizeBindBasePath, normalizeExternalEndpoint } from "../../domain/hosts/index.js";
 import { buildHostArchive, type HostArchiveInput } from "./bootstrap/host-archive.js";
 import { generateWireGuardKeyPair } from "./bootstrap/wireguard-keys.js";
 import { EnrollmentError } from "./enrollment.js";
@@ -130,4 +130,11 @@ test("a refused stored record leaves as 409 host-record-invalid", () => {
   assert.equal(handleHostError(new EnrollmentError("host-record-invalid", "x"), response), true);
   assert.equal(sent.status, 409);
   assert.equal((sent.body as { error?: string }).error, "host-record-invalid");
+});
+
+test("the hub's external address refuses control characters and a leading dash", () => {
+  for (const value of [`hub${char(0x00)}.example.test`, `hub${char(0x85)}.example.test`, "-x:51821"]) {
+    assert.equal(normalizeExternalEndpoint(value).ok, false, JSON.stringify(value));
+  }
+  assert.deepEqual(normalizeExternalEndpoint(" hub.example.test:51821 "), { ok: true, value: "hub.example.test:51821" });
 });
