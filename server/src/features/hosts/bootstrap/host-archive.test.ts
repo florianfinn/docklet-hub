@@ -7,7 +7,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 
+import { groupIntoStacks, type ContainerOverviewEntry } from "../../../domain/containers/index.js";
 import { ARCHIVE_FILE_NAMES, buildHostArchive, type HostArchiveInput } from "./host-archive.js";
+import { COMPOSE_PROJECT, LEGACY_COMPOSE_PROJECT } from "./host-archive-compose.js";
 import { renderEnvFile } from "./host-archive-env.js";
 import { DEFAULT_BIND_BASE_PATH } from "./host-archive-input.js";
 import { renderTunnelConfig } from "./host-archive-wireguard.js";
@@ -451,6 +453,34 @@ test("die README nennt die Handgriffe auf dem Zielhost", async () => {
   // Der Nachweis der Anmeldung und der Weg zurück.
   assert.ok(readme.includes("registered"));
   assert.ok(readme.includes("given-up"));
+});
+
+test("das Archiv heißt docklet-hub-agent-remote und stoppt vor dem Start den alten Stack", async () => {
+  const unpacked = await unpackOnce();
+  assert.match(unpacked.read("docker-compose.yml"), /^name: docklet-hub-agent-remote$/m);
+  const readme = unpacked.read("README.md");
+  const down = readme.indexOf("sudo docker compose -p dashboard-docker-agent-remote down");
+  assert.ok(down >= 0, "der Stopp des alten Stacks fehlt");
+  assert.ok(down < readme.indexOf("sudo docker compose up -d"), "erst der Stopp, dann der Start");
+  // The hub must recognise both stacks as its own even with a foreign image
+  // reference, or it offers them for editing like any other stack.
+  const member = (project: string): ContainerOverviewEntry => ({
+    id: `id-${project}`,
+    name: "wireguard",
+    image: "example/wireguard:1",
+    status: "Up 2 hours",
+    running: true,
+    startedAt: null,
+    health: null,
+    compose: { project, service: "wireguard" },
+    stats: null,
+    externalManagement: null
+  });
+  const { stacks } = groupIntoStacks([member(COMPOSE_PROJECT), member(LEGACY_COMPOSE_PROJECT)]);
+  assert.deepEqual(
+    stacks.map((stack) => [stack.project, stack.system]),
+    [[COMPOSE_PROJECT, true], [LEGACY_COMPOSE_PROJECT, true]].sort()
+  );
 });
 
 test("die README beschreibt den Umstieg eines älteren Arms auf diesen Agenten (R38)", async () => {

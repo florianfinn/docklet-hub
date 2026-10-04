@@ -48,6 +48,8 @@ test("Hub und Agent sind am Image erkennbar, ein ähnlicher Name nicht", () => {
 test("die Projekte des Leitstands sind erkennbar, ein fremdes nicht", () => {
   assert.equal(isSystemProject("docklet-hub"), true);
   assert.equal(isSystemProject("dashboard-docker-agent-remote"), true);
+  assert.equal(isSystemProject("docklet-hub-agent-unraid"), true);
+  assert.equal(isSystemProject("docklet-hub-agent-remote"), true);
   assert.equal(isSystemProject("nextcloud"), false);
 });
 

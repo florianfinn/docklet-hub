@@ -27,7 +27,16 @@
 // arms that still run it; since #279 the agent image is `docklet-hub-agent`.
 const SYSTEM_IMAGE_REPOSITORIES = new Set(["docklet-hub", "docklet-hub-agent", "dashboard-docker-agent"]);
 
-const SYSTEM_PROJECTS = new Set(["docklet-hub", "dashboard-docker-agent", "dashboard-docker-agent-remote"]);
+// Projects of the generated arm archive (`host-archive-compose.ts`) and the
+// templates in agent/deploy/; the `dashboard-docker-agent*` names stay for arms
+// installed before the rename.
+const SYSTEM_PROJECTS = new Set([
+  "docklet-hub",
+  "docklet-hub-agent-remote",
+  "docklet-hub-agent-unraid",
+  "dashboard-docker-agent",
+  "dashboard-docker-agent-remote"
+]);
 
 /**
  * Der Name des Repositorys aus einer Image-Referenz, ohne Registry, Tag und
