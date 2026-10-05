@@ -16,6 +16,7 @@ test("comments without marker, reviewer, full SHA or known result are refused", 
   assert.equal(parseReview(comment("pass").replace("Reviewer: subagent\n", "")), null);
   assert.equal(parseReview(comment("pass", "abc1234")), null);
   assert.equal(parseReview(comment("approved")), null);
+  assert.equal(parseReview(`Independent review\nReviewer: subagent\nResult: pass\n\nHead: ${HEAD}`), null);
 });
 
 test("only a passing review of the current head succeeds", () => {

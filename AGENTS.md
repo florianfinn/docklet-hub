@@ -112,8 +112,8 @@ in docs/design/ und sind dort im Index verlinkt.
   Diff zum Zielbranch erhält. Umfang und Tiefe richten sich nach der Änderung;
   er darf Tests ausführen und prüft auch die Veröffentlichbarkeit.
 - Das Ergebnis steht als PR-Kommentar unter dem Konto des Maintainers. Die
-  erste Zeile lautet Independent review, danach folgen Reviewer, Head (volle
-  SHA), Result (pass oder fail) und die Befunde. Der Workflow review-status
+  erste Zeile lautet Independent review, direkt darunter folgen Reviewer, Head
+  (volle SHA) und Result (pass oder fail), nach einer Leerzeile die Befunde. Der Workflow review-status
   setzt daraus den Status review am genannten Head; ein Kommentar zu einem
   älteren Head markiert den aktuellen als fehlgeschlagen.
 - Die Sitzung behebt blockierende Befunde sofort selbst. Nach jeder Änderung
@@ -195,7 +195,7 @@ in docs/design/ und sind dort im Index verlinkt.
 - Kein Subagent verändert laufende Systeme. Ein Deploy braucht die ausdrückliche
   Betreiberbestätigung für genau diesen Deploy und erfolgt von origin/main.
 - Vor Schemaänderungen Datenbank sichern; danach Migrationen, /health und
-  ausgeliefertes Web-Bundle prüfen. Risiken stehen im PR unter Vor dem Deploy.
+  ausgeliefertes Web-Bundle prüfen. Risiken stehen im PR unter Before deploy.
 - Hub-Agent-Protokollbrüche und neue Pflichtwerte werden ausdrücklich benannt.
 - Änderungstexte beginnen mit der konkreten Änderung und tragen messbare
   Aussagen mit Zahl und Messweg. Prüfergebnisse und Grenzen werden ehrlich
