@@ -10,6 +10,7 @@ test("title and body must work as the squash commit on main", () => {
   assert.deepEqual(textProblems("fix: f\u00C3\u00BCr"), ["text contains double-encoded characters"]);
   assert.deepEqual(textProblems("fix: x", "Body f\u00C3\u00BCr"), ["text contains double-encoded characters"]);
   assert.deepEqual(textProblems("fix: x", "Die Pr\u0075efung"), ["text contains German words without umlauts"]);
+  assert.deepEqual(textProblems("fix: x", "Assisted-by: Claude Code\n\nhttps://claude.ai/code/session_0123"), ["text contains a session link"]);
 });
 
 test("merge subjects pass only with two parents", () => {

@@ -25,4 +25,5 @@ test("only a passing review of the current head succeeds", () => {
   assert.equal(statusFor({ head: HEAD, result: "fail" }, pr).state, "failure");
   assert.equal(statusFor({ head: "b".repeat(40), result: "pass" }, pr).state, "failure");
   assert.equal(statusFor({ head: HEAD, result: "pass" }, { ...pr, state: "closed" }), null);
+  assert.equal(statusFor(null, pr).state, "failure");
 });

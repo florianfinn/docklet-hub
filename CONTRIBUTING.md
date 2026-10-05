@@ -16,8 +16,9 @@ copying their values into public issues.
 Do not add AI authorship or maintainer claims, or AI co-author trailers,
 to source, documentation, commits, issues or pull requests. Commits and pull
 requests may note AI assistance as plain text without an email address, such
-as `Assisted-by: Claude Code`. Commit authors and committers are people with
-their noreply address.
+as `Assisted-by: Claude Code`, without session links. Commit authors and
+committers are people with their noreply address; for merges through GitHub,
+GitHub is the committer.
 Preserve actual third-party license and provenance notices.
 
 ```sh
@@ -45,24 +46,25 @@ Develop a feature on its own feature branch; branch names are not prescribed.
 Task branches open pull requests against that branch. Integrate the complete feature with one final PR to main.
 Before merging, the working session starts an independent agent review: a
 reviewer with its own context that did not implement the change, sized to the
-change and allowed to run tests. Its result is posted as a PR comment from the
-maintainer's account, starting with the line "Independent review", directly followed by
+change and allowed to run tests. The session fixes blocking findings right
+away; after every change a new independent reviewer with fresh context checks
+the new state. Only the final head's review is posted, as a PR comment from
+the maintainer's account: the line "Independent review", directly followed by
 Reviewer, Head (full SHA) and Result (pass or fail), then a blank line and the
-findings. The
-review-status workflow turns it into the required review status on that head;
-see [review workflow](docs/design/review-workflow.md). The session fixes
-blocking findings right away; after every change a new independent reviewer
-with fresh context checks the new state. Only the final head's review is
-posted, listing the fixed findings. Every new push needs a new review. Main
-requires the checks, pr-text and review checks; squash-merge through GitHub
-once they pass. The PR title becomes the commit subject and the PR body the
-commit message, so titles are Conventional Commits, reverts included
-(`revert: …`); pr-text enforces this and checks title and body for
-transliterated umlauts and double-encoded characters. Required checks are matched by name
-only: a PR that changes .github/workflows/ or scripts run by workflows can
-report them itself, so the maintainer reads such diffs before merging, and
-fork workflows need approval for all external contributors. After
-changing a PR's base branch, push again so checks reruns against it.
+fixed findings. The review-status workflow turns it into the required review
+status on the current head; see [review workflow](docs/design/review-workflow.md).
+Every new push needs a new review, and so does retargeting a PR to another
+base branch; after retargeting, also push again so checks reruns.
+
+Main requires the checks, pr-text and review checks; squash-merge through
+GitHub once they pass. The PR title becomes the commit subject and the PR body
+the commit message, so titles are Conventional Commits, reverts included
+(`revert: …`). pr-text enforces this and checks title and body for
+transliterated umlauts, double-encoded characters and session links. Required
+checks are matched by name only: a PR that changes .github/workflows/ or
+scripts run by workflows can report them itself, so the maintainer reads such
+diffs before merging, and fork workflows need approval for all external
+contributors.
 
 Open issues only for feature work, product or architecture decisions and
 findings that are not fixed in the current session. Small self-contained

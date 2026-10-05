@@ -12,6 +12,7 @@ export function textProblems(title,body="",words=loadWords()) {
   const text=title+"\n\n"+body;
   if(findMojibake(text).length)problems.push("text contains double-encoded characters");
   if(findTransliterations(text,words).length)problems.push("text contains German words without umlauts");
+  if(/claude\.ai\/code\/session_/i.test(text))problems.push("text contains a session link");
   return problems;
 }
 

@@ -41,9 +41,10 @@ in docs/design/ und sind dort im Index verlinkt.
   Co-Authored-By-Trailer für solche Werkzeuge in Code, Dokumentation,
   Commit-Texten, Issues oder PRs. Commits und PRs dürfen KI-Mitarbeit als
   Texthinweis ohne E-Mail-Adresse nennen, etwa Assisted-by: Claude Code;
-  .claude/settings.json legt ihn fest. Sitzungslinks entfallen. Autor und
-  Committer sind Menschen mit Noreply-Absender; die Identität setzt die
-  jeweilige Umgebung, nicht das Repo. Echte Lizenz- und Herkunftsnachweise
+  .claude/settings.json legt ihn fest. Sitzungslinks entfallen; pr-text weist
+  sie im PR-Text zurück. Autor und Committer sind Menschen mit
+  Noreply-Absender, bei Merges über GitHub ist GitHub der Committer; die
+  Identität setzt die jeweilige Umgebung, nicht das Repo. Echte Lizenz- und Herkunftsnachweise
   übernommener Komponenten bleiben erhalten.
 
 ## Öffentliche Daten
@@ -117,7 +118,7 @@ in docs/design/ und sind dort im Index verlinkt.
   (volle SHA) und Result (pass oder fail), nach einer Leerzeile die Befunde.
   Der Workflow review-status setzt den Status review am aktuellen PR-Head:
   success nur, wenn der Kommentar genau diesen Head mit pass nennt, sonst
-  failure.
+  failure, auch für einen unlesbaren Beleg.
 - Pflicht-Checks erkennt GitHub nur am Namen. Ein PR, der Dateien unter
   .github/workflows/ oder von Workflows ausgeführte Skripte ändert, kann sie
   selbst grün melden; solche Diffs prüft der Maintainer vor dem Merge selbst.
@@ -129,8 +130,8 @@ in docs/design/ und sind dort im Index verlinkt.
   Beleg für den finalen Head mit den behobenen Befunden. Optionale Befunde
   werden entschieden und im Beleg kurz begründet. Ist ein Befund im PR nicht
   behebbar, wird der Beleg mit fail gepostet oder ein Issue angelegt.
-- Jeder neue Push braucht einen neuen Review; eine geänderte Basis ohne
-  Konflikt nicht.
+- Jeder neue Push und jeder Wechsel des Zielbranches braucht einen neuen
+  Review; neue Commits auf demselben Zielbranch ohne Konflikt nicht.
 - Für main gilt ein aktives Ruleset mit PR-Pflicht und den erforderlichen
   Prüfungen checks, pr-text und review, ohne strikte Aktualität zur Basis.
   Gemergt wird per Squash über GitHub, sobald alle Prüfungen grün sind. Ein Fehler

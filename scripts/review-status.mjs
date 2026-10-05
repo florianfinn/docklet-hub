@@ -22,6 +22,7 @@ export function parseReview(body) {
 
 export function statusFor(review,pr) {
   if(pr.state!=="open")return null;
+  if(!review)return {state:"failure",description:"Review comment is malformed"};
   if(review.head!==pr.head.sha)return {state:"failure",description:"Review names "+review.head.slice(0,7)+", head is "+pr.head.sha.slice(0,7)};
   return review.result==="pass"
     ? {state:"success",description:"Independent review passed"}
@@ -30,11 +31,9 @@ export function statusFor(review,pr) {
 
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) {
   const event=JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,"utf8"));
+  // A malformed review marks the current head as failed, so it never leaves an older pass in place.
   const review=parseReview(event.comment.body);
-  if(!review) {
-    console.error("The comment is no valid review: first line \""+MARKER+"\", then Reviewer, Head (full SHA) and Result (pass or fail).");
-    process.exit(1);
-  }
+  if(!review)console.error("The comment is no valid review: first line \""+MARKER+"\", then Reviewer, Head (full SHA) and Result (pass or fail).");
   const repo=process.env.GITHUB_REPOSITORY;
   const gh=args=>execFileSync("gh",args,{encoding:"utf8"});
   const pr=JSON.parse(gh(["api","repos/"+repo+"/pulls/"+event.issue.number]));
