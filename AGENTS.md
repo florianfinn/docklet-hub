@@ -143,6 +143,9 @@ in docs/design/ und sind dort im Index verlinkt.
   und PR folgen erst auf ausdrückliche Anweisung.
 - Commits sind Conventional Commits mit englischem Betreff. Sobald ein Issue
   existiert, steht (#<number>) am Ende. Öffentliche Noreply-Absender verwenden.
+- PR-Titel sind Conventional Commits, weil ein Squash-Merge sie zum Betreff auf
+  main macht; die Prüfung pr-text erzwingt das. Wird die Basis eines PRs
+  geändert, läuft checks erst mit dem nächsten Push erneut.
 - Abschluss-PRs nennen erledigte Issues mit Closes #<number>, einschließlich
   auf dem Feature-Branch bereits abgeschlossener Aufgaben.
 - Hub und Agent tragen dieselbe Version. Mindest-Agent-Version und

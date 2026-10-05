@@ -26,7 +26,7 @@ git config core.hooksPath .githooks
 git add <reviewed-files>
 pnpm run lint
 pnpm run test
-pnpm run build
+pnpm run build   # optional; CI builds
 ```
 
 Git hooks inspect the staged content and commit metadata before publication.
@@ -55,7 +55,9 @@ blocking findings right away; after every change a new independent reviewer
 with fresh context checks the new state. Only the final head's review is
 posted, listing the fixed findings. Every new push needs a new review. Main
 requires the checks, pr-text and review checks; merge through GitHub once they
-pass.
+pass. Pull request titles are Conventional Commits, because a squash
+merge makes them the commit subject on main; pr-text enforces this. After
+changing a PR's base branch, push again so checks reruns against it.
 
 Open issues only for feature work, product or architecture decisions and
 findings that are not fixed in the current session. Small self-contained
