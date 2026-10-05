@@ -36,10 +36,8 @@ export type InspectedContainer = {
   pidsLimit: number | null;
   // true if NanoCpus or CpuQuota is set.
   cpuLimited: boolean;
-  // Log driver and its options (S9/K4b, §21.6). Docker's default for
-  // `json-file` is NO rotation — without max-size a container log grows
-  // without bound. The engine resolves the daemon default into this field at
-  // creation, so it describes the actual state and not the compose file.
+  // Log driver and options as the engine resolved them at creation, so this is
+  // the actual state, including the daemon default.
   logDriver: string;
   logOptions: Record<string, string>;
 };
@@ -54,37 +52,16 @@ export type InspectedContainer = {
 // Options of the check. Deliberately passed in instead of imported from
 // config.ts, so this module stays pure and testable without an environment.
 export type HardeningOptions = {
-  // Allowlist for bind mounts (stage plan 3.8). If the value is missing, the
-  // rule does NOT run — without configuration the check should not suddenly
-  // reject everything it allowed before.
+  // Allowlist root for bind mounts; without it the rule does not run.
   bindBasePath?: string;
-  // The own universe of a "protected" container (stage 5e, section 6.2): its
-  // project directory, e.g. /home/docker/homepage. If it is set, ALL bind
-  // sources must lie below exactly this path — a mount into a neighbour's
-  // directory is then rejected structurally instead of merely being
-  // undesirable.
-  //
-  // The rule is deliberately a REAL TIGHTENING of bindBasePath, not a
-  // replacement: it only applies after bind-outside-base has passed, and its
-  // allowed range is always a subset of the global one (the own directory is
-  // one of many under the base path). A protected container can therefore
-  // never mount anything a normal one would not be allowed to.
-  //
-  // If the value is missing, the container is "normal" — then only the global
-  // base path applies, and per 6.2 a neighbour mount is explicitly a trust
-  // decision of the operator, not a failure of the dashboard.
+  // The project directory of a "protected" container. Its binds must then lie
+  // below exactly this directory; this only tightens bindBasePath. Without it
+  // a neighbour's directory is the operator's trust decision.
   secureUniverse?: string;
-  // The host directories that carry the operation of the management on THIS
-  // host (S23). If a bind reaches one of them — from below or from above —
-  // the container effectively is the management and carries a delegation
-  // lock.
-  //
-  // ⚠️ Must come from the caller, because only the caller knows the host:
-  // locally these are dashboard-state/dashboard-repo, on a remote host the
-  // agent's bootstrap directory (its secret and the WireGuard key live
-  // there). If the value is missing, the local fallback DASHBOARD_SELF_PATHS
-  // applies — never an empty list, because "nothing to protect" is always the
-  // wrong assumption here.
+  // The host directories that carry the management on this host (the agent's
+  // own state). Only the caller knows them; a mount reaching one from below or
+  // above is a delegation lock. Missing or empty falls back to
+  // DASHBOARD_SELF_PATHS, never to "nothing to protect".
   selfPaths?: readonly string[];
 };
 
@@ -96,13 +73,8 @@ export type HardeningViolation = {
   rule: HardeningRule;
   severity: HardeningSeverity;
   detail: string;
-  // Only set for the bind-derived rules: the NORMALISED host path of the
-  // mount, without target and mode (:ro/:rw). That is where the danger lies —
-  // and the stable key for the raw editor's before/after comparison
-  // (compose-raw.ts). The full `detail` remains for display; comparing it
-  // would mean counting the same docker.sock as "new" as soon as only its
-  // spelling changes (target path, :ro, a different Compose/Docker version on
-  // recreate).
+  // Bind-derived rules only: the normalised host path without target and
+  // mode, the stable key of the before/after comparison (compose-raw.ts).
   hostPath?: string;
 };
 
@@ -116,8 +88,7 @@ export function violationValue(violation: HardeningViolation): string {
 }
 
 export type HardeningReport = {
-  // The only list that still STOPS anything — and even that only for handing
-  // on (external/grant), not for the operator internally.
+  // The only list that stops anything, and only outside the internal tier.
   delegationLock: HardeningViolation[];
   warning: HardeningViolation[];
   hint: HardeningViolation[];
@@ -135,18 +106,10 @@ const FORBIDDEN_CAPABILITIES = new Set([
   "ALL"
 ]);
 
-// Host paths whose mounting (even read-only) opens an operational or system
-// directory. Level "warning" (S9): visible and asking for confirmation, but no
-// delegation ban.
-//
-// The two dashboard directories are NO LONGER here but in
-// isDashboardSelfMount() — they are the fourth core rule of the delegation
-// lock, and that one is checked BEFORE this list.
-//
-// This is a denylist and therefore incomplete in principle. The reliable form
-// is the allowlist from stage plan 3.8 (bind mounts only below a configured
-// base path); it has been running alongside since stage 5. Until then this
-// list catches the cases that actually mean host compromise.
+// Host system directories whose mount, even read-only, is a warning. A
+// denylist is incomplete by nature; the bind allowlist (bindBasePath) is the
+// reliable rule and runs alongside. The agent's own directories are checked
+// earlier by isDashboardSelfMount.
 const SENSITIVE_HOST_PREFIXES = [
   "/etc",
   "/root",
@@ -159,23 +122,10 @@ const SENSITIVE_HOST_PREFIXES = [
   "/var/lib/docker"
 ];
 
-// The directories that carry the operation of the dashboard itself:
-// `dashboard-state` holds the secrets (among others AUTH_PROXY_*),
-// `dashboard-repo` the deployed code. Whoever has one of them in a container
-// can rewrite the management through which all other rights run — the same
-// statement as docker.sock, just by a different route.
-//
-// ⚠️ ONLY A FALLBACK NOW (S23). These constants describe the LOCAL host. On a
-// remote host they do not exist — there the rule therefore
-// meant "never matches", and `dashboard-self-mount`, one of the five
-// delegation locks, was effectively switched off: a container that mounts the
-// agent's directory there would have been shareable via grant and externally
-// controllable, although it can take over the agent.
-//
-// Since S23 the caller therefore passes in `selfPaths` (config.ts assembles
-// them from its own base path AND the actual mounts of the agent container).
-// The fallback remains, so that a forgetful caller behaves as before S23 —
-// i.e. keeps protecting the local host — instead of checking nothing at all.
+// Fallback for HardeningOptions.selfPaths: the state (secrets) and code
+// directories of the local management. A container holding one can rewrite
+// the management, like docker.sock by another route. Callers pass the real
+// paths of their host; this keeps a forgetful caller protective.
 const DASHBOARD_SELF_PATHS = ["/home/docker/dashboard-state", "/home/docker/dashboard-repo"];
 
 // Normalises a path without file system access: resolves "." and ".." and
@@ -201,16 +151,9 @@ function hostPathOf(bind: string): string {
   return source;
 }
 
-// Does a (normalised) bind path reach a given target — in BOTH directions?
-//
-// ⚠️ The second direction is the reason this function exists: a mount that
-// lies ABOVE the target contains it. `/var` is not one bit more harmless than
-// `/var/run/docker.sock`; it is the same plus everything else. A plain prefix
-// check ("lies below") is blind to ancestors — the same lesson S9 drew for
-// dashboard-self-mount and R3 later added for the socket rule.
-//
-// "/" is named separately: normalizePath("/") is "/", and a startsWith("//")
-// would never match.
+// Does a normalised bind path reach the target from below OR above? A mount
+// on an ancestor (`/var`, `/`) contains the target. "/" is handled on its own
+// because `startsWith("//")` never matches.
 function reachesTarget(normalized: string, target: string): boolean {
   if (normalized === "/") return true;
   if (normalized === target) return true;
@@ -218,9 +161,7 @@ function reachesTarget(normalized: string, target: string): boolean {
   return target.startsWith(normalized + "/");
 }
 
-// The two places where the Docker socket lives in the existing setup.
-// `/var/run` is a symlink to `/run` on most hosts; both spellings occur in
-// compose files.
+// `/var/run` is a symlink to `/run` on most hosts; both spellings occur.
 const DOCKER_SOCKET_PATHS = ["/var/run/docker.sock", "/run/docker.sock"];
 
 function isDockerSocket(hostPath: string): boolean {
@@ -240,42 +181,19 @@ function isSensitiveHostPath(hostPath: string): boolean {
   );
 }
 
-// Fourth core rule of the delegation lock: does this mount reach the
-// dashboard's own operational directories?
-//
-// ⚠️ Both directions count, and the second is the actual reason for this
-// function:
-//
-//   1. The path IS one of the directories or lies below it
-//      (/home/docker/dashboard-state/secrets).
-//   2. The path lies ABOVE and therefore contains them — "/", "/home",
-//      "/home/docker". A mount on "/" is not one bit more harmless than a
-//      mount directly on dashboard-state; it is the same plus everything else.
-//      Without this branch "/" would only have been a warning and the
-//      container therefore delegable — exactly the gap a prefix list tends to
-//      have.
-//
-// The comparison uses the NORMALISED path (PR #176): ".." and "//" are
-// resolved, `:ro` and the mount target do not matter. The danger lies in the
-// source, not in the spelling.
+// Does this mount reach the management's own directories, from below or from
+// above ("/" contains them)? Compared on the normalised source path; target
+// and `:ro` do not matter.
 function isDashboardSelfMount(hostPath: string, selfPaths?: readonly string[]): boolean {
   if (!hostPath.startsWith("/")) return false;
   const normalized = normalizePath(hostPath);
-  // An empty list counts as "not given": otherwise it would be a silent
-  // off switch for the rule.
+  // An empty list counts as not given, never as an off switch.
   const targets = selfPaths && selfPaths.length > 0 ? selfPaths : DASHBOARD_SELF_PATHS;
-  // The same both-directions question as for the socket, hence the same
-  // function (R3): two copies of this logic would be two chances to forget one
-  // of them — that was exactly the finding.
   return targets.some((target) => reachesTarget(normalized, target));
 }
 
-// json-file without max-size grows without bound (§21.6). Other drivers either
-// rotate on their own (`local`: 20m x 5) or hand the log off entirely (syslog,
-// journald, fluentd, none) — neither is a finding.
-//
-// An empty driver name is treated like json-file: that is Docker's default,
-// and the safe direction here is "rather report once too often".
+// json-file without max-size grows without bound; other drivers rotate or
+// hand the log off. An empty driver name is Docker's default, json-file.
 function isLoggingUnlimited(driver: string, options: Record<string, string>): boolean {
   const logDriver = (driver || "json-file").toLowerCase();
   if (logDriver !== "json-file") return false;
@@ -288,30 +206,12 @@ function normalizeCapability(capability: string): string {
   return capability.replace(/^CAP_/i, "").toUpperCase();
 }
 
-// Allowlist (stage plan 3.8): the host path must lie STRICTLY below a
-// PROJECT DIRECTORY — i.e. at least two levels below the base path.
-//
-// Two exclusions, both from the same idea:
-//
-//   /home/docker            — the base path itself. Such a mount exists on the
-//                             live server, and it is exactly the case this
-//                             rule is meant to catch.
-//   /home/docker/<name>     — a project directory. Since stage 5c it holds
-//                             the compose.yaml, i.e. the DEFINITION of the
-//                             container.
-//
-// ⚠️ The second exclusion is the lesson from the security review of 5c
-// (2026-07-21). Without it a container could mount its own project directory
-// writable, rewrite its compose.yaml from inside (privileged, "/" as a volume)
-// and start as a privileged container on the next recreate — host root,
-// bypassing a model that explicitly has no field for privileged. The
-// definition must lie outside the reach of what it defines.
-//
-// Data directories stay mountable (/home/docker/<name>/data), including a
-// neighbour's — per 6.2 that is explicitly a trust decision of the operator.
-// Survey across all 37 containers on 2026-07-21: NONE of the 48 bind sources
-// under /home/docker is a project directory, so the tightening costs not a
-// single existing mount.
+// Allowlist: the source must lie strictly below a project directory, i.e. at
+// least two levels below the base path. The base path itself and a project
+// directory are excluded: the project directory holds the compose.yaml, and a
+// container able to rewrite its own definition could make itself privileged
+// on the next recreate. Data directories, a neighbour's included, stay
+// mountable.
 function isInsideBasePath(hostPath: string, basePath: string): boolean {
   const normalized = normalizePath(hostPath);
   const base = normalizePath(basePath);
@@ -320,12 +220,8 @@ function isInsideBasePath(hostPath: string, basePath: string): boolean {
   return normalized.slice(base.length + 1).includes("/");
 }
 
-// The own universe of a protected container (stage 5e): the path must lie
-// STRICTLY below the container directory — /home/docker/homepage itself is
-// excluded (the compose.yaml lives there). One level is enough:
-// /home/docker/homepage/data. The second level is already enforced by
-// isInsideBasePath against the global base path, which runs here in addition;
-// this check only adds the binding to the container's OWN name.
+// A protected container's source must lie strictly below its own project
+// directory, which holds the compose.yaml; isInsideBasePath runs as well.
 function isInsideUniverse(hostPath: string, universe: string): boolean {
   const normalized = normalizePath(hostPath);
   const base = normalizePath(universe);
@@ -338,10 +234,7 @@ export function findHardeningViolations(
 ): HardeningViolation[] {
   const violations: HardeningViolation[] = [];
 
-  // A named volume that cannot be resolved must be interpreted neither as
-  // "no device" nor as a harmless Docker data volume. Its actual host source
-  // is unknown; externally the container therefore stays invisible and not
-  // delegable until Docker delivers the inspect again.
+  // An unresolved named volume has an unknown host source: fail closed.
   for (const name of new Set(container.unresolvedVolumes ?? [])) {
     violations.push({
       rule: "volume-unresolved",
@@ -352,19 +245,10 @@ export function findHardeningViolations(
 
   for (const bind of container.binds) {
     const hostPath = hostPathOf(bind);
-    // The normalised host path is the stable comparison key (see
-    // HardeningViolation.hostPath). normalizePath resolves "." and "..", so
-    // that "/var/run/../run/docker.sock" does not pass as a different path.
     const normalizedHostPath = normalizePath(hostPath);
     if (isDashboardSelfMount(hostPath, options.selfPaths)) {
-      // Checked BEFORE the sensitive list: /home/docker/dashboard-state lies
-      // below the base path and "/" would otherwise only show up as a warning.
-      //
-      // ⚠️ And BEFORE the socket rule, since that one also covers ancestors
-      // (R3): a mount on "/" reaches both targets. Which of the two rules then
-      // applies is not a security question — both are a delegation lock — but
-      // one of explanation. For "/", "your own operational directories are
-      // mounted in" is the sentence that tells the operator what is at stake.
+      // Before the socket and sensitive rules: "/" reaches all of them, and
+      // this one explains best what is at stake.
       violations.push({
         rule: "dashboard-self-mount",
         severity: HARDENING_RULE_SEVERITY["dashboard-self-mount"],
@@ -372,8 +256,6 @@ export function findHardeningViolations(
         hostPath: normalizedHostPath
       });
     } else if (isDockerSocket(hostPath)) {
-      // A container with the socket is host root. It is therefore never
-      // delegable — it stays operable for the operator internally (§4.2).
       violations.push({
         rule: "docker-socket-mount",
         severity: HARDENING_RULE_SEVERITY["docker-socket-mount"],
@@ -381,8 +263,7 @@ export function findHardeningViolations(
         hostPath: normalizedHostPath
       });
     } else if (isSensitiveHostPath(hostPath)) {
-      // The denylist beats the allowlist: /etc lies outside the base path,
-      // /var/lib/docker partly inside it — both remain a finding.
+      // The denylist wins over the allowlist, inside the base path too.
       violations.push({ rule: "sensitive-host-path", severity: HARDENING_RULE_SEVERITY["sensitive-host-path"], detail: bind, hostPath: normalizedHostPath });
     } else if (
       options.bindBasePath &&
@@ -398,10 +279,8 @@ export function findHardeningViolations(
         hostPath: normalizedHostPath
       });
     } else if (
-      // Protected container (stage 5e): the bind lies within the global base
-      // path (bind-outside-base has passed above), but not in its OWN
-      // universe — i.e. in a neighbour's directory. For the "protected" class
-      // that is exactly the escape it is meant to prevent structurally.
+      // Protected container: inside the base path, but in a neighbour's
+      // directory.
       options.secureUniverse &&
       hostPath.startsWith("/") &&
       !isInsideUniverse(hostPath, options.secureUniverse)
@@ -421,10 +300,8 @@ export function findHardeningViolations(
     violations.push({ rule: "privileged", severity: HARDENING_RULE_SEVERITY["privileged"], detail: "privileged=true" });
   }
 
-  // ⚠️ Level lowered in S9 (§4.2): tailscale carries NET_ADMIN, SYS_PTRACE and
-  // SYS_ADMIN are present in the existing setup on services that are supposed
-  // to run. A capability is a hint — unlike privileged, which grants the whole
-  // set at once.
+  // A single capability is a notice; services such as VPN clients need
+  // NET_ADMIN. privileged grants the whole set and is a delegation lock.
   for (const capability of container.capAdd) {
     if (FORBIDDEN_CAPABILITIES.has(normalizeCapability(capability))) {
       violations.push({ rule: "dangerous-capability", severity: HARDENING_RULE_SEVERITY["dangerous-capability"], detail: capability });
@@ -452,9 +329,7 @@ export function findHardeningViolations(
   }
 
   if (container.devices.length > 0) {
-    // /dev/dri (hardware transcoding) is the reason for the lowering: a
-    // passed-through device is a risk, but not one that should keep the
-    // operator from their own container.
+    // A notice: hardware transcoding needs /dev/dri.
     violations.push({
       rule: "device-passthrough",
       severity: HARDENING_RULE_SEVERITY["device-passthrough"],
@@ -462,9 +337,7 @@ export function findHardeningViolations(
     });
   }
 
-  // --- From here on: operational hygiene (stage 4, level "notice" since S9) --
-  // These three were already in 3.8 but missing from the implementation. They
-  // report, they do not block — reasoning at HardeningSeverity.
+  // Operational hygiene from here on: notices that block nothing.
 
   if (!hasNoNewPrivileges(container.securityOpt)) {
     violations.push({
@@ -474,10 +347,8 @@ export function findHardeningViolations(
     });
   }
 
-  // cap_drop: ALL is the basis on which a cap_add is a deliberate exception at
-  // all. Without it the container keeps the complete Docker default set, and
-  // the FORBIDDEN_CAPABILITIES list above then checks a set that is not the
-  // actual one.
+  // Without cap_drop: ALL the container keeps Docker's default set, and
+  // cap_add is no longer a deliberate exception.
   if (!container.capDrop.some((capability) => normalizeCapability(capability) === "ALL")) {
     violations.push({
       rule: "capabilities-not-dropped",
@@ -498,9 +369,7 @@ export function findHardeningViolations(
     });
   }
 
-  // K4b (§21.6): the same nature as resource-limit-missing — an availability
-  // risk, not an escape risk. A chatty game server fills up the disk, and
-  // otherwise that only shows up as "server full".
+  // An availability risk like missing limits: the log can fill the disk.
   if (isLoggingUnlimited(container.logDriver, container.logOptions)) {
     violations.push({
       rule: "logging-unbounded",
@@ -524,9 +393,8 @@ export function hardeningReport(
   };
 }
 
-// Does this container carry a delegation lock? The only question that still
-// decides between executing and rejecting in the agent — and even that only for
-// the EXTERNAL path (§4.2). Internally it no longer stops anything.
+// Whether the container carries a delegation lock; the gate refuses mutating
+// actions on it outside the internal tier.
 export function hasDelegationLock(
   container: InspectedContainer,
   options: HardeningOptions = {}
@@ -536,32 +404,11 @@ export function hasDelegationLock(
   );
 }
 
-// The rules of the SELF-CHECK (spec.ts, compose-apply.ts, raw-apply.ts).
-//
-// ⚠️ This is deliberately NOT the same question as the operational rule above,
-// and the distinction is the core of S9:
-//
-//   Operation — "may I touch this existing container?" There only the
-//               delegation lock still stops anything, and only externally
-//               (§4.2).
-//   Self      — "may THIS come into being like this, or be newly added?" The
-//               relaxation from §4 applies to the EXISTING SETUP ("what is in
-//               the compose as it is, no blocker") — not to creating a
-//               container through a form that has no field for any of these
-//               properties, and not to an edit that newly introduces them.
-//
-// Included are therefore all rules about the IDENTITY of the container
-// (delegation lock), about SENSITIVE host paths — and the two rules of the
-// bind allowlist. In operation the latter are only a hint now, but they carry
-// the guarantee of the "protected" class (5e) and the convention that a
-// container may not mount its own project directory (review 5c). Both are
-// statements about WHERE data may live, and the dashboard should not break
-// them itself when creating.
-//
-// NOT included: operational hygiene (limits, cap_drop, no-new-privileges,
-// logging) as well as devices and capabilities. Exactly those should no
-// longer stop anyone per §4 — `/dev/dri` and `NET_ADMIN` are the cases named
-// explicitly.
+// The self-check (spec.ts, compose-apply.ts, raw-apply.ts) asks a different
+// question than operation: may this be created or newly introduced? It covers
+// the delegation lock, sensitive host paths and both bind allowlist rules,
+// which guard where data may live. Hygiene, devices and capabilities stay
+// notices and block no creation.
 const SELF_CHECK_RULES: readonly HardeningRule[] = [
   ...DELEGATION_LOCK_RULES,
   "sensitive-host-path",
@@ -578,16 +425,9 @@ export function selfCheckViolations(
   );
 }
 
-// Only the rule names, without details. Details name host paths and
-// capabilities and therefore only go to docker.registry.manage (intern-only);
-// the names may go along with every docker.view, so that the UI can show at
-// all THAT something is wrong.
-// The names are deliberately DEDUPLICATED here, the detail list in
-// hardeningReport() is not: two forbidden capabilities are two findings (and
-// each names a different capability), but without the details the same rule
-// name remains twice. Unfiltered, the response would then contain
-// "dangerous-capability, dangerous-capability" and the UI would show the same
-// entry twice.
+// Deduplicated rule names without details: details name host paths and stay
+// with privileged readers, the names may go to every viewer. Without details
+// two findings of one rule would read as the same name twice.
 export function hardeningRuleNames(
   container: InspectedContainer,
   options: HardeningOptions = {}
