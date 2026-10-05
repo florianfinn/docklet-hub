@@ -129,15 +129,12 @@ export function findMojibake(text) {
   return findings;
 }
 
-// --- Aufruf über die Kommandozeile ------------------------------------------
+// --- Command line -------------------------------------------------------------
 //
-//   node scripts/check-umlauts.mjs <datei>     der commit-msg-Haken
-//   … | node scripts/check-umlauts.mjs -        ein PR-Titel vor dem Merge:
-//       gh pr view N --json title -q .title | node scripts/check-umlauts.mjs -
+//   node scripts/check-umlauts.mjs <file>   the commit-msg hook
+//   … | node scripts/check-umlauts.mjs -     any text on stdin
 //
-// Der Weg über stdin ist der Grund für das `-`: der PR-Titel liegt in keiner
-// Datei, und ein Titel als Argument einer Shell-Zeile ist genau der Weg, auf
-// dem er 2026-09-04 gekippt ist.
+// PR titles and bodies are checked by pr-text (scripts/check-pr-publication.mjs).
 
 const runAsProgram = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 
@@ -167,9 +164,8 @@ if (runAsProgram) {
     console.error("");
     for (const match of mojibake) console.error(`  Zeile ${match.line}: …${match.sample}…`);
     console.error("");
-    console.error("Der Text ist unterwegs als Windows-1252 gelesen worden. Betreff und PR-Titel");
-    console.error("aus einer UTF-8-Datei übergeben (git commit -F, gh … --body-file / --input),");
-    console.error("nicht als Argument einer Shell-Zeile.");
+    console.error("Der Text ist unterwegs als Windows-1252 gelesen worden. Commit-Texte am");
+    console.error("besten aus einer UTF-8-Datei übergeben (git commit -F).");
     console.error("");
   }
   if (transliterations.length > 0 || mojibake.length > 0) {

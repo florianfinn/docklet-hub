@@ -1,17 +1,17 @@
-## Änderung
+## Change
 
-<!-- Konkretes Ergebnis und Grund. Messwerte mit Zahl und Messweg. -->
+<!-- Concrete result and reason. Measurements with number and method. -->
 
-## Vor dem Deploy
+## Before deploy
 
-<!-- Migration, Umgebungsvariablen, Protokollbruch oder Neustartbedarf. -->
+<!-- Migration, environment variables, protocol break or restart needed. -->
 
-## Prüfung
+## Checks
 
-- [ ] Lokal: pnpm run lint, pnpm run test und pnpm run build (reine Textänderung: pre-push-Textprüfung)
-- [ ] GitHub-Prüfung checks am aktuellen Integrationsstand
-- [ ] Unabhängiger Agentenreview mit Head-, Base- und Test-Merge-SHA
-- [ ] Öffentliche Texte, Beispiele und Artefakte auf private Daten geprüft
+- [ ] Local: pnpm run lint and pnpm run test (text-only change: pre-push prose checks)
+- [ ] GitHub checks and pr-text green on the current head
+- [ ] "Independent review" comment with Result: pass for the current head
+- [ ] Public texts, examples and artefacts checked for private data
 
-<!-- Aufgaben auf Feature-Branches manuell nach Merge mit Beleg schließen.
-     Abschluss-PR auf main nennt alle erledigten Issues mit Closes #<number>. -->
+<!-- Close tasks on feature branches manually after merge with evidence.
+     A final PR to main lists all finished issues with Closes #<number>. -->

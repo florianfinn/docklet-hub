@@ -8,7 +8,8 @@ in docs/design/ und sind dort im Index verlinkt.
 
 - Bezeichner, Dateinamen, technische Schlüssel, Protokollwerte und Branches
   sind englisch. Hub und Agent importieren gemeinsame Werte aus contract/.
-- Dokumentation und Commit-Texte sind deutsch. README.md, CONTRIBUTING.md,
+- Dokumentation ist deutsch. Commit-, PR- und Merge-Texte sind englisch.
+  README.md, CONTRIBUTING.md,
   SECURITY.md, agent/README.md, die deploy-READMEs und erzeugte
   Installationspakete sind englisch.
 - Neue und angefasste Codekommentare sind englisch. Bestehende Kommentare
@@ -27,8 +28,9 @@ in docs/design/ und sind dort im Index verlinkt.
   Werkzeugdirektiven bleiben erhalten.
 - UI-Texte stehen in den Sprachdateien des jeweiligen Features bzw. der
   Plattform. Deutsch ist die erste Sprache. ICU-Apostrophe werden verdoppelt.
-- Umlaute und ß werden richtig geschrieben. Texte mit Umlauten kommen über
-  UTF-8-Dateien in Git und GitHub, nie als Shell-Argument.
+- Umlaute und ß werden richtig geschrieben; Hooks, Tests und pr-text prüfen
+  Dateien, Commit- und PR-Texte auf ASCII-Umschreibungen und doppelt kodierte
+  Zeichen.
 - Übernommener Code trägt Quellpfad, volle Quell-SHA, Bezugsdatum und
   begründete Abweichungen. Lizenz- und Herkunftsnachweise bleiben erhalten.
 - shadcn-Bausteine zuerst aus shadcnblocks Pro beziehen. Fehlt der
@@ -39,9 +41,10 @@ in docs/design/ und sind dort im Index verlinkt.
   Co-Authored-By-Trailer für solche Werkzeuge in Code, Dokumentation,
   Commit-Texten, Issues oder PRs. Commits und PRs dürfen KI-Mitarbeit als
   Texthinweis ohne E-Mail-Adresse nennen, etwa Assisted-by: Claude Code;
-  .claude/settings.json legt ihn fest. Sitzungslinks entfallen. Autor und
-  Committer sind Menschen mit Noreply-Absender; die Identität setzt die
-  jeweilige Umgebung, nicht das Repo. Echte Lizenz- und Herkunftsnachweise
+  .claude/settings.json legt ihn fest. Sitzungslinks entfallen; pr-text weist
+  sie im PR-Text zurück. Autor und Committer sind Menschen mit
+  Noreply-Absender, bei Merges über GitHub ist GitHub der Committer; die
+  Identität setzt die jeweilige Umgebung, nicht das Repo. Echte Lizenz- und Herkunftsnachweise
   übernommener Komponenten bleiben erhalten.
 
 ## Öffentliche Daten
@@ -105,34 +108,37 @@ in docs/design/ und sind dort im Index verlinkt.
   Feature-Branch. Branch-Namen sind nicht vorgegeben.
 - Erst das vollständige Feature kommt mit einem Abschluss-PR auf main.
   Eigenständige Fehlerkorrekturen und Dokumentation dürfen direkt per PR dorthin.
-- Jeder PR wird vor dem Merge automatisch von einem unabhängigen Agenten
-  geprüft. Die bearbeitende Sitzung startet ihn ohne zusätzliche Aufforderung.
-  Der Reviewer hat den PR nicht umgesetzt und erhält einen eigenen Kontext,
-  Repo-Regeln, Issues und den vollständigen Diff zum tatsächlichen Zielbranch.
-- Review-Belege nennen Reviewer, Head-/Base-/Test-Merge-SHAs, Befunde und Ergebnis.
-  Inhaltliche Änderungen oder Änderungen der Integrationsgrundlage brauchen
-  erneuten Review. Blockierende Befunde werden vor dem Merge behoben.
-- Die veröffentlichende Sitzung attestiert einen abgeschlossenen Review mit
-  scripts/record-agent-review.mjs. Der erforderliche agent-review-Status
-  liegt am PR-Head. Der Beleg nennt die geprüften Head-, Base- und
-  Test-Merge-SHAs; die Sitzung verantwortet die Wahrhaftigkeit der Attestation.
-  Das Skript ersetzt keine Prüfung.
-- Jeder Merge läuft über scripts/merge-reviewed-pr.mjs mit dem aktuellen
-  privaten Review-Bericht und UTF-8-Merge-Text. Der Helfer verlangt den neuesten
-  erfolgreichen GitHub-Prüflauf für genau diese Integration und prüft die
-  PR-SHAs unmittelbar vor dem Merge erneut. Währenddessen erfolgen keine
-  parallelen Änderungen am Zielbranch. Direkte UI-/API-Merges sind untersagt.
-  GitHub erzwingt den Helfer nicht; seine Merge-API bindet atomar nur den Head.
-- Ohne angemeldetes gh lesen beide Skripte über die REST-API und geben mit
-  --print den geprüften Beleg bzw. die Merge-Argumente aus. Die Sitzung
-  veröffentlicht den Beleg unverändert über ihre GitHub-Anbindung und mergt
-  unmittelbar danach mit genau diesen Argumenten samt expectedHeadSha. Das ist
-  der Helfer-Weg und kein direkter Merge; jeder andere Weg bleibt untersagt.
-- Für main gilt ein aktives Ruleset mit PR-Pflicht, erforderlichen checks
-  und agent-review sowie strikter Aktualität zur Basis. Auf Feature-Branches
-  gelten dieselben Schritte als Arbeitsregel; GitHub erzwingt sie dort nicht.
-  GitHub prüft den Test-Merge; dessen künstliche Metadaten werden von der
-  vollständigen Prüfung der echten PR-Historie getrennt.
+- Vor jedem Merge startet die bearbeitende Sitzung ohne zusätzliche
+  Aufforderung einen unabhängigen Reviewer: einen Agenten mit eigenem Kontext,
+  der den PR nicht umgesetzt hat und Repo-Regeln, Issues und den vollständigen
+  Diff zum Zielbranch erhält. Umfang und Tiefe richten sich nach der Änderung;
+  er darf Tests ausführen und prüft auch die Veröffentlichbarkeit.
+- Das Ergebnis steht als PR-Kommentar unter dem Konto des Maintainers. Die
+  erste Zeile lautet Independent review, direkt darunter folgen Reviewer, Head
+  (volle SHA) und Result (pass oder fail), nach einer Leerzeile die Befunde.
+  Der Workflow review-status setzt den Status review am aktuellen PR-Head:
+  success nur, wenn der Kommentar genau diesen Head mit pass nennt, sonst
+  failure, auch für einen unlesbaren Beleg.
+- Pflicht-Checks erkennt GitHub nur am Namen. Ein PR, der Dateien unter
+  .github/workflows/ oder von Workflows ausgeführte Skripte ändert, kann sie
+  selbst grün melden; solche Diffs prüft der Maintainer vor dem Merge selbst.
+  Workflows aus Forks laufen erst nach Freigabe (Actions-Einstellung „Require
+  approval for all external contributors“).
+- Die Sitzung behebt blockierende Befunde sofort selbst. Nach jeder Änderung
+  prüft ein neuer unabhängiger Reviewer mit frischem Kontext den neuen Stand.
+  Fehlgeschlagene Zwischenrunden bleiben in der Sitzung; gepostet wird der
+  Beleg für den finalen Head mit den behobenen Befunden. Optionale Befunde
+  werden entschieden und im Beleg kurz begründet. Ist ein Befund im PR nicht
+  behebbar, wird der Beleg mit fail gepostet oder ein Issue angelegt.
+- Jeder neue Push und jeder Wechsel des Zielbranches braucht einen neuen
+  Review; neue Commits auf demselben Zielbranch ohne Konflikt nicht.
+- Für main gilt ein aktives Ruleset mit PR-Pflicht und den erforderlichen
+  Prüfungen checks, pr-text und review, ohne strikte Aktualität zur Basis.
+  Gemergt wird per Squash über GitHub, sobald alle Prüfungen grün sind. Ein Fehler
+  aus dem Zusammenspiel zweier PRs fällt im vollen CI-Lauf auf main auf und
+  wird sofort per Fix oder Revert behoben.
+- Auf Feature-Branches gelten dieselben Schritte als Arbeitsregel; GitHub
+  erzwingt sie dort nicht.
 - Der Feature-Branch übernimmt main regelmäßig per Merge. Geteilte Historie
   wird nicht rebased oder force-gepusht. Ungeprüfte Zwischenstände bleiben lokal.
 - Der einzige Root-Commit wird vor Erstveröffentlichung als vollständiger
@@ -143,11 +149,12 @@ in docs/design/ und sind dort im Index verlinkt.
 - Kein direkter Push auf main.
 - Ein Feature wird zuerst fertig gebaut, besprochen und lokal getestet. Push
   und PR folgen erst auf ausdrückliche Anweisung.
-- Commits sind Conventional Commits mit deutschem Betreff. Sobald ein Issue
+- Commits sind Conventional Commits mit englischem Betreff. Sobald ein Issue
   existiert, steht (#<number>) am Ende. Öffentliche Noreply-Absender verwenden.
-- Commit-Text über git commit -F, PR-Text über --body-file und Titel/Merge-Text
-  über gh api --input mit UTF-8-Dateien. Vor Merge Titel und vollständigen
-  Merge-Text mit scripts/check-umlauts.mjs prüfen.
+- Auf main wird nur per Squash gemergt; der PR-Titel wird zum Betreff, der
+  PR-Text zum Commit-Text. PR-Titel sind deshalb Conventional Commits, auch bei
+  Reverts (revert: …); die Prüfung pr-text erzwingt das. Wird die Basis eines
+  PRs geändert, läuft checks erst mit dem nächsten Push erneut.
 - Abschluss-PRs nennen erledigte Issues mit Closes #<number>, einschließlich
   auf dem Feature-Branch bereits abgeschlossener Aufgaben.
 - Hub und Agent tragen dieselbe Version. Mindest-Agent-Version und
@@ -157,8 +164,9 @@ in docs/design/ und sind dort im Index verlinkt.
 
 ## Prüfungen und Bestand
 
-- Vor jedem Push laufen lokal pnpm run lint, pnpm run test und pnpm run build.
-  Die Veröffentlichungskontrolle ist Teil der Tests und Git-Hooks.
+- Vor jedem Push laufen lokal pnpm run lint (mit Typprüfung) und pnpm run
+  test; pre-push erzwingt das. Den Build prüft CI. Die
+  Veröffentlichungskontrolle ist Teil der Tests und Git-Hooks.
 - Reine Textänderungen nach scripts/change-scope.mjs (nur .md außerhalb
   ausgeführter Pfade sowie LICENSE oder NOTICE im Wurzelverzeichnis) prüfen
   pre-push und checks ohne Installation, Lint, Tests und Build: nur
@@ -199,7 +207,7 @@ in docs/design/ und sind dort im Index verlinkt.
 - Kein Subagent verändert laufende Systeme. Ein Deploy braucht die ausdrückliche
   Betreiberbestätigung für genau diesen Deploy und erfolgt von origin/main.
 - Vor Schemaänderungen Datenbank sichern; danach Migrationen, /health und
-  ausgeliefertes Web-Bundle prüfen. Risiken stehen im PR unter Vor dem Deploy.
+  ausgeliefertes Web-Bundle prüfen. Risiken stehen im PR unter Before deploy.
 - Hub-Agent-Protokollbrüche und neue Pflichtwerte werden ausdrücklich benannt.
 - Änderungstexte beginnen mit der konkreten Änderung und tragen messbare
   Aussagen mit Zahl und Messweg. Prüfergebnisse und Grenzen werden ehrlich

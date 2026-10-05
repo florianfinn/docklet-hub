@@ -147,7 +147,9 @@ export async function readNdjson(
     void reader.cancel(signal.reason).catch(() => undefined);
   };
 
-  const deliver = async (rawLine: string): Promise<void> => {
+  // Synchronous unless `onEvent` returns a promise: the lines of one chunk then
+  // reach the caller in one task, so a UI store renders once per chunk.
+  const deliver = (rawLine: string): Promise<void> | undefined => {
     if (signal.aborted) return;
     const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
     // ⚠️ THE COMPLETE OVERSIZED LINE IS DROPPED HERE. The buffer check in
@@ -162,7 +164,7 @@ export async function readNdjson(
     }
     if (typeof event !== "object" || event === null || Array.isArray(event)) return;
     const result = onEvent(event as NdjsonEvent);
-    if (result) await Promise.race([result, abortWait]);
+    return result ? Promise.race([result, abortWait]) : undefined;
   };
 
   /** Holds the rest of a chunk without `\n` — or drops it, past the cap. */
@@ -193,7 +195,8 @@ export async function readNdjson(
       const fits = pending.length + piece.length <= NDJSON_MAX_BUFFERED_CHARS;
       const line = fits ? pending + piece : "";
       pending = "";
-      if (fits) await deliver(line);
+      const waiting = fits ? deliver(line) : undefined;
+      if (waiting) await waiting;
     }
     keep(text.slice(start));
   };

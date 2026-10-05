@@ -1,7 +1,7 @@
 name: PR checks
 on:
   pull_request:
-    types: [opened, synchronize, reopened, edited, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 permissions:
@@ -22,13 +22,20 @@ jobs:
       # Text-only PRs skip install, lint, build and the full suite.
       - id: scope
         run: echo "scope=$(node scripts/change-scope.mjs --ci)" >> "$GITHUB_OUTPUT"
-      - run: node scripts/show-check-evidence.mjs
       - run: node scripts/check-publication.mjs --history
-      - run: node scripts/check-pr-publication.mjs
       - if: steps.scope.outputs.scope == 'text'
         run: node scripts/change-scope.mjs --run-text-tests
       - if: steps.scope.outputs.scope != 'text'
         run: npm install --global pnpm@11.21.0
+      - if: steps.scope.outputs.scope != 'text'
+        id: store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - if: steps.scope.outputs.scope != 'text'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
       - if: steps.scope.outputs.scope != 'text'
         run: pnpm install --frozen-lockfile
       - if: steps.scope.outputs.scope != 'text'

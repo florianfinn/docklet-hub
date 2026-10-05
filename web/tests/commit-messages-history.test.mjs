@@ -15,7 +15,7 @@ test("neue Historie prüft den Root-Commit, lehnt falschen Typ und flachen Klon 
     const message=join(dir,"message.txt");writeFileSync(message,"invalid initial message\n");
     scratchGit(source,["-c","user.name=Guard","-c","user.email=guard@example.invalid","commit","--allow-empty","-qF",message]);
     scratchGit(dir,["clone","-q","--depth=1",pathToFileURL(source).href,clone]);
-    for(const path of ["web/tests/commit-messages.test.mjs","web/tests/umlaut-words.txt","scripts/check-umlauts.mjs"]) {mkdirSync(dirname(join(clone,path)),{recursive:true});copyFileSync(join(ROOT,path),join(clone,path));}
+    for(const path of ["web/tests/commit-messages.test.mjs","web/tests/umlaut-words.txt","scripts/check-umlauts.mjs","scripts/commit-subject.mjs"]) {mkdirSync(dirname(join(clone,path)),{recursive:true});copyFileSync(join(ROOT,path),join(clone,path));}
     const env=scratchGitEnvironment();delete env.NODE_TEST_CONTEXT;delete env.PUBLICATION_HEAD_SHA;
     const run=()=>spawnSync(process.execPath,["--test","web/tests/commit-messages.test.mjs"],{cwd:clone,encoding:"utf8",env,timeout:10000});
     const shallow=run();assert.equal(shallow.status,1);assert.match(shallow.stdout+shallow.stderr,/git fetch --unshallow origin/);
