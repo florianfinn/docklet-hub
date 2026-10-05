@@ -28,8 +28,9 @@ in docs/design/ und sind dort im Index verlinkt.
   Werkzeugdirektiven bleiben erhalten.
 - UI-Texte stehen in den Sprachdateien des jeweiligen Features bzw. der
   Plattform. Deutsch ist die erste Sprache. ICU-Apostrophe werden verdoppelt.
-- Umlaute und ß werden richtig geschrieben; Hooks und Tests prüfen Dateien und
-  Commit-Texte auf ASCII-Umschreibungen und doppelt kodierte Zeichen.
+- Umlaute und ß werden richtig geschrieben; Hooks, Tests und pr-text prüfen
+  Dateien, Commit- und PR-Texte auf ASCII-Umschreibungen und doppelt kodierte
+  Zeichen.
 - Übernommener Code trägt Quellpfad, volle Quell-SHA, Bezugsdatum und
   begründete Abweichungen. Lizenz- und Herkunftsnachweise bleiben erhalten.
 - shadcn-Bausteine zuerst aus shadcnblocks Pro beziehen. Fehlt der
@@ -114,12 +115,14 @@ in docs/design/ und sind dort im Index verlinkt.
 - Das Ergebnis steht als PR-Kommentar unter dem Konto des Maintainers. Die
   erste Zeile lautet Independent review, direkt darunter folgen Reviewer, Head
   (volle SHA) und Result (pass oder fail), nach einer Leerzeile die Befunde.
-  Der Workflow review-status setzt daraus den Status review am genannten Head;
-  ein Kommentar zu einem älteren Head markiert den aktuellen als
-  fehlgeschlagen.
+  Der Workflow review-status setzt den Status review am aktuellen PR-Head:
+  success nur, wenn der Kommentar genau diesen Head mit pass nennt, sonst
+  failure.
 - Pflicht-Checks erkennt GitHub nur am Namen. Ein PR, der Dateien unter
   .github/workflows/ oder von Workflows ausgeführte Skripte ändert, kann sie
   selbst grün melden; solche Diffs prüft der Maintainer vor dem Merge selbst.
+  Workflows aus Forks laufen erst nach Freigabe (Actions-Einstellung „Require
+  approval for all external contributors“).
 - Die Sitzung behebt blockierende Befunde sofort selbst. Nach jeder Änderung
   prüft ein neuer unabhängiger Reviewer mit frischem Kontext den neuen Stand.
   Fehlgeschlagene Zwischenrunden bleiben in der Sitzung; gepostet wird der

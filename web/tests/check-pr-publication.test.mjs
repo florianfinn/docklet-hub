@@ -1,13 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { titleProblems } from "../../scripts/check-pr-publication.mjs";
+import { textProblems } from "../../scripts/check-pr-publication.mjs";
 import { subjectAccepted } from "../../scripts/commit-subject.mjs";
 
-test("a PR title must work as the squash commit subject", () => {
-  assert.deepEqual(titleProblems("fix(web): keep the log cap"), []);
-  assert.deepEqual(titleProblems("feat!: drop the old protocol"), []);
-  assert.deepEqual(titleProblems("Update docs"), ["title is no Conventional Commit"]);
-  assert.deepEqual(titleProblems("fix: f\u00C3\u00BCr"), ["title contains double-encoded characters"]);
+test("title and body must work as the squash commit on main", () => {
+  assert.deepEqual(textProblems("fix(web): keep the log cap", "Body text."), []);
+  assert.deepEqual(textProblems("feat!: drop the old protocol"), []);
+  assert.deepEqual(textProblems("Update docs"), ["title is no Conventional Commit"]);
+  assert.deepEqual(textProblems("fix: f\u00C3\u00BCr"), ["text contains double-encoded characters"]);
+  assert.deepEqual(textProblems("fix: x", "Body f\u00C3\u00BCr"), ["text contains double-encoded characters"]);
+  assert.deepEqual(textProblems("fix: x", "Die Pr\u0075efung"), ["text contains German words without umlauts"]);
 });
 
 test("merge subjects pass only with two parents", () => {

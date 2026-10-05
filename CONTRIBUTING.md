@@ -57,9 +57,11 @@ posted, listing the fixed findings. Every new push needs a new review. Main
 requires the checks, pr-text and review checks; squash-merge through GitHub
 once they pass. The PR title becomes the commit subject and the PR body the
 commit message, so titles are Conventional Commits, reverts included
-(`revert: …`); pr-text enforces this. Required checks are matched by name
+(`revert: …`); pr-text enforces this and checks title and body for
+transliterated umlauts and double-encoded characters. Required checks are matched by name
 only: a PR that changes .github/workflows/ or scripts run by workflows can
-report them itself, so the maintainer reads such diffs before merging. After
+report them itself, so the maintainer reads such diffs before merging, and
+fork workflows need approval for all external contributors. After
 changing a PR's base branch, push again so checks reruns against it.
 
 Open issues only for feature work, product or architecture decisions and

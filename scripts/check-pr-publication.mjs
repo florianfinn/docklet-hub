@@ -1,14 +1,17 @@
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { inspectText } from "./check-publication.mjs";
-import { findMojibake } from "./check-umlauts.mjs";
+import { findMojibake, findTransliterations, loadWords } from "./check-umlauts.mjs";
 import { CONVENTIONAL } from "./commit-subject.mjs";
 
-// A squash merge makes the PR title the commit subject on main.
-export function titleProblems(title) {
+// A squash merge makes the title the commit subject and the body the commit
+// message on main, where the commit guard checks both.
+export function textProblems(title,body="",words=loadWords()) {
   const problems=[];
   if(!CONVENTIONAL.test(title))problems.push("title is no Conventional Commit");
-  if(findMojibake(title).length)problems.push("title contains double-encoded characters");
+  const text=title+"\n\n"+body;
+  if(findMojibake(text).length)problems.push("text contains double-encoded characters");
+  if(findTransliterations(text,words).length)problems.push("text contains German words without umlauts");
   return problems;
 }
 
@@ -17,7 +20,7 @@ if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href && p
   const pr=JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,"utf8")).pull_request;
   const findings=inspectText(pr.title+"\n"+(pr.body??""),"pull-request");
   for(const {path,line,category} of findings)console.error(path+":"+line+" ["+category+"]");
-  const problems=titleProblems(pr.title);
+  const problems=textProblems(pr.title,pr.body??"");
   for(const problem of problems)console.error("pull-request: "+problem);
   if(findings.length || problems.length)process.exitCode=1;
 }
