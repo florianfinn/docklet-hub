@@ -1,8 +1,9 @@
 import type { ComposeQuestion, ProjectCreateInput, ProjectPreview } from "./api";
 
 // The state of creating a project, as pure functions like `apply-state.ts`.
-// The agent compares every list for exact set equality, so a stale tick is as
-// wrong as a missing one.
+// The agent compares services, images and external sources for exact set
+// equality, so a stale tick is as wrong as a missing one. Hardening findings
+// only need to be contained; the agent's own list is sent back unchanged.
 
 export type ProjectConfirmations = {
   services: ReadonlySet<string>;

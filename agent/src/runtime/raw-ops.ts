@@ -2,7 +2,8 @@ import {
   EngineError
 } from "../engine.js";
 import {
-  selfCheckViolations
+  selfCheckViolations,
+  violationValue
 } from "../hardening.js";
 import { parseImageRef } from "../image-ref.js";
 import {
@@ -168,7 +169,7 @@ export const rawOps: RawApplyOps = {
     // socket before. Two DIFFERENT host paths stay two keys; a second bind at a
     // different danger spot is thus still detected. Rules without hostPath
     // (capability, namespace, …) keep their fine-grained `detail`.
-    return violations.map((violation) => `${violation.rule} — ${violation.hostPath ?? violation.detail}`);
+    return violations.map(violationValue);
   },
 
   async runState(containerId) {

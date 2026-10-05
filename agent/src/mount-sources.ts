@@ -5,7 +5,7 @@
 import type { MountSource } from "contract";
 import { isInsideBase } from "./compose.js";
 import { violationKey } from "./compose-raw.js";
-import { normalizePath } from "./hardening.js";
+import { normalizePath, SUBJECT_SEPARATOR } from "./hardening.js";
 
 type ConfigVolume = {
   type?: unknown;
@@ -62,7 +62,7 @@ export function mountSourcesOf(config: unknown, services: readonly string[], pro
 export function externalSourceAcceptances(sources: readonly MountSource[]): string[] {
   return sources
     .filter((entry) => entry.kind === "external" && entry.source)
-    .map((entry) => violationKey(entry.service, `bind-outside-base — ${entry.source}`));
+    .map((entry) => violationKey(entry.service, `bind-outside-base${SUBJECT_SEPARATOR}${entry.source}`));
 }
 
 // The distinct external bind sources that need their own confirmation.

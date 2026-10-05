@@ -20,16 +20,14 @@
 //    bestätigungspflichtig — und es entstünde ein Container, über dessen
 //    Rechte nie jemand entschieden hat.
 //
-// 2. DREI BESTÄTIGUNGEN SIND STRENG, EINE IST MILD.
-//    `confirmNew`, `confirmRemoved` und `acknowledgeImagePull` laufen beim
-//    Agenten durch dasselbe `checkConfirmation` und werden auf GENAUE
-//    Mengengleichheit geprüft, in beide Richtungen — ein Name, den der Diff
-//    nicht kennt, macht die Bestätigung ungültig, nicht nur ein fehlender
-//    (`src/compose-raw.ts:141`, `src/index.ts:859`). `acknowledgeHardening`
-//    dagegen prüft nur in EINE Richtung: jeder neue Verstoß muss enthalten
-//    sein, überzählige stören nicht (`src/raw-apply.ts:244`). Die
-//    Ungleichbehandlung ist gemessen und Absicht; sie wird hier abgebildet und
-//    nicht geglättet.
+// 2. THREE CONFIRMATIONS ARE STRICT, ONE IS LENIENT.
+//    `confirmNew`, `confirmRemoved` and `acknowledgeImagePull` go through the
+//    agent's `checkConfirmation` (agent/src/compose-raw.ts, called from
+//    agent/src/runtime/raw-ops.ts) and need exact set equality: an unknown
+//    name invalidates the confirmation like a missing one.
+//    `acknowledgeHardening` only needs to contain every new finding; extra
+//    entries do not matter (`executeRawApply` in agent/src/raw-apply.ts).
+//    The difference is intended and mirrored here, not smoothed over.
 //
 //    ⚠️ `acknowledgeImagePull` ist deshalb KEINE Quittung, sondern eine LISTE
 //    von Bildnamen — und der Hub kann sie nicht selbst bilden. Welche Images
