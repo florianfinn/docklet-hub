@@ -41,10 +41,11 @@ in docs/design/ und sind dort im Index verlinkt.
   Co-Authored-By-Trailer für solche Werkzeuge in Code, Dokumentation,
   Commit-Texten, Issues oder PRs. Commits und PRs dürfen KI-Mitarbeit als
   Texthinweis ohne E-Mail-Adresse nennen, etwa Assisted-by: Claude Code;
-  .claude/settings.json legt ihn fest. Sitzungslinks entfallen; pr-text weist
-  sie im PR-Text zurück. Autor und Committer sind Menschen mit
-  Noreply-Absender, bei Merges über GitHub ist GitHub der Committer; die
-  Identität setzt die jeweilige Umgebung, nicht das Repo. Echte Lizenz- und Herkunftsnachweise
+  .claude/settings.json legt ihn fest und schaltet Sitzungslinks mit
+  attribution.sessionUrl ab. Sitzungslinks entfallen; pr-text weist sie im
+  PR-Text zurück. Autor und Committer sind Menschen mit Noreply-Absender, bei
+  Merges über GitHub ist GitHub der Committer; die Identität setzt die
+  jeweilige Umgebung, nicht das Repo. Echte Lizenz- und Herkunftsnachweise
   übernommener Komponenten bleiben erhalten.
 
 ## Öffentliche Daten
