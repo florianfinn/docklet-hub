@@ -6,7 +6,7 @@ Zielbild und Begründungen. Arbeitsstand steht in GitHub Issues und Meilensteine
 | --- | --- |
 | [authentication-modes.md](authentication-modes.md) | Anmeldemodi und Wiederherstellung |
 | [concept-and-plan.md](concept-and-plan.md) | Zielbild von docklet hub |
-| [container-lifecycle.md](container-lifecycle.md) | Projektpfade, Anlegen Hub-eigener Projekte und Container-Lebenszyklus |
+| [container-lifecycle.md](container-lifecycle.md) | Projektpfade, Anlegen Hub-eigener Projekte, Laufzeitaktionen und Container-Lebenszyklus |
 | [feature-architecture.md](feature-architecture.md) | Architektur nach Features |
 | [game-console.md](game-console.md) | Games-Konsole |
 | [hub-color-and-structure.md](hub-color-and-structure.md) | Farbsystem und Gliederung der Oberfläche |
@@ -21,7 +21,7 @@ Zielbild und Begründungen. Arbeitsstand steht in GitHub Issues und Meilensteine
 | [proxy-management.md](proxy-management.md) | Proxyverwaltung HTTP/S |
 | [publication-policy.md](publication-policy.md) | Öffentliche Daten und Prüfungen |
 | [review-workflow.md](review-workflow.md) | Unabhängige Agentenreviews |
-| [self-healing.md](self-healing.md) | Begrenzte Selbstheilung |
+| [self-healing.md](self-healing.md) | Begrenzte Selbstheilung und manuelle Stopp-Absicht |
 | [sign-in-and-setup.md](sign-in-and-setup.md) | Anmeldung und Erstanmeldung |
 | [update-and-rollback.md](update-and-rollback.md) | Updates, Rollback und Sicherungen |
 
