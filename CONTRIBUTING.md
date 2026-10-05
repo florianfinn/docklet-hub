@@ -44,6 +44,9 @@ branch take the full chain locally.
 
 Develop a feature on its own feature branch; branch names are not prescribed.
 Task branches open pull requests against that branch. Integrate the complete feature with one final PR to main.
+Right after opening a pull request, the session removes lines its tooling
+appends to the PR body, such as a footer with a session link, and waits for a
+green pr-text check before the review starts.
 Before merging, the working session starts an independent agent review: a
 reviewer with its own context that did not implement the change, sized to the
 change and allowed to run tests. The session fixes blocking findings right
