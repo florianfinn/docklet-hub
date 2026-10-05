@@ -12,6 +12,9 @@ permissions:
 jobs:
   review-status:
     if: github.event.issue.pull_request && github.event.comment.author_association == 'OWNER' && startsWith(github.event.comment.body, 'Independent review')
+    # Job level, so other comments on the PR never displace a pending review run.
+    concurrency:
+      group: review-status-${{ github.event.issue.number }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -113,9 +113,13 @@ in docs/design/ und sind dort im Index verlinkt.
   er darf Tests ausführen und prüft auch die Veröffentlichbarkeit.
 - Das Ergebnis steht als PR-Kommentar unter dem Konto des Maintainers. Die
   erste Zeile lautet Independent review, direkt darunter folgen Reviewer, Head
-  (volle SHA) und Result (pass oder fail), nach einer Leerzeile die Befunde. Der Workflow review-status
-  setzt daraus den Status review am genannten Head; ein Kommentar zu einem
-  älteren Head markiert den aktuellen als fehlgeschlagen.
+  (volle SHA) und Result (pass oder fail), nach einer Leerzeile die Befunde.
+  Der Workflow review-status setzt daraus den Status review am genannten Head;
+  ein Kommentar zu einem älteren Head markiert den aktuellen als
+  fehlgeschlagen.
+- Pflicht-Checks erkennt GitHub nur am Namen. Ein PR, der Dateien unter
+  .github/workflows/ oder von Workflows ausgeführte Skripte ändert, kann sie
+  selbst grün melden; solche Diffs prüft der Maintainer vor dem Merge selbst.
 - Die Sitzung behebt blockierende Befunde sofort selbst. Nach jeder Änderung
   prüft ein neuer unabhängiger Reviewer mit frischem Kontext den neuen Stand.
   Fehlgeschlagene Zwischenrunden bleiben in der Sitzung; gepostet wird der
@@ -126,7 +130,7 @@ in docs/design/ und sind dort im Index verlinkt.
   Konflikt nicht.
 - Für main gilt ein aktives Ruleset mit PR-Pflicht und den erforderlichen
   Prüfungen checks, pr-text und review, ohne strikte Aktualität zur Basis.
-  Gemergt wird normal über GitHub, sobald alle Prüfungen grün sind. Ein Fehler
+  Gemergt wird per Squash über GitHub, sobald alle Prüfungen grün sind. Ein Fehler
   aus dem Zusammenspiel zweier PRs fällt im vollen CI-Lauf auf main auf und
   wird sofort per Fix oder Revert behoben.
 - Auf Feature-Branches gelten dieselben Schritte als Arbeitsregel; GitHub
@@ -143,9 +147,10 @@ in docs/design/ und sind dort im Index verlinkt.
   und PR folgen erst auf ausdrückliche Anweisung.
 - Commits sind Conventional Commits mit englischem Betreff. Sobald ein Issue
   existiert, steht (#<number>) am Ende. Öffentliche Noreply-Absender verwenden.
-- PR-Titel sind Conventional Commits, weil ein Squash-Merge sie zum Betreff auf
-  main macht; die Prüfung pr-text erzwingt das. Wird die Basis eines PRs
-  geändert, läuft checks erst mit dem nächsten Push erneut.
+- Auf main wird nur per Squash gemergt; der PR-Titel wird zum Betreff, der
+  PR-Text zum Commit-Text. PR-Titel sind deshalb Conventional Commits, auch bei
+  Reverts (revert: …); die Prüfung pr-text erzwingt das. Wird die Basis eines
+  PRs geändert, läuft checks erst mit dem nächsten Push erneut.
 - Abschluss-PRs nennen erledigte Issues mit Closes #<number>, einschließlich
   auf dem Feature-Branch bereits abgeschlossener Aufgaben.
 - Hub und Agent tragen dieselbe Version. Mindest-Agent-Version und

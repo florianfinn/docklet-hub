@@ -54,9 +54,12 @@ see [review workflow](docs/design/review-workflow.md). The session fixes
 blocking findings right away; after every change a new independent reviewer
 with fresh context checks the new state. Only the final head's review is
 posted, listing the fixed findings. Every new push needs a new review. Main
-requires the checks, pr-text and review checks; merge through GitHub once they
-pass. Pull request titles are Conventional Commits, because a squash
-merge makes them the commit subject on main; pr-text enforces this. After
+requires the checks, pr-text and review checks; squash-merge through GitHub
+once they pass. The PR title becomes the commit subject and the PR body the
+commit message, so titles are Conventional Commits, reverts included
+(`revert: …`); pr-text enforces this. Required checks are matched by name
+only: a PR that changes .github/workflows/ or scripts run by workflows can
+report them itself, so the maintainer reads such diffs before merging. After
 changing a PR's base branch, push again so checks reruns against it.
 
 Open issues only for feature work, product or architecture decisions and
