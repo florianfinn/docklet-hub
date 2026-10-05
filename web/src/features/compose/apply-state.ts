@@ -4,15 +4,10 @@ import type {
   ComposeQuestion
 } from "./api";
 
-// Der Zustand des Anwendens — als reine Rechnung, ohne React.
-//
-// ⚠️ WARUM DAS HIER UND NICHT IM BAUTEIL STEHT. Was ein Entwurf noch braucht,
-// bevor er hinausgehen darf, ist die schwierigste Frage dieser Fläche: die
-// Prüfung des Agenten ist GENAUE MENGENGLEICHHEIT, nicht Teilmenge. Eine
-// Bestätigung für einen Namen, den der Diff nicht kennt, macht den Aufruf
-// ungültig — genauso wie eine fehlende. In einem Bauteil zwischen Zustand und
-// Auszeichnung wäre das nicht zu prüfen; hier ist es eine Funktion mit einem
-// Test daneben.
+// The state of applying a draft as pure functions, testable without React.
+// The agent checks services and images for exact set equality: a confirmation
+// for a name the diff does not know invalidates the call like a missing one.
+// Hardening findings only need to be contained in the acknowledgement.
 
 /**
  * Was der Betreiber bestätigt hat.
@@ -135,11 +130,9 @@ export function applyInputOf(
 /**
  * Was eine Rückfrage des Arms an den Bestätigungen ändert.
  *
- * ⚠️ SIE ÜBERNIMMT DIE LISTEN DES ARMS UNVERÄNDERT und bildet keine eigenen.
- * Welche Images fehlen und welche Härtungsverstösse neu sind, weiß nur er; die
- * Prüfung ist Mengengleichheit, und eine selbst zusammengestellte Liste wird
- * abgelehnt. Was diese Funktion tut, ist ausschliesslich: die Antwort des Arms
- * an die Stelle legen, an der der nächste Versuch sie mitschickt.
+ * Takes the agent's lists unchanged and builds none of its own: only the agent
+ * knows which images are missing and which hardening findings are new. Images
+ * are checked for exact set equality, hardening findings for containment.
  *
  * ⚠️ SIE BEANTWORTET NICHT JEDE FRAGE. `changed-elsewhere` heißt, dass jemand
  * anderes die Datei geschrieben hat — dagegen hilft keine Bestätigung, sondern

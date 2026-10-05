@@ -156,6 +156,49 @@ test("a follow-up question is answered with the agent's list and sent again", as
   }
 });
 
+test("new hardening findings are explained and confirmed one by one (#8)", async () => {
+  const findings = ["app:bind-outside-base — /srv/media", "app:docker-socket-mount — /var/run/docker.sock"];
+  const { hub, done } = await mount([
+    {
+      status: 200,
+      body: {
+        outcome: {
+          kind: "question",
+          question: { kind: "hardening", newViolations: findings, rolledBack: true },
+          projectDirRemoved: true
+        }
+      }
+    },
+    { status: 200, body: { outcome: { kind: "created", project: { ok: true }, resync: { status: "synced", error: null } } } }
+  ]);
+  try {
+    await openAndCheck();
+    await click("project-confirm-service-app");
+    await click("project-create");
+    assert.equal(await waitFor(() => byTestId("project-new-violations") !== null), true, "the findings are shown");
+    const items = document.body.querySelectorAll('[data-testid="project-new-violations-item"]');
+    assert.equal(items.length, 2);
+    assert.equal(items[0]?.textContent?.includes("/var/run/docker.sock"), true, "the gravest finding comes first");
+    assert.equal(byTestId("project-new-violations-delegation-lock") !== null, true, "the agent's lock is named");
+
+    const answer = (): boolean => {
+      const button = byTestId("project-answer");
+      return button instanceof HTMLButtonElement && button.disabled;
+    };
+    assert.equal(answer(), true, "no confirmation with one click");
+    await click(`project-new-violations-check-${findings[1]}`);
+    assert.equal(answer(), true, "one finding is still open");
+    await click(`project-new-violations-check-${findings[0]}`);
+    assert.equal(answer(), false);
+
+    await click("project-answer");
+    assert.equal(await waitFor(() => byTestId("project-created") !== null), true);
+    assert.deepEqual(hub.bodies[1]?.acknowledgeHardening, findings);
+  } finally {
+    await done();
+  }
+});
+
 test("a refused create says when data stayed in the folder", async () => {
   const { done } = await mount([
     { status: 409, body: { error: "agent-conflict", reason: "compose-up-failed", projectDirRemoved: false } }

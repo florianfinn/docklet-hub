@@ -18,7 +18,7 @@ Logs und Shell gehören zum ausgewählten Host und Container. Fehlercodes sind T
 
 ## 5. Redaktion und Sicherheitsgrenzen
 
-Texteditoren erhalten ungespeicherte Entwürfe beziehungsweise fragen vor Verlust nach. Sensible Konfigurationswerte werden geschützt angezeigt. Harte Einstellungen werden verständlich erklärt und vor einer riskanten Änderung bewusst bestätigt. Proxy-Konfiguration wird am tatsächlichen Proxy gelesen und geschrieben, ohne zweite Route-Wahrheit im Hub.
+Texteditoren erhalten ungespeicherte Entwürfe beziehungsweise fragen vor Verlust nach. Sensible Konfigurationswerte werden geschützt angezeigt. Harte Einstellungen werden verständlich erklärt und vor einer riskanten Änderung bewusst bestätigt. Welche Regel ein Container verletzt, entscheidet allein die Härtungsprüfung des Agenten; Regelnamen und Schweregrade stehen in contract/, und die Oberfläche ordnet jedem Befund nur die Erklärung seiner Regel zu. Unbekannte Regeln erscheinen wörtlich und ohne eigene Bewertung. Neue Befunde eines Entwurfs werden einzeln mit Service und Pfad bestätigt, und die Oberfläche sendet genau die Liste des Agenten. Der Agent übernimmt den Entwurf nur, wenn jeder neue Befund in der Bestätigung enthalten ist; überzählige Einträge stören ihn nicht. Proxy-Konfiguration wird am tatsächlichen Proxy gelesen und geschrieben, ohne zweite Route-Wahrheit im Hub.
 
 ## 6. Dateien und Shell
 

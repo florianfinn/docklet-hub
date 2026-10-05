@@ -384,6 +384,15 @@ export type {
 export { MOUNT_SOURCE_KINDS, mountSourceSchema } from "./agent/projects.js";
 export type { MountSource, MountSourceKind } from "./agent/projects.js";
 export {
+  DELEGATION_LOCK_RULES,
+  HARDENING_RULE_SEVERITY,
+  HARDENING_RULES,
+  HARDENING_SEVERITIES,
+  isHardeningRule,
+  parseHardeningFinding
+} from "./agent/hardening.js";
+export type { HardeningFinding, HardeningRule, HardeningSeverity } from "./agent/hardening.js";
+export {
   CONTAINER_NAME_PATTERN,
   containerSpecSchema,
   hasControlCharacter,

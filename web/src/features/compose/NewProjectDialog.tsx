@@ -21,6 +21,8 @@ import { resyncWarns, toggled } from "./apply-state";
 import { ComposeEditor } from "./ComposeEditor";
 import { ConfirmList } from "./ConfirmList";
 import { questionText } from "./compose-question-text";
+import { HardeningFindings } from "./HardeningFindings";
+import { unconfirmedCount } from "./hardening-findings";
 import { projectErrorKey } from "./project-errors";
 import {
   createProject,
@@ -330,10 +332,24 @@ function QuestionNote({
   onAnswer: () => void;
 }) {
   const t = useTranslations();
+  const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
   const answerable = projectAnswered(NO_PROJECT_CONFIRMATIONS, question) !== null;
+  // A risky change is accepted finding by finding, never with one click (#8).
+  const missing = question.kind === "hardening" ? unconfirmedCount(question.newViolations, checked) : 0;
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border p-4" data-testid="project-question">
       <p className="text-[13px]">{questionText(t, question)}</p>
+      {question.kind === "hardening" ? (
+        <>
+          <HardeningFindings
+            findings={question.newViolations}
+            checked={checked}
+            onToggle={(key) => setChecked(toggled(checked, key))}
+            testId="project-new-violations"
+          />
+          <p className="text-[12px] text-muted-foreground">{t("hardeningConfirmNote")}</p>
+        </>
+      ) : null}
       {"rolledBack" in question && question.rolledBack === false ? (
         <p className="text-[13px] text-destructive">{t("composeNotRolledBack")}</p>
       ) : null}
@@ -341,9 +357,21 @@ function QuestionNote({
         <p className="text-[13px] text-state-warn">{t("projectDirectoryLeft")}</p>
       ) : null}
       {answerable ? (
-        <Button type="button" size="sm" className="self-start" onClick={onAnswer} data-testid="project-answer">
+        <Button
+          type="button"
+          size="sm"
+          className="self-start"
+          disabled={missing > 0}
+          onClick={onAnswer}
+          data-testid="project-answer"
+        >
           {t("projectAnswerAndRetry")}
         </Button>
+      ) : null}
+      {missing > 0 ? (
+        <p className="text-[12px] text-muted-foreground" data-testid="project-hardening-missing">
+          {t("hardeningConfirmMissing", { count: missing })}
+        </p>
       ) : null}
     </div>
   );

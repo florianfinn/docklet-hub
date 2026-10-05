@@ -10,6 +10,7 @@ import {
 } from "../engine.js";
 import {
   selfCheckViolations,
+  violationValue,
   type HardeningOptions,
   type InspectedContainer
 } from "../hardening.js";
@@ -152,7 +153,7 @@ export async function violationKey(raw: RawInspect, containerId: string): Promis
   return selfCheckViolations(
     await inspectedContainer(raw),
     hardeningOptionsFor(containerId)
-  ).map((violation) => `${violation.rule} — ${violation.hostPath ?? violation.detail}`);
+  ).map(violationValue);
 }
 
 export const imageManagerLabelOf = createImageManagerLabelLookup((imageId) => engine.inspectImage(imageId));
