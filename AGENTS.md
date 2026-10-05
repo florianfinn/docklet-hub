@@ -116,9 +116,14 @@ in docs/design/ und sind dort im Index verlinkt.
   SHA), Result (pass oder fail) und die Befunde. Der Workflow review-status
   setzt daraus den Status review am genannten Head; ein Kommentar zu einem
   älteren Head markiert den aktuellen als fehlgeschlagen.
-- Blockierende Befunde werden vor dem Merge behoben, optionale bewusst
-  entschieden. Jeder neue Push braucht einen neuen Review; eine geänderte Basis
-  ohne Konflikt nicht.
+- Die Sitzung behebt blockierende Befunde sofort selbst. Nach jeder Änderung
+  prüft ein neuer unabhängiger Reviewer mit frischem Kontext den neuen Stand.
+  Fehlgeschlagene Zwischenrunden bleiben in der Sitzung; gepostet wird der
+  Beleg für den finalen Head mit den behobenen Befunden. Optionale Befunde
+  werden entschieden und im Beleg kurz begründet. Ist ein Befund im PR nicht
+  behebbar, wird der Beleg mit fail gepostet oder ein Issue angelegt.
+- Jeder neue Push braucht einen neuen Review; eine geänderte Basis ohne
+  Konflikt nicht.
 - Für main gilt ein aktives Ruleset mit PR-Pflicht und den erforderlichen
   Prüfungen checks, pr-text und review, ohne strikte Aktualität zur Basis.
   Gemergt wird normal über GitHub, sobald alle Prüfungen grün sind. Ein Fehler
