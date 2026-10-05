@@ -20,7 +20,7 @@ Scheitert das Anlegen und gelingt der Rollback, entfernt der Agent den Entwurf u
 
 ## Laufzeitaktionen
 
-Start, Stopp und Neustart gibt es für einzelne Container und für ganze Stacks (#97). Eine Containeraktion läuft über die Docker Engine und ist auch für fremdverwaltete Container erlaubt. Ist das Ziel schon erreicht, gilt sie als erfolgreich. Eine Stack-Aktion betrifft immer alle Services des Projekts; einzelne Services laufen über die Containeraktion. Eine Teilauswahl würde einen zweiten Weg mit eigener Reihenfolge- und Abhängigkeitslogik neben Compose schaffen.
+Start, Stopp und Neustart gibt es für einzelne Container und für ganze Stacks (#97). Eine Containeraktion läuft über die Docker Engine und ist auch für fremdverwaltete Container erlaubt. Läuft ein Container beim Start schon oder steht er beim Stopp schon, gilt die Aktion als erfolgreich. Eine Stack-Aktion betrifft immer alle Services des Projekts; einzelne Services laufen über die Containeraktion. Eine Teilauswahl würde einen zweiten Weg mit eigener Reihenfolge- und Abhängigkeitslogik neben Compose schaffen.
 
 Kein Laufzeitweg zieht Images, baut oder entfernt Waisen. Ein fehlendes Image lässt die Aktion sichtbar scheitern, statt fremden Code nebenbei auf den Host zu holen.
 
@@ -34,15 +34,15 @@ Ein Neustart über die Laufzeit verwendet den bestehenden Container weiter. Änd
 | Neustart | `up -d --force-recreate` | Stopp und Start |
 | Stopp | `compose stop` | `compose stop` |
 
-In beiden Stellungen erzeugt der Start fehlende Services. Mit „Aus“ ersetzt er keinen bestehenden Container; mit „An“ ersetzt er Container, deren Definition sich geändert hat, und der Neustart ersetzt alle. Bevor ein Weg etwas erzeugt, prüft der Agent die Definition mit `compose config` und die lokalen Images. Scheitert eine Prüfung, bleibt der Stack unverändert.
+In beiden Stellungen erzeugt der Start fehlende Services. Mit „Aus“ ersetzt er keinen bestehenden Container; mit „An“ ersetzt er Container, deren Definition sich geändert hat, und der Neustart ersetzt alle. Jeder `up` trägt zusätzlich `--no-build` und `--pull never` und läuft ohne `--wait`. Bevor ein Weg etwas erzeugt, prüft der Agent die Definition mit `compose config` und die lokalen Images. Scheitert eine Prüfung, bleibt der Stack unverändert.
 
-Die Einstellung gilt global; die Ersteinrichtung fragt sie mit der Vorauswahl „An“ ab. Eine Übersteuerung je Projekt und die Anzeige abweichender Definitionen verfolgt #149. Die Einstellung wirkt nur auf Hub-eigene Projekte. Fremdverwaltete Stacks und Einzelcontainer arbeiten immer wie „Aus“, und dort erzeugt auch der Start nichts: Fehlende Services erscheinen im Ergebnis als nicht erzeugt, weil Erzeugen und Ersetzen dem Verwalter gehören. Der Button nennt den wirksamen Modus, damit ein Neustart nie stillschweigend zum Recreate wird.
+Die Einstellung gilt global; die Ersteinrichtung fragt sie mit der Vorauswahl „An“ ab. Eine Übersteuerung je Projekt und die Anzeige abweichender Definitionen verfolgt #149. Die Einstellung wirkt nur auf Hub-eigene Projekte. Fremdverwaltete Stacks ersetzen nie einen Container und erzeugen auch beim Start nichts: Dort startet `compose start` nur die bestehenden Container, und fehlende Services erscheinen im Ergebnis als nicht erzeugt, weil Erzeugen und Ersetzen dem Verwalter gehören. Ihr Neustart ist Stopp und Start auf demselben Weg. Der Button nennt den wirksamen Modus, damit ein Neustart nie stillschweigend zum Recreate wird.
 
 `down` und `up` als Ersatz für Stopp und Start scheiden aus. Nach `down` fehlen die Container und mit ihnen die Logs, an denen sich ein Fehler nachvollziehen ließe, und der Hub verliert den Anker, über den er den Stack wieder starten kann. Scheitert das anschließende `up`, ist der Stack aus, ohne dass ein alter Container zurückbleibt. Anonyme Volumes bleiben verwaist zurück, während `up --force-recreate` sie in den neuen Container übernimmt.
 
 ### Ergebnis und Abschluss
 
-Ein Vorgang ist abgeschlossen, wenn der Agent den Laufzustand jedes betroffenen Containers nachgelesen hat. Erfolgreich ist er, wenn jeder Container den Zielzustand `running` oder `exited` erreicht hat. Health meldet der Agent mit, macht sie aber nicht zum Erfolgskriterium; nur wo `depends_on` mit `service_healthy` die Reihenfolge bestimmt, wartet Compose auf sie. Ein Health-Kriterium würde Start und Neustart an Zeitgrenzen binden, die zum Update-Erfolg gehören (#13).
+Ein Vorgang ist abgeschlossen, wenn der Agent den Laufzustand jedes betroffenen Containers nachgelesen hat. Erfolgreich ist er, wenn jeder Container den Zielzustand `running` oder `exited` erreicht hat. Health meldet der Agent mit, macht sie aber nicht zum Erfolgskriterium; deshalb fehlt `--wait`. Nur wo `depends_on` mit `service_healthy` die Reihenfolge bestimmt, wartet Compose vor dem Start des abhängigen Service auf die Health seiner Voraussetzung. Ein Health-Kriterium würde Start und Neustart an Zeitgrenzen binden, die zum Update-Erfolg gehören (#13).
 
 Das Ergebnis nennt jeden Service mit seinem Zustand und fasst den Vorgang als `ok`, `partial` oder `failed` zusammen. Auch ein gescheiterter Vorgang kann Container ersetzt haben, deshalb verankert der Agent die Container-IDs vor jeder Antwort neu.
 
