@@ -43,12 +43,15 @@ branch take the full chain locally.
 
 Develop a feature on its own feature branch; branch names are not prescribed.
 Task branches open pull requests against that branch. Integrate the complete feature with one final PR to main.
-Every ready pull request is reviewed automatically by the Claude review
-workflow (.github/workflows/review.yml), whoever wrote the change. It runs
-from the base branch, only reads the PR head and fails on blocking findings;
-see [review workflow](docs/design/review-workflow.md). Drafts and text-only
-changes are not reviewed, and pull requests from forks fail it. Main requires
-the checks, pr-text and review checks; merge through GitHub once they pass.
+Before merging, the working session starts an independent agent review: a
+reviewer with its own context that did not implement the change, sized to the
+change and allowed to run tests. Its result is posted as a PR comment from the
+maintainer's account, starting with the line "Independent review", followed by
+Reviewer, Head (full SHA), Result (pass or fail) and the findings. The
+review-status workflow turns it into the required review status on that head;
+see [review workflow](docs/design/review-workflow.md). Every new push needs a
+new review. Main requires the checks, pr-text and review checks; merge through
+GitHub once they pass.
 
 Open issues only for feature work, product or architecture decisions and
 findings that are not fixed in the current session. Small self-contained

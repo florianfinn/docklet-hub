@@ -1,0 +1,26 @@
+name: Review status
+# Sets the required `review` status from an owner's independent review comment.
+# issue_comment runs this file and the script from the default branch; the PR's
+# code is never checked out.
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+jobs:
+  review-status:
+    if: github.event.issue.pull_request && github.event.comment.author_association == 'OWNER' && startsWith(github.event.comment.body, 'Independent review')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - run: node scripts/review-status.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}

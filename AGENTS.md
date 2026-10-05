@@ -106,20 +106,26 @@ in docs/design/ und sind dort im Index verlinkt.
   Feature-Branch. Branch-Namen sind nicht vorgegeben.
 - Erst das vollständige Feature kommt mit einem Abschluss-PR auf main.
   Eigenständige Fehlerkorrekturen und Dokumentation dürfen direkt per PR dorthin.
-- Jeder bereite PR wird automatisch von der Review-Action
-  (.github/workflows/review.yml) unabhängig geprüft, egal ob Mensch oder Agent
-  ihn umgesetzt hat. Sie läuft aus dem Basisbranch, liest den PR nur und wird
-  bei blockierenden Befunden rot. Entwürfe und reine Textänderungen nach
-  scripts/change-scope.mjs prüft sie nicht; PRs aus Forks fallen durch.
+- Vor jedem Merge startet die bearbeitende Sitzung ohne zusätzliche
+  Aufforderung einen unabhängigen Reviewer: einen Agenten mit eigenem Kontext,
+  der den PR nicht umgesetzt hat und Repo-Regeln, Issues und den vollständigen
+  Diff zum Zielbranch erhält. Umfang und Tiefe richten sich nach der Änderung;
+  er darf Tests ausführen und prüft auch die Veröffentlichbarkeit.
+- Das Ergebnis steht als PR-Kommentar unter dem Konto des Maintainers. Die
+  erste Zeile lautet Independent review, danach folgen Reviewer, Head (volle
+  SHA), Result (pass oder fail) und die Befunde. Der Workflow review-status
+  setzt daraus den Status review am genannten Head; ein Kommentar zu einem
+  älteren Head markiert den aktuellen als fehlgeschlagen.
 - Blockierende Befunde werden vor dem Merge behoben, optionale bewusst
-  entschieden. Jeder Push auf einen PR löst einen neuen Review aus.
+  entschieden. Jeder neue Push braucht einen neuen Review; eine geänderte Basis
+  ohne Konflikt nicht.
 - Für main gilt ein aktives Ruleset mit PR-Pflicht und den erforderlichen
   Prüfungen checks, pr-text und review, ohne strikte Aktualität zur Basis.
   Gemergt wird normal über GitHub, sobald alle Prüfungen grün sind. Ein Fehler
   aus dem Zusammenspiel zweier PRs fällt im vollen CI-Lauf auf main auf und
   wird sofort per Fix oder Revert behoben.
-- Auf Feature-Branches läuft der Review ebenfalls, GitHub erzwingt ihn dort
-  aber nicht; blockierende Befunde gelten dort als Arbeitsregel.
+- Auf Feature-Branches gelten dieselben Schritte als Arbeitsregel; GitHub
+  erzwingt sie dort nicht.
 - Der Feature-Branch übernimmt main regelmäßig per Merge. Geteilte Historie
   wird nicht rebased oder force-gepusht. Ungeprüfte Zwischenstände bleiben lokal.
 - Der einzige Root-Commit wird vor Erstveröffentlichung als vollständiger
@@ -148,8 +154,8 @@ in docs/design/ und sind dort im Index verlinkt.
   ausgeführter Pfade sowie LICENSE oder NOTICE im Wurzelverzeichnis) prüfen
   pre-push und checks ohne Installation, Lint, Tests und Build: nur
   Veröffentlichung, Commit-Texte und die Node-Tests für Texte. pre-push misst
-  gegen origin/main; Zweige von Feature-Branches laufen dort voll. Die
-  Review-Action überspringt solche PRs.
+  gegen origin/main; Zweige von Feature-Branches laufen dort voll. Der
+  unabhängige Review bleibt Pflicht.
 - GitHub-PR-Prüfungen laufen zusätzlich auf Feature-Branches und main für
   Veröffentlichung, Lint, Tests und Build mit minimalen Rechten, ohne
   Produktionsgeheimnisse. Sie ersetzen weder Prüfung vor Push noch Review.

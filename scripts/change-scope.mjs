@@ -13,15 +13,14 @@ export function isTextOnly(paths) {
   return paths.length>0 && paths.every(path=>!EXECUTED.test(path) && TEXT.test(path));
 }
 
-const git=(args,cwd=ROOT)=>execFileSync("git",args,{cwd,encoding:"utf8"});
-const changedPaths=(base,head,cwd)=>git(["diff","--name-only","--no-renames",base+"..."+head],cwd).split("\n").filter(Boolean);
+const git=args=>execFileSync("git",args,{cwd:ROOT,encoding:"utf8"});
+const changedPaths=(base,head)=>git(["diff","--name-only","--no-renames",base+"..."+head]).split("\n").filter(Boolean);
 
 // Pull requests use the event SHAs; pushes to main always take the full chain.
-// `cwd` is a separate checkout of the PR head when this script comes from the base.
-function ciScope(cwd=ROOT) {
-  if(!["pull_request","pull_request_target"].includes(process.env.GITHUB_EVENT_NAME))return "full";
+function ciScope() {
+  if(process.env.GITHUB_EVENT_NAME!=="pull_request")return "full";
   const pr=JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,"utf8")).pull_request;
-  return isTextOnly(changedPaths(pr.base.sha,pr.head.sha,cwd))?"text":"full";
+  return isTextOnly(changedPaths(pr.base.sha,pr.head.sha))?"text":"full";
 }
 
 // pre-push stdin: "<local ref> <local sha> <remote ref> <remote sha>" per ref.
@@ -36,12 +35,12 @@ function prePushScope(input) {
 
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) {
   const mode=process.argv[2];
-  if(mode==="--ci")console.log(ciScope(process.argv[3]));
+  if(mode==="--ci")console.log(ciScope());
   else if(mode==="--pre-push"){
     let input="";
     try {input=readFileSync(0,"utf8");} catch {/* no stdin: full chain */}
     console.log(prePushScope(input));
   }
   else if(mode==="--run-text-tests")process.exitCode=spawnSync(process.execPath,["--test",...TEXT_TESTS],{cwd:ROOT,stdio:"inherit"}).status??1;
-  else throw new Error("Usage: node scripts/change-scope.mjs --ci [head-checkout] | --pre-push | --run-text-tests");
+  else throw new Error("Usage: node scripts/change-scope.mjs --ci | --pre-push | --run-text-tests");
 }
