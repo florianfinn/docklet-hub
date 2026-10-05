@@ -8,7 +8,8 @@ in docs/design/ und sind dort im Index verlinkt.
 
 - Bezeichner, Dateinamen, technische Schlüssel, Protokollwerte und Branches
   sind englisch. Hub und Agent importieren gemeinsame Werte aus contract/.
-- Dokumentation und Commit-Texte sind deutsch. README.md, CONTRIBUTING.md,
+- Dokumentation ist deutsch. Commit-, PR- und Merge-Texte sind englisch.
+  README.md, CONTRIBUTING.md,
   SECURITY.md, agent/README.md, die deploy-READMEs und erzeugte
   Installationspakete sind englisch.
 - Neue und angefasste Codekommentare sind englisch. Bestehende Kommentare
@@ -27,8 +28,8 @@ in docs/design/ und sind dort im Index verlinkt.
   Werkzeugdirektiven bleiben erhalten.
 - UI-Texte stehen in den Sprachdateien des jeweiligen Features bzw. der
   Plattform. Deutsch ist die erste Sprache. ICU-Apostrophe werden verdoppelt.
-- Umlaute und ß werden richtig geschrieben. Texte mit Umlauten kommen über
-  UTF-8-Dateien in Git und GitHub, nie als Shell-Argument.
+- Umlaute und ß werden richtig geschrieben; Hooks und Tests prüfen Dateien und
+  Commit-Texte auf ASCII-Umschreibungen und doppelt kodierte Zeichen.
 - Übernommener Code trägt Quellpfad, volle Quell-SHA, Bezugsdatum und
   begründete Abweichungen. Lizenz- und Herkunftsnachweise bleiben erhalten.
 - shadcn-Bausteine zuerst aus shadcnblocks Pro beziehen. Fehlt der
@@ -105,34 +106,20 @@ in docs/design/ und sind dort im Index verlinkt.
   Feature-Branch. Branch-Namen sind nicht vorgegeben.
 - Erst das vollständige Feature kommt mit einem Abschluss-PR auf main.
   Eigenständige Fehlerkorrekturen und Dokumentation dürfen direkt per PR dorthin.
-- Jeder PR wird vor dem Merge automatisch von einem unabhängigen Agenten
-  geprüft. Die bearbeitende Sitzung startet ihn ohne zusätzliche Aufforderung.
-  Der Reviewer hat den PR nicht umgesetzt und erhält einen eigenen Kontext,
-  Repo-Regeln, Issues und den vollständigen Diff zum tatsächlichen Zielbranch.
-- Review-Belege nennen Reviewer, Head-/Base-/Test-Merge-SHAs, Befunde und Ergebnis.
-  Inhaltliche Änderungen oder Änderungen der Integrationsgrundlage brauchen
-  erneuten Review. Blockierende Befunde werden vor dem Merge behoben.
-- Die veröffentlichende Sitzung attestiert einen abgeschlossenen Review mit
-  scripts/record-agent-review.mjs. Der erforderliche agent-review-Status
-  liegt am PR-Head. Der Beleg nennt die geprüften Head-, Base- und
-  Test-Merge-SHAs; die Sitzung verantwortet die Wahrhaftigkeit der Attestation.
-  Das Skript ersetzt keine Prüfung.
-- Jeder Merge läuft über scripts/merge-reviewed-pr.mjs mit dem aktuellen
-  privaten Review-Bericht und UTF-8-Merge-Text. Der Helfer verlangt den neuesten
-  erfolgreichen GitHub-Prüflauf für genau diese Integration und prüft die
-  PR-SHAs unmittelbar vor dem Merge erneut. Währenddessen erfolgen keine
-  parallelen Änderungen am Zielbranch. Direkte UI-/API-Merges sind untersagt.
-  GitHub erzwingt den Helfer nicht; seine Merge-API bindet atomar nur den Head.
-- Ohne angemeldetes gh lesen beide Skripte über die REST-API und geben mit
-  --print den geprüften Beleg bzw. die Merge-Argumente aus. Die Sitzung
-  veröffentlicht den Beleg unverändert über ihre GitHub-Anbindung und mergt
-  unmittelbar danach mit genau diesen Argumenten samt expectedHeadSha. Das ist
-  der Helfer-Weg und kein direkter Merge; jeder andere Weg bleibt untersagt.
-- Für main gilt ein aktives Ruleset mit PR-Pflicht, erforderlichen checks
-  und agent-review sowie strikter Aktualität zur Basis. Auf Feature-Branches
-  gelten dieselben Schritte als Arbeitsregel; GitHub erzwingt sie dort nicht.
-  GitHub prüft den Test-Merge; dessen künstliche Metadaten werden von der
-  vollständigen Prüfung der echten PR-Historie getrennt.
+- Jeder bereite PR wird automatisch von der Review-Action
+  (.github/workflows/review.yml) unabhängig geprüft, egal ob Mensch oder Agent
+  ihn umgesetzt hat. Sie läuft aus dem Basisbranch, liest den PR nur und wird
+  bei blockierenden Befunden rot. Entwürfe und reine Textänderungen nach
+  scripts/change-scope.mjs prüft sie nicht; PRs aus Forks fallen durch.
+- Blockierende Befunde werden vor dem Merge behoben, optionale bewusst
+  entschieden. Jeder Push auf einen PR löst einen neuen Review aus.
+- Für main gilt ein aktives Ruleset mit PR-Pflicht und den erforderlichen
+  Prüfungen checks, pr-text und review, ohne strikte Aktualität zur Basis.
+  Gemergt wird normal über GitHub, sobald alle Prüfungen grün sind. Ein Fehler
+  aus dem Zusammenspiel zweier PRs fällt im vollen CI-Lauf auf main auf und
+  wird sofort per Fix oder Revert behoben.
+- Auf Feature-Branches läuft der Review ebenfalls, GitHub erzwingt ihn dort
+  aber nicht; blockierende Befunde gelten dort als Arbeitsregel.
 - Der Feature-Branch übernimmt main regelmäßig per Merge. Geteilte Historie
   wird nicht rebased oder force-gepusht. Ungeprüfte Zwischenstände bleiben lokal.
 - Der einzige Root-Commit wird vor Erstveröffentlichung als vollständiger
@@ -143,11 +130,8 @@ in docs/design/ und sind dort im Index verlinkt.
 - Kein direkter Push auf main.
 - Ein Feature wird zuerst fertig gebaut, besprochen und lokal getestet. Push
   und PR folgen erst auf ausdrückliche Anweisung.
-- Commits sind Conventional Commits mit deutschem Betreff. Sobald ein Issue
+- Commits sind Conventional Commits mit englischem Betreff. Sobald ein Issue
   existiert, steht (#<number>) am Ende. Öffentliche Noreply-Absender verwenden.
-- Commit-Text über git commit -F, PR-Text über --body-file und Titel/Merge-Text
-  über gh api --input mit UTF-8-Dateien. Vor Merge Titel und vollständigen
-  Merge-Text mit scripts/check-umlauts.mjs prüfen.
 - Abschluss-PRs nennen erledigte Issues mit Closes #<number>, einschließlich
   auf dem Feature-Branch bereits abgeschlossener Aufgaben.
 - Hub und Agent tragen dieselbe Version. Mindest-Agent-Version und
@@ -157,14 +141,15 @@ in docs/design/ und sind dort im Index verlinkt.
 
 ## Prüfungen und Bestand
 
-- Vor jedem Push laufen lokal pnpm run lint, pnpm run test und pnpm run build.
-  Die Veröffentlichungskontrolle ist Teil der Tests und Git-Hooks.
+- Vor jedem Push laufen lokal pnpm run lint (mit Typprüfung) und pnpm run
+  test; pre-push erzwingt das. Den Build prüft CI. Die
+  Veröffentlichungskontrolle ist Teil der Tests und Git-Hooks.
 - Reine Textänderungen nach scripts/change-scope.mjs (nur .md außerhalb
   ausgeführter Pfade sowie LICENSE oder NOTICE im Wurzelverzeichnis) prüfen
   pre-push und checks ohne Installation, Lint, Tests und Build: nur
   Veröffentlichung, Commit-Texte und die Node-Tests für Texte. pre-push misst
-  gegen origin/main; Zweige von Feature-Branches laufen dort voll. Der
-  unabhängige Review bleibt Pflicht.
+  gegen origin/main; Zweige von Feature-Branches laufen dort voll. Die
+  Review-Action überspringt solche PRs.
 - GitHub-PR-Prüfungen laufen zusätzlich auf Feature-Branches und main für
   Veröffentlichung, Lint, Tests und Build mit minimalen Rechten, ohne
   Produktionsgeheimnisse. Sie ersetzen weder Prüfung vor Push noch Review.

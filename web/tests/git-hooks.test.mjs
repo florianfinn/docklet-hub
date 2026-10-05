@@ -121,7 +121,7 @@ test("pre-push reicht der Prüfkette keine GIT_*-Variablen weiter", () => {
     const lines = readFileSync(record, "utf8").split("\n").filter(Boolean);
     assert.deepEqual(
       lines.filter((line) => line.startsWith("call ")),
-      ["call run lint", "call run test", "call run build"],
+      ["call run lint", "call run test"],
       "the stand-in pnpm was not called as the chain"
     );
     assert.deepEqual(

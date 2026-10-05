@@ -1,5 +1,5 @@
 #!/bin/sh
-# Local publication, lint, test and build checks supplement GitHub PR checks.
+# Local publication, lint (with typecheck) and test checks; CI also builds.
 # Text-only pushes run the publication check and the prose tests only.
 set -eu
 # Tests create scratch repositories. Do not pass this repository's hook env.
@@ -15,4 +15,3 @@ if [ "$scope" = text ]; then
 fi
 pnpm run lint
 pnpm run test
-pnpm run build

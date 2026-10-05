@@ -1,9 +1,10 @@
 # Contributing
 
 Use Node 24 and pnpm 11. The binding rules are in [AGENTS.md](AGENTS.md).
-Identifiers, filenames, protocol values and new code comments are English;
-commit messages and design documents are German. Public entry documents and
-agent/operator setup instructions are English. UI text belongs in language files.
+Identifiers, filenames, protocol values, new code comments, commit messages
+and pull requests are English; design documents are German. Public entry
+documents and agent/operator setup instructions are English. UI text belongs
+in language files.
 
 ## Before publishing
 
@@ -31,34 +32,23 @@ pnpm run build
 Git hooks inspect the staged content and commit metadata before publication.
 The publication guard intentionally reports paths and categories, not values.
 GitHub checks run additionally; they cannot undo a leak after a public push.
-Text-only changes as defined by scripts/change-scope.mjs (only .md outside
-executed paths, or the root LICENSE or NOTICE) skip install, lint, the full
-suite and build in pre-push and checks; publication, commit and prose tests
-still run. pre-push compares against origin/main, so branches of a feature
+pre-push runs the publication check, lint with typecheck and the tests; CI
+also builds. Text-only changes as defined by scripts/change-scope.mjs (only
+.md outside executed paths, or the root LICENSE or NOTICE) skip install, lint,
+the full suite and build in pre-push and checks; publication, commit and prose
+tests still run. pre-push compares against origin/main, so branches of a feature
 branch take the full chain locally.
 
 ## Features and reviews
 
 Develop a feature on its own feature branch; branch names are not prescribed.
 Task branches open pull requests against that branch. Integrate the complete feature with one final PR to main.
-Every PR needs an independent agent review before merging. The reviewer must
-not have implemented it and reviews the actual head against the actual base.
-Changed code or integration bases require another review.
-
-Record a real review with scripts/record-agent-review.mjs; see
-[review workflow](docs/design/review-workflow.md). It posts the evidence
-comment, and the agent-review workflow sets the agent-review status only when
-an owner comment reads back as exactly the evidence for the current PR.
-Required checks enforce that status and automated checks. The comment is an
-attestation by a trusted maintainer, not an automatic proof of reviewer
-independence.
-Merge only through scripts/merge-reviewed-pr.mjs with the current private
-review report and UTF-8 merge payload. It verifies the newest successful
-Actions run for exactly the reviewed integration and rechecks the PR SHAs.
-Both scripts read GitHub over REST with curl. Without a gh login, `--print`
-outputs the validated comment or merge arguments instead of writing; a session
-then posts or merges with exactly these values through its GitHub connection,
-the merge bound to `expectedHeadSha`.
+Every ready pull request is reviewed automatically by the Claude review
+workflow (.github/workflows/review.yml), whoever wrote the change. It runs
+from the base branch, only reads the PR head and fails on blocking findings;
+see [review workflow](docs/design/review-workflow.md). Drafts and text-only
+changes are not reviewed, and pull requests from forks fail it. Main requires
+the checks, pr-text and review checks; merge through GitHub once they pass.
 
 Open issues only for feature work, product or architecture decisions and
 findings that are not fixed in the current session. Small self-contained

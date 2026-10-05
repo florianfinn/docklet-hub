@@ -1,7 +1,7 @@
 {
   "attribution": {
     "commit": "Assisted-by: Claude Code",
-    "pr": "Mit Unterstützung von Claude Code erstellt."
+    "pr": "Assisted-by: Claude Code"
   },
   "hooks": {
     "SessionStart": [
