@@ -59,10 +59,10 @@ export type HardeningOptions = {
   // a neighbour's directory is the operator's trust decision.
   secureUniverse?: string;
   // The host directories that carry the management on this host: its state
-  // and code directories and the agent container's own mounts. Only the caller
-  // knows them; a mount reaching one from below or
-  // above is a delegation lock. Missing or empty falls back to
-  // DASHBOARD_SELF_PATHS, never to "nothing to protect".
+  // and code directories and the agent container's own mounts. Only the
+  // caller knows them; a mount reaching one from below or above is a
+  // delegation lock. Missing or empty falls back to DASHBOARD_SELF_PATHS,
+  // never to "nothing to protect".
   selfPaths?: readonly string[];
 };
 
