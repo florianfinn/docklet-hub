@@ -58,8 +58,9 @@ export type HardeningOptions = {
   // below exactly this directory; this only tightens bindBasePath. Without it
   // a neighbour's directory is the operator's trust decision.
   secureUniverse?: string;
-  // The host directories that carry the management on this host (the agent's
-  // own state). Only the caller knows them; a mount reaching one from below or
+  // The host directories that carry the management on this host: its state
+  // and code directories and the agent container's own mounts. Only the caller
+  // knows them; a mount reaching one from below or
   // above is a delegation lock. Missing or empty falls back to
   // DASHBOARD_SELF_PATHS, never to "nothing to protect".
   selfPaths?: readonly string[];
@@ -393,8 +394,9 @@ export function hardeningReport(
   };
 }
 
-// Whether the container carries a delegation lock; the gate refuses mutating
-// actions on it outside the internal tier.
+// Whether the container carries a delegation lock, the condition under which
+// the gate (runtime/gate.ts, via hardeningReport) refuses mutating actions
+// outside the internal tier.
 export function hasDelegationLock(
   container: InspectedContainer,
   options: HardeningOptions = {}

@@ -125,7 +125,7 @@ export const enCompose = {
   composeQuestionServices: "New services: {added}. Going away: {removed}.",
   composeQuestionImages: "These images are not on the host and will be pulled: {list}",
   composeQuestionHardening:
-    "{count, plural, one {This draft introduces a new hardening finding} other {This draft introduces # new hardening findings}}. The agent only takes it once exactly these findings are confirmed.",
+    "{count, plural, one {This draft introduces a new hardening finding} other {This draft introduces # new hardening findings}}. The agent only takes it once each of these findings is confirmed.",
   composeQuestionChangedElsewhere:
     "The file has changed since it was loaded. The draft is still in the editor — reloading shows the other state.",
   composeQuestionStartFailed: "The stack did not come up: {detail}",
@@ -210,14 +210,14 @@ export const enCompose = {
   projectErrorNameInvalid: "This name cannot be used as a project and folder name.",
   projectErrorLocked: "This folder is locked against self-management.",
   // ── Hardening findings with explanation (#8) ──────────────────────────────
-  hardeningSeverityDelegationLock: "Controls the host",
+  hardeningSeverityDelegationLock: "Critical",
   hardeningSeverityWarning: "Warning",
   hardeningSeverityNotice: "Notice",
   hardeningSeverityUnknown: "Unknown",
   hardeningService: "service {service}",
   hardeningConfirmFinding: "Confirm finding on service {service}",
   hardeningDelegationLockNote:
-    "A container with a “controls the host” finding can in practice be used like the host itself. The agent allows mutating actions on it only through internal access and logs them separately; externally they stay locked.",
+    "A critical finding means the container can take over the host, or that this cannot be ruled out. The agent allows mutating actions on it only through internal access and logs them separately; externally they stay locked.",
   hardeningRuleDockerSocket: "Docker socket mounted",
   hardeningRuleDockerSocketText:
     "Through the Docker socket the container can start further containers, including privileged ones with the host file system. That amounts to root access to the host.",

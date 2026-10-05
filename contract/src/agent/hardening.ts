@@ -54,9 +54,9 @@ export function isHardeningRule(value: string): value is HardeningRule {
 }
 
 // A finding of the compose paths travels as "service:rule<separator>subject";
-// the agent formats it (agent/src/hardening.ts, violationValue) and the same
-// string is the confirmation it compares for exact set equality. The parser
-// finds the rule by this vocabulary, so it does not depend on the separator.
+// the agent formats it (agent/src/hardening.ts, violationValue), and every new
+// finding must appear verbatim in the acknowledgement; extra entries do not
+// matter. The parser finds the rule by this vocabulary, not the separator.
 export type HardeningFinding = {
   key: string;
   service: string;

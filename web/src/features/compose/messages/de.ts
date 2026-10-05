@@ -164,7 +164,7 @@ export const deCompose = {
   composeQuestionServices: "Neue Services: {added}. Entfallende: {removed}.",
   composeQuestionImages: "Diese Images liegen auf dem Host nicht vor und werden geholt: {list}",
   composeQuestionHardening:
-    "{count, plural, one {Dieser Entwurf führt einen neuen Härtungsbefund ein} other {Dieser Entwurf führt # neue Härtungsbefunde ein}}. Der Agent übernimmt ihn erst, wenn genau diese Befunde bestätigt sind.",
+    "{count, plural, one {Dieser Entwurf führt einen neuen Härtungsbefund ein} other {Dieser Entwurf führt # neue Härtungsbefunde ein}}. Der Agent übernimmt ihn erst, wenn jeder dieser Befunde bestätigt ist.",
   composeQuestionChangedElsewhere:
     "Die Datei hat sich geändert, seit sie geladen wurde. Der Entwurf steht noch im Editor — neu laden zeigt den fremden Stand.",
   composeQuestionStartFailed: "Der Stack ist nicht hochgekommen: {detail}",
@@ -255,14 +255,14 @@ export const deCompose = {
   projectErrorNameInvalid: "Dieser Name taugt nicht als Projekt- und Ordnername.",
   projectErrorLocked: "Dieser Ordner ist gegen Selbstverwaltung gesperrt.",
   // ── Härtungsbefunde mit Erklärung (#8) ─────────────────────────────────────
-  hardeningSeverityDelegationLock: "Steuert den Host",
+  hardeningSeverityDelegationLock: "Kritisch",
   hardeningSeverityWarning: "Warnung",
   hardeningSeverityNotice: "Hinweis",
   hardeningSeverityUnknown: "Unbekannt",
   hardeningService: "Service {service}",
   hardeningConfirmFinding: "Befund an Service {service} bestätigen",
   hardeningDelegationLockNote:
-    "Ein Container mit einem Befund der Art „Steuert den Host“ lässt sich praktisch wie der Host selbst bedienen. Der Agent erlaubt verändernde Aktionen daran nur über den internen Zugang und protokolliert sie gesondert; extern bleiben sie gesperrt.",
+    "Ein kritischer Befund heißt: Der Container kann den Host übernehmen, oder das ist nicht auszuschließen. Der Agent erlaubt verändernde Aktionen daran nur über den internen Zugang und protokolliert sie gesondert; extern bleiben sie gesperrt.",
   hardeningRuleDockerSocket: "Docker-Socket eingehängt",
   hardeningRuleDockerSocketText:
     "Über den Docker-Socket kann der Container weitere Container starten, auch privilegierte mit dem Dateisystem des Hosts. Das entspricht Root-Zugriff auf den Host.",
