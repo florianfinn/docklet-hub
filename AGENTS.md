@@ -109,6 +109,9 @@ in docs/design/ und sind dort im Index verlinkt.
   Feature-Branch. Branch-Namen sind nicht vorgegeben.
 - Erst das vollständige Feature kommt mit einem Abschluss-PR auf main.
   Eigenständige Fehlerkorrekturen und Dokumentation dürfen direkt per PR dorthin.
+- Direkt nach dem Anlegen eines PRs entfernt die Sitzung Zeilen, die ihr
+  Werkzeug an den PR-Text anhängt, etwa eine Fußzeile mit Sitzungslink, und
+  wartet auf eine grüne Prüfung pr-text. Erst dann startet der Review.
 - Vor jedem Merge startet die bearbeitende Sitzung ohne zusätzliche
   Aufforderung einen unabhängigen Reviewer: einen Agenten mit eigenem Kontext,
   der den PR nicht umgesetzt hat und Repo-Regeln, Issues und den vollständigen
