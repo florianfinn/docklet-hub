@@ -77,6 +77,17 @@ test("mehrere Zeilen in einem Block kommen einzeln an", async () => {
   );
 });
 
+// A microtask between two lines of one chunk lets a UI store render once per
+// line; a 5,000-line backlog then costs quadratic render time.
+test("the lines of one chunk arrive without a microtask in between", async () => {
+  const order = [];
+  await readNdjson(bodyOf(['{"n":1}\n{"n":2}\n{"n":3}\n']), { signal: NEVER_ABORTED }, (event) => {
+    order.push(event.n);
+    queueMicrotask(() => order.push("tick"));
+  });
+  assert.deepEqual(order.slice(0, 3), [1, 2, 3]);
+});
+
 test("ein UTF-8-Zeichen über eine Blockgrenze bleibt ein Zeichen", async () => {
   const bytes = new TextEncoder().encode(line("Straße"));
   // "ß" is two bytes (0xC3 0x9F); cut between them.
