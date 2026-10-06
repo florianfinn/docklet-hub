@@ -97,9 +97,6 @@ export async function handlePull(ctx: ContainerRouteContext): Promise<void> {
 // allowlist) — the only difference is that the progress goes out while it
 // happens instead of being buffered until the end. That is the part the UI
 // shows as terminal output.
-//
-// The output names the registry, layer ids and sizes — the silent `pull`
-// does not.
 export async function handlePullStream(ctx: ContainerRouteContext): Promise<void> {
   const { response, actor, containerId, action } = ctx;
   const result = await gate(containerId, { mutating: true, action, actor });

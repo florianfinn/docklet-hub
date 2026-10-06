@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { EXEC_REJECTION_KEYS } from "contract";
+
 import { AgentError } from "../../platform/agent-transport/protocol.js";
 import { describeSessionRejection, describeStartRejection, execRejectionKey, SESSION_UNKNOWN_MESSAGE } from "./rejections.js";
 
@@ -77,4 +79,13 @@ test("an den drei kurzen Routen: unbekannt, zu groß und nur lesen haben je eine
   assert.equal(describeSessionRejection(new AgentError("too big", 413)).error, "input-too-large");
   assert.equal(describeSessionRejection(new AgentError("read only", 503)).error, "agent-read-only");
   assert.equal(describeSessionRejection(new AgentError("down", null)).error, "agent-unreachable");
+});
+
+test("jeder Ablehnungsschlüssel des Vertrags hat an der Stromroute eine eigene Übersetzung", () => {
+  // An unknown key falls back to the agent's raw message; every contract key
+  // must get the hub's own sentence instead.
+  for (const key of EXEC_REJECTION_KEYS) {
+    const error = refusal(400, key);
+    assert.notEqual(describeStartRejection(error).message, error.message, key);
+  }
 });

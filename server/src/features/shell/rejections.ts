@@ -80,10 +80,9 @@ const AGENT_START_REJECTIONS: ReadonlyMap<
     }
   ],
   [
-    // ⚠️ THE THIRTEENTH REFUSAL, from agent v0.30.0 on (#234): the container is
-    // in the observer class of the allowlist (`observeOnly`). The agent lets it
-    // be read and refuses everything that acts — a shell included — with
-    // `403 observe-only`. An own code and no `agent-forbidden`: the remedy is
+    // The container is in the observer class of the allowlist (`observeOnly`).
+    // The agent lets it be read and refuses everything that acts — a shell
+    // included — with `403 observe-only`. An own code and no `agent-forbidden`: the remedy is
     // not "the allowlist lacks the container" but "the operator released it for
     // looking only", and the surface has to be able to say that.
     "observe-only",

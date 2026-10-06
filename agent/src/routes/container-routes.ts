@@ -137,9 +137,8 @@ export async function handleUpdateCheck(ctx: ContainerRouteContext): Promise<voi
 // The details name host paths, capabilities and mount targets — that is a
 // map of the host.
 //
-// Deliberately does NOT go through gate(): a container with blocking
-// violations is exactly the one whose report you need to see. The allowlist
-// is checked anyway.
+// Does not go through gate(): the report is read whatever the container
+// carries. The allowlist is checked anyway.
 export async function handleHardening(ctx: ContainerRouteContext): Promise<void> {
   const { response, containerId } = ctx;
   if (!registry.isAllowed(containerId)) {

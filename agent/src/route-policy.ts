@@ -105,8 +105,6 @@ export const ROUTES: readonly Route[] = [
   { methods: ["POST"], pattern: "/containers/:id/apply-spec", mutating: true, audit: "apply-spec", gate: "apply-spec" },
   { methods: ["POST"], pattern: "/containers/:id/resolve", mutating: false, audit: "resolve", gate: "resolve" },
   { methods: ["POST"], pattern: "/containers/:id/exec", mutating: true, audit: "exec", gate: "exec" },
-  // The observable pull reveals registry, layer IDs and sizes; the silent
-  // `pull` tells none of that.
   { methods: ["POST"], pattern: "/containers/:id/pull-stream", mutating: true, audit: "pull-stream", gate: "pull-stream" },
   { methods: ["POST"], pattern: "/containers", mutating: true, audit: "create", gate: "create" },
 

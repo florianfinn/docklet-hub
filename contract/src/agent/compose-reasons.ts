@@ -169,8 +169,8 @@ export const COMPOSE_RAW_STREAM_FAILURE_REASONS = ["compose-raw-failed"] as cons
 // themselves answer as a named failure.
 //
 // ⚠️ Where this list ends, and why exactly there: the shared front matter
-// before the dispatch answers the same on EVERY route — `checkRoute` with
-// `actor-not-allowed` (agent/src/route-policy.ts), authentication, an unknown route.
+// before the dispatch answers the same on EVERY route — `checkRoute`
+// (agent/src/route-policy.ts), authentication, an unknown route.
 // Those are not statements about the raw editor, and whoever translates them
 // does so once for the whole agent. `stack-busy`, on the other hand,
 // is included even though it also arises in the shared error handler: the lock
