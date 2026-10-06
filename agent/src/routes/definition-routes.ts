@@ -404,9 +404,9 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
     // replaced gluetun container. The only place this sentence appeared was
     // this container's stderr.
     //
-    // The mapping itself (which status, what goes into the audit) has lived in `action-failure.ts` since #48 — it is tested
-    // there, while this file has no test, and the recreate path uses exactly
-    // the same one.
+    // The mapping itself (which status, what goes into the audit) lives in
+    // `action-failure.ts`: it is tested there, while this file has no test, and
+    // the recreate path uses exactly the same one.
     const failure = actionFailureOf(error);
     if (!failure) throw error;
     audit.write({

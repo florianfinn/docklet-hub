@@ -128,11 +128,9 @@ export async function handleCompose(ctx: ContainerRouteContext): Promise<void> {
 
 // --- Derived configuration (S5b, §16.3) ------------------------------
 //
-// The only information about a container's makeup that ALSO goes out
-// EXTERNALLY. It is therefore not bound to internal in the route table, but
-// goes through gate() like the detail view — and its content is an allowlist
-// of six fields (derived-config.ts), not a filtered copy of the inspect. Host
-// paths, labels, env and capabilities structurally cannot show up here.
+// Goes through gate() like the detail view. Its content is an allowlist of six
+// fields (derived-config.ts), not a filtered copy of the inspect: host paths,
+// labels, env and capabilities structurally cannot show up here.
 export async function handleConfiguration(ctx: ContainerRouteContext): Promise<void> {
   const { response, actor, containerId } = ctx;
   const result = await gate(containerId, {

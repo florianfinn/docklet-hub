@@ -257,9 +257,9 @@ export async function handlePullStream(ctx: ContainerRouteContext): Promise<void
 
 // --- Recreate preview (stage 5a) ---------------------------------------
 // The core of the decision on the deferred pull question: before a recreate
-// runs, it must be visible WHICH image would start. Otherwise an externally
-// triggered pull would be a silent lever — someone pulls :latest, and the
-// next internal recreate starts, unchecked, whatever lies there by then.
+// runs, it must be visible WHICH image would start. Otherwise a pull would be a
+// silent lever — someone pulls :latest, and the next recreate starts,
+// unchecked, whatever lies there by then.
 //
 // The preview is read-only and changes nothing.
 export async function handleRecreatePreview(ctx: ContainerRouteContext): Promise<void> {

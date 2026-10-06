@@ -1,9 +1,8 @@
 // The derived configuration summary (S5b, §16.3).
 //
-// Externally the YAML is NOT shown. The question "is the server running, and
-// how is it wired?" is still legitimate from on the road (E7) — it is answered
-// with information that by construction CANNOT contain anything dangerous,
-// instead of with a filtered full text.
+// The YAML is not shown here. The question "is the server running, and how is
+// it wired?" is answered with information that by construction CANNOT contain
+// anything dangerous, instead of with a filtered full text.
 //
 // ⚠️ The most important exclusion is the HOST PATHS. They are a map of the
 // server, which is why the hardening details have their own route.

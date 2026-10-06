@@ -199,9 +199,10 @@ export async function handleMonitorEvents(ctx: RouteContext): Promise<void> {
 // --- Watch-only status (Docker monitoring D1) -----------------------------
 //
 // A separate list of its own (monitors), NOT the allowlist. Deliberately does
-// NOT go through gate(): a monitor entry is not a control permission.
-// The response is reduced to running/since-when/health/status (W2, toMonitorStatus) and names neither
-// names nor image nor any other reconnaissance surface.
+// NOT go through gate(): a monitor entry is not a control permission. The
+// response is reduced to running/since-when/health/status (W2,
+// toMonitorStatus) and names neither names nor image nor any other
+// reconnaissance surface.
 export async function handleMonitorList(ctx: RouteContext): Promise<void> {
   const { response } = ctx;
   const statuses = [];

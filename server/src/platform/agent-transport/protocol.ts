@@ -158,11 +158,12 @@ function assertAgentAccepted(response: { status: number; ok: boolean }, path: st
   }
   if (response.status === 403) {
     // A 403 comes from the agent's own barriers: a route bound to one caller,
-    // the allowlist, external management or the self-management lock. The
+    // the allowlist, external management, the self-management lock or a
+    // hardening rule. The
     // message names no cause it does not know, only where it is recorded.
     throw new AgentError(
       `Der Agent hat „${path}" abgelehnt (403). Sein Audit-Log auf dem Zielhost nennt den Grund; ` +
-        "in Frage kommen die Allowlist, die Fremdverwaltung, die Selbstschutzsperre oder eine Route, die an einen anderen Aufrufer gebunden ist.",
+        "in Frage kommen die Allowlist, die Fremdverwaltung, die Selbstschutzsperre, eine Härtungsregel oder eine Route, die an einen anderen Aufrufer gebunden ist.",
       403
     );
   }
