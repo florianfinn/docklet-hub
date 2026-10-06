@@ -9,8 +9,9 @@ const ROOT=fileURLToPath(new URL("../../",import.meta.url));
 test("vollständige neue Historie enthält gültige Conventional Commits und richtige Umlaute", () => {
   const shallow=execFileSync("git",["rev-parse","--is-shallow-repository"],{cwd:ROOT,encoding:"utf8"}).trim();
   assert.equal(shallow,"false","flacher Klon: git fetch --unshallow origin vor der vollständigen Commit-Prüfung ausführen");
-  const historyRef=process.env.GITHUB_EVENT_NAME==="pull_request" && process.env.PUBLICATION_HEAD_SHA ? process.env.PUBLICATION_HEAD_SHA : "--all";
-  const records=execFileSync("git",["log",historyRef,"--format=%H%x1e%P%x1e%B%x1f"],{cwd:ROOT,encoding:"utf8"}).split("\x1f").filter(r=>r.trim());
+  // Local tools keep their own refs outside branches and tags (for example refs/t3/); they are never pushed.
+  const historyRefs=process.env.GITHUB_EVENT_NAME==="pull_request" && process.env.PUBLICATION_HEAD_SHA ? [process.env.PUBLICATION_HEAD_SHA] : ["--branches","--remotes","--tags"];
+  const records=execFileSync("git",["log",...historyRefs,"--format=%H%x1e%P%x1e%B%x1f"],{cwd:ROOT,encoding:"utf8"}).split("\x1f").filter(r=>r.trim());
   assert.ok(records.length>0,"Die neue Historie enthält keinen Commit");
   const findings=[];
   for(const record of records) {
