@@ -1,17 +1,154 @@
-# Unabhängige Agentenreviews
+# Push, Review und Abschluss
 
-Vor jedem Merge startet die bearbeitende Sitzung einen unabhängigen Reviewer. Er hat einen eigenen Kontext, hat den PR nicht umgesetzt und erhält Repo-Regeln, Issues und den vollständigen Diff zum tatsächlichen Zielbranch. Umfang und Tiefe richten sich nach der Änderung: Eine Doku-Korrektur braucht einen kurzen Blick, ein Feature einen gründlichen Review mit Testläufen. Gegenüber einem Review als GitHub Action kann dieser Reviewer Tests ausführen, Issues lesen und den Kontext der Aufgabe nutzen, und er braucht kein eigenes Token.
+Dieser Ablauf ist vor Push, PR-Erstellung, Review und Merge verbindlich zu lesen,
+auch von unabhängigen Reviewern. Ein vollständiger erster Review und gezielte
+Folgereviews erhalten die Befunde, ohne für jede Textkorrektur dieselbe Prüfung
+neu zu beginnen. Repo-Regeln zu Veröffentlichung, Prüfungen und Freigaben gelten
+weiter; Umfang und Tiefe des Reviews richten sich nach der Änderung.
 
-Manche GitHub-Anbindungen hängen beim Anlegen eines PRs eine Fußzeile mit Sitzungslink an den PR-Text an; die Einstellung attribution.sessionUrl wirkt dort nicht, ein späteres Bearbeiten des Texts hängt nichts an. Die Sitzung entfernt solche Zeilen deshalb direkt nach dem Anlegen und wartet auf eine grüne Prüfung pr-text, bevor der Review startet. So fällt der Link weder im Review auf noch erreicht er beim Squash main.
+## Vorbereitung und erster Review
 
-Befunde behebt die Sitzung sofort, mit dem vollen Kontext der Aufgabe. Ein Bericht in GitHub müsste erst in eine neue Sitzung übertragen werden und verlöre dabei Kontext. Nach jeder Änderung prüft ein neuer Reviewer mit frischem Kontext den neuen Stand, statt dass der bisherige seine eigenen Befunde abhakt; so bleibt jede Runde gleich unabhängig. Fehlgeschlagene Zwischenrunden werden nicht gepostet. Der Beleg für den finalen Head nennt die behobenen Befunde und begründet entschiedene optionale Befunde. Ist ein Befund im PR nicht behebbar, wird der Beleg mit fail gepostet oder ein Issue angelegt, damit nichts still verschwindet.
+Vor dem ersten Push prüft die bearbeitende Sitzung die Änderung selbst. Entfällt
+oder ändert sich ein Verhalten, sucht sie nach seiner Bedeutung, nicht nur nach
+Bezeichnern: Sprachdateien, Dokumentation und Kommentare gehören dazu. Neue
+Aussagen in Dokumentation und UI-Texten werden gegen den Code belegt. Eine Suche
+nach alten Bezeichnern allein übersieht Fließtext, der altes Verhalten beschreibt.
 
-Das Ergebnis veröffentlicht die Sitzung als PR-Kommentar über ihre GitHub-Anbindung, die unter dem Konto des Maintainers schreibt. Die erste Zeile lautet Independent review; direkt darunter stehen ohne Leerzeile Reviewer, Head mit voller SHA und Result mit pass oder fail, nach einer Leerzeile die Befunde. Nur dieser Kopfblock zählt, damit Befundtexte oder Fußzeilen keine Felder liefern. Hängt die Anbindung eine Fußzeile an, stört das nicht.
+Direkt nach dem Anlegen eines PRs entfernt die Sitzung Zeilen, die ihr Werkzeug
+an den PR-Text anhängt, etwa eine Fußzeile mit Sitzungslink. Sie wartet auf eine
+grüne Prüfung `pr-text`, bevor sie den Review startet. Die Einstellung
+`attribution.sessionUrl` verhindert solche Fußzeilen nicht bei jeder Anbindung.
 
-Der Workflow .github/workflows/review-status.yml reagiert nur auf neu erstellte Kommentare mit author_association OWNER, deren Text mit Independent review beginnt. Er führt scripts/review-status.mjs aus dem Standardbranch aus, nie Code des PRs, und hat nur Leserechte sowie statuses: write. Das Skript setzt den Status review am aktuellen PR-Head: success, wenn der Kommentar genau diesen Head mit pass nennt, sonst failure; auch ein Kommentar mit der Markierung, aber ohne lesbaren Kopfblock, setzt failure und lässt kein älteres pass stehen. Ein Review eines älteren Heads öffnet das Tor also nie. Bearbeitete Kommentare lösen nichts aus; ein neuer Review wird neu gepostet.
+Vor jedem Merge startet die Sitzung ohne zusätzliche Aufforderung einen
+unabhängigen Reviewer mit eigenem Kontext, der die Änderung nicht umgesetzt hat.
+Er erhält Repo-Regeln, diese Doku, Auftrag, relevante Issues und Abnahmekriterien,
+Zielbranch und Head-SHA sowie den vollständigen Diff zum tatsächlichen Zielbranch.
+Der erste Review deckt den gesamten PR ab: Verhalten, Tests, Bedeutungssuche,
+Belege neuer Aussagen und Veröffentlichbarkeit. Der Reviewer darf Tests ausführen;
+eine Doku-Korrektur braucht einen kurzen Blick, ein Feature eine gründliche Prüfung.
+Er berichtet alle entdeckten Befunde gesammelt, auch wenn ein Blocker feststeht.
 
-Der Status hängt am Head, nicht an der Basis. Weil das Ruleset für main keine strikte Aktualität verlangt, bleibt ein Review nach einem Merge anderer PRs gültig; nur ein neuer Push auf den PR oder ein Wechsel des Zielbranches verlangt einen neuen Review. Beim Zielbranch-Wechsel bleibt der Head gleich und damit auch der Status; die Sitzung lässt deshalb neu reviewen und postet den neuen Beleg. Ohne Merge Queue, die GitHub für Repos persönlicher Konten nicht anbietet, würde strikte Aktualität nach jedem Merge Branch-Aktualisierung, CI-Lauf und neuen Review für alle offenen PRs erzwingen. Das Risiko zweier einzeln grüner PRs, die zusammen brechen, trägt der volle CI-Lauf bei jedem Push auf main; ein solcher Fehler wird sofort per Fix oder Revert behoben.
+Der einzige Root-Commit wird vor Erstveröffentlichung als vollständiger Quellbaum
+unabhängig geprüft. Danach gilt das PR-Verfahren für jede Änderung.
 
-Das Ruleset für main verlangt PR sowie checks, pr-text und review. Gemergt wird nur per Squash über GitHub; die Repo-Einstellungen machen den PR-Titel zum Betreff und den PR-Text zum Commit-Text. So erreichen weder Zwischencommits noch deren Texte main, und pr-text prüft Titel und Text vorab wie der Commit-Wächter auf main: Conventional-Commit-Betreff, keine Umschreibungen, keine doppelt kodierten Zeichen. Feature-Branches haben kein Ruleset; dort gelten dieselben Schritte als Arbeitsregel.
+## Befunde entscheiden und gebündelt beheben
 
-Der Kommentar ist eine Attestation der Sitzung unter dem Konto des Maintainers, kein kryptografischer Beweis der Unabhängigkeit. Die Sitzung verantwortet, dass ein echter unabhängiger Review stattgefunden hat. Ändert jemand den PR von Hand, fehlt am neuen Head der Status, bis eine Sitzung erneut reviewt. Kommentare anderer Konten öffnen das Tor nicht. Pflicht-Checks erkennt GitHub aber nur am Namen, und die Workflows eines PRs laufen aus dessen eigenem Stand: Ein PR, auch aus einem Fork, kann einen Job namens review, checks oder pr-text anlegen und diesen Check selbst grün melden. Das Ruleset kann das nicht unterscheiden, weil echte und falsche Meldung von derselben GitHub-Actions-App stammen. Deshalb prüft der Maintainer Diffs unter .github/workflows/ und in von Workflows ausgeführten Skripten vor dem Merge selbst, und Workflows aus Forks laufen erst nach seiner Freigabe; dafür steht die Actions-Einstellung für Fork-PRs auf „Require approval for all external contributors“.
+Jeder Befund erhält eine stabile Kennung innerhalb des PRs, Fundstelle, Problem
+mit Beleg und eine begründete Einstufung. Blockierend sind Fehler in Verhalten,
+Sicherheit oder verbindlichen Abnahmekriterien sowie Texte, die Nutzer zu falschen
+Handlungen führen oder wesentliche Verträge falsch beschreiben. Kleine
+Präzisierungen von Kommentaren und Testnamen sind grundsätzlich optional, sofern
+sie kein solches Problem darstellen. Der Reviewer begründet den konkreten Schaden
+oder die verletzte Anforderung; eine Ungenauigkeit allein erzwingt kein `fail`.
+
+Die Sitzung führt eine Befundliste mit den Entscheidungen „behoben“, „begründet
+verworfen“ oder „zur Nacharbeit übernommen“. Für behobene Punkte nennt sie den
+Fix-Commit, für verworfene die fachliche Begründung, für übernommene das Issue und
+die dortige Kennung. Bei einem ungelösten Blocker bleibt das Ergebnis `fail`.
+Ein Issue ersetzt seine Behebung und Prüfung vor dem Merge nicht.
+
+Blocker und passende optionale Korrekturen werden in einer Korrekturrunde gesammelt
+behoben, selbst geprüft und gemeinsam gepusht. Nach einem bestandenen Review
+werden zusätzliche optionale Verbesserungen zur Nacharbeit übernommen, statt
+den geprüften Stand erneut umzubauen. Die Liste wird im finalen Review-Beleg
+veröffentlicht; spätere Arbeit bleibt über die verlinkten Issues nachvollziehbar.
+Zwischenberichte bleiben in der Sitzung, ihre Befunde dürfen nicht verloren gehen.
+
+## Gezielte Folgereviews und Grenze der Wiederholung
+
+Jeder neue Push braucht einen neuen unabhängigen Reviewer mit frischem Kontext.
+Er erhält zusätzlich die vorherige geprüfte Head-SHA, den vollständigen vorherigen
+Bericht samt Befundliste und Entscheidungen sowie den Diff seit diesem Stand.
+Der gesamte Diff zum Zielbranch bleibt zugänglich. Ein Folgereview prüft die Fixes,
+ihre Auswirkungen, mögliche Regressionen und die Befundentscheidungen. Er muss
+bereits geprüfte, unveränderte Teile nicht vollständig neu untersuchen. Bei
+größerem Umbau, unvollständigem Vorbericht oder neuen Hinweisen erweitert er den
+Prüfumfang ausdrücklich und begründet dies.
+
+Neue Funde werden ebenfalls erfasst. Übernommene optionale Befunde werden nicht
+ohne neue sachliche Gründe erneut als Blocker aufgerollt; echte neue Blocker
+verhindern weiter den Merge. Ein `pass` für den aktuellen Head bestätigt die
+Abnahme anhand des ersten Reviews und der geprüften Folgeänderungen.
+
+Nach zwei Korrekturrunden, die keinen bestandenen Review ergeben, startet die
+Sitzung keine weitere Runde automatisch. Sie bündelt die Ursachen: unklare
+Anforderung, unvollständige Prüfung, fehlerhafte Fixes oder falsche Einstufung.
+Sie dokumentiert im PR einen konkreten Korrektur- und Prüfplan, bevor sie
+fortsetzt. Benötigt dieser eine fachliche Entscheidung, holt sie diese beim
+Maintainer ein. Die Grenze ist keine Merge-Freigabe; ungelöste Blocker bleiben
+blockierend und ein unlösbarer Stand wird mit `fail` belegt.
+
+Ein Wechsel des Zielbranches verlangt einen neuen vollständigen Review und
+einen erneuten Push, damit `checks` für die neue Basis läuft. Neue Commits auf
+demselben Zielbranch ohne Konflikt verlangen keinen erneuten Review.
+
+## Thematische Arbeitspakete für kleine Nacharbeiten
+
+Kleine übernommene Befunde werden nach gemeinsamem Bereich, Korrekturziel und
+Prüfweg gebündelt. Vor dem Anlegen sucht die Sitzung passende offene Issues und
+prüft auf Duplikate. Sie ergänzt ein passendes Paket oder legt ein begrenztes
+Issue mit der [Vorlage für Review-Nacharbeiten](../../.github/ISSUE_TEMPLATE/review-follow-ups.md)
+an. Solche Pakete sind die Ausnahme vom Verbot neuer `track`-Sammelissues;
+ein dauerhaftes Issue für beliebige Verbesserungen ist kein Arbeitspaket.
+
+Jeder Punkt enthält eine Checkbox mit stabiler Kennung, Fundstelle, Problem und
+Beleg, gewünschter Korrektur sowie Ursprungs-PR und Review-Bezug. Das Issue nennt
+Ziel, Umfang und gemeinsame Abnahme; es muss ohne Rekonstruktion des Chats
+bearbeitbar und klein genug für einen überschaubaren PR sein. Befunde aus privaten
+Zwischenberichten werden im Issue mit bereinigten Belegen beschrieben. Kennungen
+werden nicht neu vergeben. Feature- und Release-Bezüge erhalten den passenden
+Meilenstein; unabhängige Wartung braucht keinen eigenen Meilenstein.
+
+Bei Arbeiten am betroffenen Bereich prüft die Sitzung passende offene Pakete und
+nimmt zusammengehörige Punkte mit, wenn sie zum Auftrag passen. Bei der Übernahme
+nennt sie im Issue die ausgewählten Kennungen und die verantwortliche Sitzung oder
+Person. Der umsetzende PR nennt Issue und Kennungen; nach dem Merge werden die
+Punkte mit PR, Merge-SHA und Prüfbeleg abgehakt. Teil-PRs verwenden kein `Closes`
+für das ganze Paket. Das Issue schließt erst, wenn alle Punkte behoben oder
+begründet verworfen sind. Bei Übergabe einer Aufgabe nennt die Sitzung verbleibende
+Pakete als konkrete Wartungsaufgaben; sie verschwinden nicht aus dem Abschluss.
+
+## Review-Beleg und GitHub-Status
+
+Die Sitzung veröffentlicht den Beleg als neuen PR-Kommentar unter dem Konto des
+Maintainers. Die erste Zeile lautet `Independent review`; unmittelbar darunter
+stehen ohne Leerzeile `Reviewer`, `Head` (volle SHA) und `Result` (`pass` oder
+`fail`). Nach einer Leerzeile nennt der Text Prüfumfang, bei Folgereviews den
+vorherigen geprüften Head und Bericht, alle Befundentscheidungen mit Fixes oder
+Issue-Verweisen, Prüfungen und Grenzen. Ein Kommentar nennt einen echten Reviewer;
+die bearbeitende Sitzung darf sich nicht selbst als unabhängigen Reviewer ausgeben.
+
+Der Workflow `.github/workflows/review-status.yml` reagiert auf neu erstellte
+Kommentare mit `author_association OWNER`, die mit `Independent review` beginnen.
+Er führt `scripts/review-status.mjs` aus dem Standardbranch aus, nie Code des PRs,
+mit Leserechten und `statuses: write`. Nur der Kopfblock zählt: `success` entsteht
+bei einem gültigen `pass` für genau den aktuellen Head; sonst entsteht `failure`,
+auch bei unlesbarem Beleg oder älterem Head. Bearbeitete Kommentare lösen nichts
+aus. Ein neuer Review wird deshalb neu gepostet. Das bestehende Format reicht
+auch für gezielte Folgereviews; Actions und Ruleset brauchen dafür keine Änderung.
+
+## Merge und technische Absicherung
+
+Das Ruleset für `main` verlangt PR sowie `checks`, `pr-text` und `review`, ohne
+strikte Aktualität zur Basis. Gemergt wird per Squash über GitHub, sobald alle
+Prüfungen für den aktuellen Head grün sind, der Beleg `pass` lautet, keine Blocker
+verbleiben und die Befundentscheidungen nachvollziehbar sind. Auf Feature-Branches
+gelten dieselben Schritte als Arbeitsregel; GitHub erzwingt sie dort nicht.
+
+PR-Titel und PR-Text werden Betreff und Text des Squash-Commits. Titel sind deshalb
+Conventional Commits, auch bei Reverts (`revert: …`). `pr-text` prüft außerdem
+Umschreibungen von Umlauten, doppelt kodierte Zeichen und Sitzungslinks.
+Die lokalen Prüfungen, Pre-Push-Hooks und CI bleiben gemäß `AGENTS.md` Pflicht;
+ein gezielter Folgereview ändert diese Prüfketten nicht.
+
+Der Review-Status hängt am Head, nicht an der Basis. Ein konfliktfreier Merge
+anderer PRs macht ihn nicht ungültig. Das Risiko zweier einzeln grüner PRs,
+die zusammen brechen, trägt der volle CI-Lauf bei jedem Push auf `main`;
+ein solcher Fehler wird sofort per Fix oder Revert behoben.
+
+Der Kommentar ist eine Attestation der Sitzung, kein kryptografischer Beweis der
+Unabhängigkeit. Pflicht-Checks erkennt GitHub nur am Namen. Ein PR kann über eigene
+Workflows Jobs mit den erforderlichen Namen grün melden. Deshalb prüft der
+Maintainer Diffs unter `.github/workflows/` und in von Workflows ausgeführten
+Skripten vor dem Merge selbst. Workflows aus Forks laufen erst nach Freigabe;
+dafür gilt die Actions-Einstellung „Require approval for all external contributors“.
