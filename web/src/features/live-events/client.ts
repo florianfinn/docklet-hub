@@ -73,10 +73,6 @@ export function connectLiveEvents(client: QueryClient, deps: LiveClientDeps = {}
       case "session-expired": reportUnauthorized(); stop(); break;
       case "heartbeat": break;
       case "snapshot": {
-        const ids = new Set(event.hosts.map((host) => host.hostId));
-        for (const entry of client.getQueryData<HostOverview[]>(queryKeys.containers.overview()) ?? []) {
-          if (entry.host.state === "registered" && !ids.has(entry.host.id)) remove(entry.host.id);
-        }
         updateState(() => ({ transport: true, hosts: Object.fromEntries(event.hosts.map((host) => [host.hostId, host.status])) }));
         for (const host of event.hosts) { removed.delete(host.hostId); if (host.status === "connected") schedule(host.hostId); }
         void client.invalidateQueries({ queryKey: queryKeys.hosts.list(), exact: true });

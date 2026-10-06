@@ -1,4 +1,5 @@
 import { monitorEventLineSchema, readNdjson, type ContainerEntry, type LiveAction, type LiveEvent, type LiveStatus } from "contract";
+import { createRecreateBatch } from "./recreate.js";
 
 export type LiveHost = { id: string; agentUrl: string; state: "pending" | "registered" };
 export type RefreshTarget = { containerId: string } | { project: string } | { host: true };
@@ -8,13 +9,14 @@ export type LiveEvents = {
   reconcile: (hosts: readonly LiveHost[]) => Promise<void>;
   removeHost: (hostId: string) => void;
   disconnectHost: (hostId: string) => void;
-  refresh: (hostId: string, target: RefreshTarget) => Promise<ContainerEntry[]>;
+  refresh: (hostId: string, target: RefreshTarget, options?: { resync?: boolean }) => Promise<ContainerEntry[]>;
   stop: () => Promise<void>;
 };
 export type LiveEventsDeps = {
   open: (host: LiveHost, signal: AbortSignal) => Promise<Response>;
   read: (hostId: string) => Promise<ContainerEntry[]>;
   resync: (hostId: string) => Promise<void>;
+  onError?: (error: unknown) => void;
   wait?: (ms: number, signal: AbortSignal) => Promise<void>;
   now?: () => number;
 };
@@ -84,6 +86,16 @@ export function createLiveEvents(deps: LiveEventsDeps): LiveEvents {
       entry.abort.signal.addEventListener("abort", abort, { once: true });
       let response: Response | undefined;
       let connectedAt: number | null = null;
+      const recreate = createRecreateBatch({
+        signal: attempt.signal, wait,
+        resync: () => deps.resync(entry.host.id),
+        changed: () => {
+          if (active(entry)) emit({ kind: "changed", hostId: entry.host.id, containerIds: [], action: "recreate" });
+        },
+        onError: (error) => {
+          if (active(entry) && !attempt.signal.aborted) { deps.onError?.(error); attempt.abort(); }
+        }
+      });
       try {
         response = await deps.open(entry.host, attempt.signal);
         if (!response.ok || !response.body) throw new Error("monitor-stream-unavailable");
@@ -97,18 +109,20 @@ export function createLiveEvents(deps: LiveEventsDeps): LiveEvents {
         connectedAt = now();
         status(entry, "connected");
         emit({ kind: "changed", hostId: entry.host.id, containerIds: [], action: "refresh" });
-        await readNdjson(response.body, { signal: attempt.signal }, async (raw) => {
+        await readNdjson(response.body, { signal: attempt.signal }, (raw) => {
           const parsed = monitorEventLineSchema.safeParse(raw);
           if (!parsed.success || !parsed.data.containerId) return;
           const action = monitorAction(parsed.data.action);
           if (!action) return;
-          if (action === "recreate") await deps.resync(entry.host.id);
+          if (action === "recreate") { recreate.schedule(); return; }
           if (active(entry) && !attempt.signal.aborted) emit({ kind: "changed", hostId: entry.host.id, containerIds: [parsed.data.containerId], action });
         });
-      } catch {
-        // A failed attempt is represented by status; credentials and remote errors never enter the stream.
+        if (active(entry) && !attempt.signal.aborted) throw new Error("monitor-stream-ended");
+      } catch (error) {
+        if (active(entry) && !attempt.signal.aborted) deps.onError?.(error);
       } finally {
         attempt.abort();
+        await recreate.settled();
         if (response?.body && !response.body.locked) await response.body.cancel().catch(() => undefined);
         entry.abort.signal.removeEventListener("abort", abort);
       }
@@ -156,14 +170,14 @@ export function createLiveEvents(deps: LiveEventsDeps): LiveEvents {
     },
     removeHost,
     disconnectHost: (hostId) => { subscriptions.get(hostId)?.attempt?.abort(); },
-    refresh: async (hostId, target) => {
+    refresh: async (hostId, target, options) => {
       if (stopped) throw new Error("live-events-stopped");
       const entry = subscriptions.get(hostId);
       if (!entry || !active(entry)) throw new Error("host-unknown");
       // A follow-up read must start after the action, not reuse a pre-action snapshot.
       await reads.get(hostId)?.catch(() => undefined);
       if (!active(entry)) throw new Error("host-unknown");
-      await deps.resync(hostId);
+      if (options?.resync !== false) await deps.resync(hostId);
       if (!active(entry)) throw new Error("host-unknown");
       const containers = await read(hostId);
       const selected = containers.filter((container) =>

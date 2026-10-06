@@ -55,9 +55,11 @@ test("events refresh only the affected host and metric keys, coalescing a burst"
   } finally { stop(); client.clear(); }
 });
 
-test("web reconnect marks stale, rereads a snapshot, and drops removed hosts without replay", async () => {
+test("web reconnect preserves hosts absent from a monitor snapshot and removes only explicit deletions", async () => {
   const client = createQueryClient(); const stream = streamDouble(); const calls: string[] = [];
   client.setQueryData(queryKeys.containers.overview(), [overview("first"), overview("removed")]);
+  client.setQueryData(queryKeys.hosts.list(), [overview("first").host, overview("removed").host]);
+  client.setQueryData(queryKeys.hosts.containers("removed"), { cached: true });
   const stop = connectLiveEvents(client, { read: stream.read, retryMs: () => 5, overview: async (id) => { calls.push(id); return overview(id); } });
   try {
     stream.send({ kind: "status", hostId: "first", status: "connected" });
@@ -65,6 +67,11 @@ test("web reconnect marks stale, rereads a snapshot, and drops removed hosts wit
     assert.equal(client.getQueryData<LiveState>(queryKeys.hosts.live())?.transport, false);
     stream.send({ kind: "snapshot", hosts: [{ hostId: "first", status: "connected" }] });
     await waitFor(() => calls.length === 1);
+    assert.deepEqual(client.getQueryData<HostOverview[]>(queryKeys.containers.overview())?.map((entry) => entry.host.id), ["first", "removed"]);
+    assert.deepEqual(client.getQueryData<HostOverview["host"][]>(queryKeys.hosts.list())?.map((host) => host.id), ["first", "removed"]);
+    assert.deepEqual(client.getQueryData(queryKeys.hosts.containers("removed")), { cached: true });
+    assert.equal(client.getQueryData<LiveState>(queryKeys.hosts.live())?.hosts.removed, undefined);
+    stream.send({ kind: "removed", hostId: "removed" });
     assert.deepEqual(client.getQueryData<HostOverview[]>(queryKeys.containers.overview())?.map((entry) => entry.host.id), ["first"]);
     assert.equal(client.getQueryData<LiveState>(queryKeys.hosts.live())?.transport, true);
     assert.equal(stream.signals[0].aborted, true);
@@ -99,9 +106,10 @@ test("disconnected readings retain host load, container samples, and overview ro
 
 test("happy-dom renders stale state and preserves visible measurements", async () => {
   const entry = overview("first");
-  const tree = await renderInDom(<AppLanguageProvider><LiveStatusLabel hostId="first" /><RowUsage hostId="first" container={entry.loose[0]} /><MeasurementStale hostId="first" sampledAt={new Date().toISOString()} /></AppLanguageProvider>);
+  const tree = await renderInDom(<AppLanguageProvider><LiveStatusLabel hostId="first" state="registered" /><LiveStatusLabel hostId="pending" state="pending" /><RowUsage hostId="first" container={entry.loose[0]} /><MeasurementStale hostId="first" sampledAt={new Date().toISOString()} /></AppLanguageProvider>);
   try {
     assert.equal(tree.container.querySelector('[data-testid="live-stale-first"]') !== null, true);
+    assert.equal(tree.container.querySelector('[data-testid="live-stale-pending"]') !== null, false);
     assert.equal(tree.container.querySelector('[data-testid="measurement-stale"]') !== null, true);
     assert.equal(tree.container.textContent?.includes("23"), true);
     await act(async () => { tree.queryClient.setQueryData(queryKeys.hosts.live(), { transport: true, hosts: { first: "connected" } }); });
@@ -129,7 +137,7 @@ test("NDJSON transport validates hints, supports abort, and reports an HTTP 401"
   } finally { globalThis.fetch = original; abort.abort(); unsubscribe(); }
 });
 
- test("a hint during the initial full overview is reread after that request finishes", async () => {
+test("a hint during the initial full overview is reread after that request finishes", async () => {
   const client = createQueryClient(); const stream = streamDouble(); const calls: string[] = [];
   const stop = connectLiveEvents(client, { read: stream.read, overview: async (id) => { calls.push(id); return overview(id); } });
   try {

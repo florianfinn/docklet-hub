@@ -2,15 +2,18 @@ import { probeAgent, type HostAccess } from "../hosts/index.js";
 import { fetchContainers, REGISTRY_SYNC_ACTOR } from "../containers/index.js";
 import { agentStream } from "../../platform/agent-transport/protocol.js";
 import { createLiveEvents, type LiveEvents } from "./service.js";
+import { createLiveErrorReporter, type LiveRuntimeError } from "./error-reporting.js";
 
 export type RunningLiveEvents = LiveEvents & { start: () => void };
 export function startLiveEvents(options: {
   hosts: HostAccess;
   resync: (hostId: string) => Promise<void>;
-  onError: () => void;
+  onError: (error: LiveRuntimeError) => void;
   fetchImpl?: typeof fetch;
 }): RunningLiveEvents {
+  const report = createLiveErrorReporter(options.onError);
   const live = createLiveEvents({
+    onError: (error) => report("monitor", error),
     open: async (host, signal) => {
       const record = await options.hosts.find(host.id);
       if (!record) throw new Error("host-unknown");
@@ -42,7 +45,7 @@ export function startLiveEvents(options: {
         }));
       }
     }
-    catch { options.onError(); }
+    catch (error) { if (!stopped) report("reconcile", error); }
     if (!stopped) { timer = setTimeout(() => { running = tick(); }, 5_000); timer.unref(); }
   };
   return {

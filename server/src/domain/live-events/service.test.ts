@@ -30,6 +30,7 @@ function harness(overrides: Partial<LiveEventsDeps> = {}) {
     read: async () => { reads++; return [CONTAINER]; },
     resync: async () => { syncs++; },
     wait: async (ms, signal) => {
+      if (ms === 150) return;
       delays.push(ms);
       await new Promise<void>((resolve) => {
         const done = () => { signal.removeEventListener("abort", done); resolve(); };
@@ -151,7 +152,7 @@ test("snapshot failure cancels an unread body and never declares the host connec
   await h.live.stop();
 });
 
- test("action follow-up waits for an older in-flight snapshot before starting a new read", async () => {
+test("action follow-up waits for an older in-flight snapshot before starting a new read", async () => {
   let finish = () => undefined as void; let reads = 0;
   const h = harness({ read: async () => {
     reads++;
@@ -165,4 +166,90 @@ test("snapshot failure cancels an unread body and never declares the host connec
     assert.equal((await refreshed)[0].running, false);
     assert.equal(reads, 2);
   } finally { finish(); await h.live.stop(); }
+});
+
+test("recreate bursts batch registry syncs without blocking later monitor events", async () => {
+  const windows: number[] = [];
+  let finishWindow = () => undefined as void;
+  let finishSync = () => undefined as void;
+  let syncs = 0;
+  const h = harness({
+    wait: async (ms, signal) => {
+      windows.push(ms);
+      await new Promise<void>((resolve) => {
+        const done = () => { signal.removeEventListener("abort", done); resolve(); };
+        finishWindow = done;
+        signal.addEventListener("abort", done, { once: true });
+      });
+    },
+    resync: async () => {
+      syncs++;
+      if (syncs === 2) await new Promise<void>((resolve) => { finishSync = resolve; });
+    }
+  });
+  try {
+    await h.live.reconcile([HOST]);
+    await until(() => h.events.some((event) => event?.kind === "status" && event.status === "connected"));
+    for (let i = 0; i < 20; i++) h.send({ action: "create", containerId: `new-${i}` });
+    h.send({ action: "stop", containerId: "a" });
+    await until(() => h.events.some((event) => event?.kind === "changed" && event.action === "stop"));
+    assert.equal(syncs, 1);
+    assert.deepEqual(windows, [150]);
+    finishWindow(); await until(() => syncs === 2);
+    for (let i = 0; i < 20; i++) h.send({ action: "destroy", containerId: `old-${i}` });
+    h.send({ action: "start", containerId: "a" });
+    await until(() => h.events.some((event) => event?.kind === "changed" && event.action === "start"));
+    assert.equal(syncs, 2);
+    finishSync(); await until(() => windows.length === 2);
+    finishWindow(); await until(() => syncs === 3);
+    await until(() => h.events.filter((event) => event?.kind === "changed" && event.action === "recreate").length === 2);
+    assert.deepEqual(h.events.filter((event) => event?.kind === "changed" && event.action === "recreate"), [
+      { kind: "changed", hostId: HOST.id, containerIds: [], action: "recreate" },
+      { kind: "changed", hostId: HOST.id, containerIds: [], action: "recreate" }
+    ]);
+  } finally { finishSync(); await h.live.stop(); }
+});
+
+test("shutdown cancels a pending recreate window without starting a registry sync", async () => {
+  let windows = 0;
+  const h = harness({ wait: async (_ms, signal) => {
+    windows++;
+    await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
+  } });
+  await h.live.reconcile([HOST]); await until(() => h.counts().reads === 1);
+  h.send({ action: "create", containerId: "new" });
+  await until(() => windows === 1);
+  await h.live.stop();
+  assert.equal(h.counts().syncs, 1);
+});
+
+test("inventory refresh after a successful cycle reads and emits without another registry sync", async () => {
+  const h = harness();
+  try {
+    await h.live.reconcile([HOST]); await until(() => h.counts().reads === 1);
+    assert.deepEqual(await h.live.refresh(HOST.id, { host: true }, { resync: false }), [CONTAINER]);
+    assert.equal(h.counts().syncs, 1);
+    assert.equal(h.counts().reads, 2);
+    assert.deepEqual(h.events.at(-1), { kind: "changed", hostId: HOST.id, containerIds: ["a"], action: "refresh" });
+    await h.live.refresh(HOST.id, { host: true });
+    assert.equal(h.counts().syncs, 2);
+  } finally { await h.live.stop(); }
+});
+
+test("a failed asynchronous recreate sync reports its cause and disconnects the monitor", async () => {
+  const failure = new Error("synthetic-sync-failure");
+  const reported: unknown[] = [];
+  let syncs = 0;
+  const h = harness({
+    resync: async () => { if (++syncs === 2) throw failure; },
+    onError: (error) => { reported.push(error); }
+  });
+  try {
+    await h.live.reconcile([HOST]); await until(() => h.counts().reads === 1);
+    h.send({ action: "create", containerId: "new" });
+    await until(() => h.delays.length === 1);
+    assert.deepEqual(reported, [failure]);
+    assert.equal(h.signals[0].aborted, true);
+    assert.equal(h.events.some((event) => event?.kind === "status" && event.status === "disconnected"), true);
+  } finally { await h.live.stop(); }
 });

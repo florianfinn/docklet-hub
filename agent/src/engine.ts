@@ -607,10 +607,8 @@ export class DockerEngine {
     return this.json<EngineInfo>({ method: "GET", path: "/info" });
   }
 
-  // Continuous stream for monitoring (S13). The agent does not pass on raw
-  // Docker events: only the four state changes and only the container id cross
-  // the agent boundary. Names, attributes and labels stay in the engine
-  // response and thus on the host.
+  // Monitoring forwards lifecycle, health, create and destroy actions with
+  // container IDs. Docker names, attributes and labels stay on the host.
   async monitorEvents(
     onEvent: (event: DockerMonitorEvent) => void,
     signal?: AbortSignal

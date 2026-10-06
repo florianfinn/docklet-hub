@@ -37,3 +37,66 @@ test("runtime opens exactly one monitor as system:monitor and reads inventory as
   } finally { await live.stop(); }
   assert.equal(cancelled, true);
 });
+
+test("runtime reports reconciliation failures with safe causes and throttles repeated ticks", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 100_000 });
+  const errors: unknown[] = [];
+  let lists = 0;
+  const live = startLiveEvents({
+    hosts: { list: async () => { lists++; throw new SyntaxError("synthetic-secret"); } } as unknown as HostAccess,
+    resync: async () => undefined,
+    onError: (error) => { errors.push(error); }
+  });
+  try {
+    live.start(); await until(() => lists === 1 && errors.length === 1);
+    for (let i = 0; i < 6; i++) {
+      context.mock.timers.tick(5_000);
+      await until(() => lists === i + 2);
+    }
+    assert.deepEqual(errors, [
+      { operation: "reconcile", reason: "SyntaxError", suppressed: 0 },
+      { operation: "reconcile", reason: "SyntaxError", suppressed: 5 }
+    ]);
+  } finally { await live.stop(); }
+});
+
+test("a failed health probe aborts an otherwise silent monitor and reconnects", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 100_000 });
+  const host = { id: "host-1", agentUrl: "http://agent.test:8099", state: "registered" } as HostRecord;
+  const signals: AbortSignal[] = [];
+  let probes = 0;
+  let healthy = true;
+  const events: (LiveEvent | null)[] = [];
+  const live = startLiveEvents({
+    hosts: { list: async () => [host], find: async () => host, connect: async () => ({ baseUrl: host.agentUrl, secret: "synthetic-secret" }) } as HostAccess,
+    resync: async () => undefined,
+    onError: () => assert.fail("Unexpected runtime failure"),
+    fetchImpl: (async (url, init) => {
+      const path = new URL(String(url)).pathname;
+      if (path === "/monitor-events") {
+        signals.push(init!.signal!);
+        return new Response(new ReadableStream());
+      }
+      if (path === "/containers") return Response.json({ containers: [] });
+      if (path === "/health") {
+        probes++;
+        return healthy ? Response.json({ ok: true }) : new Response(null, { status: 503 });
+      }
+      throw new Error("Unexpected path");
+    }) as typeof fetch
+  });
+  live.subscribe((event) => events.push(event));
+  try {
+    live.start();
+    await until(() => events.some((event) => event?.kind === "status" && event.status === "connected") && probes === 1);
+    for (let i = 0; i < 2; i++) { context.mock.timers.tick(5_000); await new Promise<void>((resolve) => setImmediate(resolve)); }
+    assert.equal(signals[0].aborted, false);
+    healthy = false;
+    context.mock.timers.tick(5_000);
+    await until(() => signals[0].aborted && events.some((event) => event?.kind === "status" && event.status === "disconnected"));
+    assert.equal(probes, 2);
+    healthy = true;
+    context.mock.timers.tick(1_000);
+    await until(() => signals.length === 2);
+  } finally { await live.stop(); }
+});

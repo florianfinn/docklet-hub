@@ -66,7 +66,7 @@ export function HostContainers({ entry, filter, query, slots }: HostContainersPr
         <HostStatusDot status={entry.host.status} className="size-[9px]" />
         <span className="font-mono text-sm font-medium">{entry.host.name}</span>
         <HostStatusBadge status={entry.host.status} />
-        <LiveStatusLabel hostId={entry.host.id} />
+        <LiveStatusLabel hostId={entry.host.id} state={entry.host.state} />
         {answered ? (
           <span className="flex items-center gap-1.5 font-mono text-[11.5px] text-subtle-foreground">
             <span>{t("hostContainersCount", { count: total })}</span>
