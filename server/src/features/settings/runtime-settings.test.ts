@@ -62,7 +62,7 @@ test("beide Schreibwege speichern und lesen die gewählten Werte samt quittierte
   try {
     assert.equal((await f.call("PUT", "/settings/runtime", { runtime: { applyComposeDefinition: false } })).status, 200);
     assert.equal(await readApplyComposeDefinition(f.pool), false);
-    const config = { ...DEFAULT_SELF_HEALING_CONFIG, enabled: false, attempts: 1, retryDelaysSeconds: [20] };
+    const config = { ...DEFAULT_SELF_HEALING_CONFIG, enabled: false, attempts: 1, retryDelaysSeconds: [20], maintenanceDurationSeconds: null };
     const response = await f.call("PUT", "/settings/self-healing", { selfHealing: { config } });
     assert.equal(response.status, 200);
     const result = settingsSchema.parse((await f.call("GET")).body);

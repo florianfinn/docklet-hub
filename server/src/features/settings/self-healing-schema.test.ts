@@ -20,9 +20,11 @@ test("jede Konfigurationsgrenze akzeptiert beide Endpunkte und lehnt Werte daneb
   for (const key of ["stabilityWindowSeconds", "maintenanceDurationSeconds"] as const) {
     const { min, max } = SELF_HEALING_LIMITS[key];
     for (const value of [min, max]) assert.equal(selfHealingConfigSchema.safeParse({ ...defaults, [key]: value }).success, true);
-    for (const value of [min - 1, max + 1, min + 0.5, "60", null, Infinity, NaN])
+    for (const value of [min - 1, max + 1, min + 0.5, "60", undefined, Infinity, NaN])
       assert.equal(selfHealingConfigSchema.safeParse({ ...defaults, [key]: value }).success, false, `${key}: ${String(value)}`);
   }
+  assert.equal(selfHealingConfigSchema.safeParse({ ...defaults, maintenanceDurationSeconds: null }).success, true);
+  assert.equal(selfHealingConfigSchema.safeParse({ ...defaults, stabilityWindowSeconds: null }).success, false);
   for (const attempts of [1, 10]) assert.equal(selfHealingConfigSchema.safeParse({ ...defaults, attempts,
     retryDelaysSeconds: Array(attempts).fill(1) }).success, true);
   for (const attempts of [0, 11, 1.5, "3", null])

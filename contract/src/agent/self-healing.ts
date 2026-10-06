@@ -16,7 +16,7 @@ export const selfHealingConfigSchema = z.strictObject({
   attempts: integer(SELF_HEALING_LIMITS.attempts),
   retryDelaysSeconds: z.array(integer(SELF_HEALING_LIMITS.retryDelaySeconds)).check(z.minLength(1), z.maxLength(10)),
   stabilityWindowSeconds: integer(SELF_HEALING_LIMITS.stabilityWindowSeconds),
-  maintenanceDurationSeconds: integer(SELF_HEALING_LIMITS.maintenanceDurationSeconds)
+  maintenanceDurationSeconds: z.nullable(integer(SELF_HEALING_LIMITS.maintenanceDurationSeconds))
 }).check(z.refine((value) => value.retryDelaysSeconds.length === value.attempts, {
   path: ["retryDelaysSeconds"], message: "Expected one delay per attempt"
 }));

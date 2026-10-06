@@ -71,7 +71,7 @@ export const AGENT_CONTRACT = {
     composeFields: fieldPresence(registryComposeSchema.shape),
     composeOrigins: registryOriginSchema.options
   },
-  selfHealing: { fields: fieldPresence(selfHealingConfigSchema.shape), limits: SELF_HEALING_LIMITS },
+  selfHealing: { fields: fieldPresence(selfHealingConfigSchema.shape), limits: SELF_HEALING_LIMITS, unlimitedMaintenanceDuration: null },
   ndjsonKinds: NDJSON_KINDS,
   errors: {
     sharedHttp: SHARED_HTTP_ERRORS,

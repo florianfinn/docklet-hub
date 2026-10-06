@@ -1,4 +1,4 @@
-import { probeAgent, type HostAccess } from "../hosts/index.js";
+import { probeAgent, type HostAccess, type HostRecord } from "../hosts/index.js";
 import { fetchContainers, REGISTRY_SYNC_ACTOR } from "../containers/index.js";
 import { agentStream } from "../../platform/agent-transport/protocol.js";
 import { createLiveEvents, type LiveEvents } from "./service.js";
@@ -9,6 +9,8 @@ export function startLiveEvents(options: {
   hosts: HostAccess;
   resync: (hostId: string) => Promise<void>;
   onError: (error: LiveRuntimeError) => void;
+  onConnected?: (hostId: string) => Promise<void>;
+  onHostReachable?: (host: HostRecord) => Promise<void>;
   fetchImpl?: typeof fetch;
 }): RunningLiveEvents {
   const report = createLiveErrorReporter(options.onError);
@@ -22,6 +24,7 @@ export function startLiveEvents(options: {
       });
     },
     resync: options.resync,
+    onConnected: options.onConnected,
     read: async (hostId) => {
       const record = await options.hosts.find(hostId);
       if (!record) throw new Error("host-unknown");
@@ -42,6 +45,7 @@ export function startLiveEvents(options: {
         await Promise.all(hosts.filter((host) => host.state === "registered").map(async (host) => {
           const health = await probeAgent(host.agentUrl, { timeoutMs: 3_000, fetchImpl: options.fetchImpl });
           if (!health.reachable) live.disconnectHost(host.id);
+          else await options.onHostReachable?.(host).catch((error: unknown) => report("reconcile", error));
         }));
       }
     }

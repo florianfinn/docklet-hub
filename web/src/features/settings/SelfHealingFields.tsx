@@ -5,7 +5,7 @@ import { Input } from "../../platform/ui/shadcn/input";
 import { Label } from "../../platform/ui/shadcn/label";
 import { Switch } from "../../platform/ui/shadcn/switch";
 
-const displayNumber = (value: number) => Number.isFinite(value) ? value : "";
+const displayNumber = (value: number | null) => value !== null && Number.isFinite(value) ? value : "";
 
 export function SelfHealingFields({ value, onChange, editable, busy, onSave }: {
   value: SelfHealingConfig; onChange: (value: SelfHealingConfig) => void;
@@ -48,11 +48,18 @@ export function SelfHealingFields({ value, onChange, editable, busy, onSave }: {
               retryDelaysSeconds: value.retryDelaysSeconds.map((entry, at) => at === index ? event.target.valueAsNumber : entry) })} />
         </div>
       ))}
+      <div className="flex items-center justify-between gap-3">
+        <Label htmlFor="self-healing-maintenance-unlimited">{t("settingsHealingMaintenanceUnlimited")}</Label>
+        <Switch id="self-healing-maintenance-unlimited" checked={value.maintenanceDurationSeconds === null} disabled={disabled}
+          onCheckedChange={(unlimited) => onChange({ ...value,
+            maintenanceDurationSeconds: unlimited ? null : DEFAULT_SELF_HEALING_CONFIG.maintenanceDurationSeconds })} />
+      </div>
       {numberFields.map(({ key, label, limits }) => (
         <div className="space-y-2" key={key}>
           <Label htmlFor={`self-healing-${key}`}>{t(label)}</Label>
           <Input id={`self-healing-${key}`} type="number" step={1} min={limits.min} max={limits.max}
-            value={displayNumber(value[key])} disabled={disabled} aria-describedby="self-healing-limits" required
+            value={displayNumber(value[key])} disabled={disabled || (key === "maintenanceDurationSeconds" && value[key] === null)}
+            aria-describedby="self-healing-limits" required={key !== "maintenanceDurationSeconds" || value[key] !== null}
             onChange={(event) => onChange({ ...value, [key]: event.target.valueAsNumber })} />
         </div>
       ))}

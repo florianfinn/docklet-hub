@@ -133,3 +133,30 @@ test("ein Speicherfehler bleibt sichtbar und der Entwurf kann erneut abgesendet 
     assert.equal(input("self-healing-delay-0").value, "15"); assert.equal(input("self-healing-delay-0").disabled, false);
   } finally { await cleanup(mounted); server.restore(); }
 });
+
+
+test("unbegrenzte Wartung lässt sich speichern, neu laden und auf eine Stunde zurückstellen", async () => {
+  const server = stub();
+  let mounted = await renderInDom(<AppLanguageProvider><RuntimeSettingsPanel role="admin" /></AppLanguageProvider>);
+  try {
+    await settleQueries(mounted.queryClient);
+    await React.act(async () => { button("self-healing-maintenance-unlimited").click(); });
+    assert.equal(input("self-healing-maintenanceDurationSeconds").disabled, true);
+    assert.equal(input("self-healing-maintenanceDurationSeconds").required, false);
+    await submit(document.querySelectorAll("form")[1]);
+    const sent = server.calls.find((call) => call.path.endsWith("/self-healing") && call.method === "PUT")?.body as
+      { selfHealing: { config: { maintenanceDurationSeconds: number | null } } };
+    assert.equal(sent.selfHealing.config.maintenanceDurationSeconds, null);
+    await cleanup(mounted);
+    mounted = await renderInDom(<AppLanguageProvider><RuntimeSettingsPanel role="admin" /></AppLanguageProvider>);
+    await settleQueries(mounted.queryClient);
+    assert.equal(button("self-healing-maintenance-unlimited").getAttribute("aria-checked"), "true");
+    assert.equal(input("self-healing-maintenanceDurationSeconds").disabled, true);
+    await React.act(async () => { button("self-healing-maintenance-unlimited").click(); });
+    assert.equal(input("self-healing-maintenanceDurationSeconds").value, "3600");
+    assert.equal(input("self-healing-maintenanceDurationSeconds").disabled, false);
+    await submit(document.querySelectorAll("form")[1]);
+    assert.equal((server.calls.filter((call) => call.path.endsWith("/self-healing") && call.method === "PUT").at(-1)?.body as
+      typeof sent).selfHealing.config.maintenanceDurationSeconds, 3600);
+  } finally { await cleanup(mounted); server.restore(); }
+});

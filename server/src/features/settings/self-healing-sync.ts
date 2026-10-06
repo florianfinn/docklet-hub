@@ -13,7 +13,6 @@ export type SelfHealingSyncDeps = {
 export function createSelfHealingSync(deps: SelfHealingSyncDeps) {
   const queues = new Map<string, Promise<void>>();
   const delivered = new Map<string, number>();
-  const reachable = new Map<string, boolean>();
 
   const syncHost = (host: HostRecord, force = false): Promise<void> => {
     const previous = queues.get(host.id) ?? Promise.resolve();
@@ -36,15 +35,10 @@ export function createSelfHealingSync(deps: SelfHealingSyncDeps) {
 
   return {
     syncHost,
-    observeHost: async (host: HostRecord, isReachable: boolean): Promise<void> => {
-      const reconnected = reachable.get(host.id) !== true;
-      reachable.set(host.id, isReachable);
-      if (isReachable) await syncHost(host, reconnected);
-    },
     syncConnected: async (): Promise<void> => {
       const hosts = await deps.listHosts();
-      // Failed requests are recorded and retried after the next successful health probe.
-      await Promise.all(hosts.filter((host) => host.state !== "pending" && reachable.get(host.id) !== false)
+      // The live connection and its health probe retry failed deliveries.
+      await Promise.all(hosts.filter((host) => host.state !== "pending")
         .map((host) => syncHost(host)));
     }
   };

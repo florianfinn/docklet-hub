@@ -57,7 +57,7 @@ export const FEATURES: readonly RegisterFeature[] = [
   // imports nothing above `domain/`, and `features/metrics/container-load.ts` is
   // not there. This list is the app, where two surfaces are put together; the
   // load is the half of the feature `metrics` (#283) that `hosts` shows.
-  (router, options) => registerHostRoutes(router, { ...options, hostLoad, onHostReachability: options.selfHealingSync?.observeHost }),
+  (router, options) => registerHostRoutes(router, { ...options, hostLoad }),
   // The feature `metrics`: the stats of one container. Kept apart from the host
   // routes although the path starts with `/hosts`: the cut follows what a
   // route reads, not its prefix. It took the place of the group

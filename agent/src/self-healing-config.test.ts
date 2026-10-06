@@ -26,7 +26,7 @@ test("ohne erste Übertragung gelten die Werkswerte; Leser geben keine veränder
 test("gespeicherte Werte überleben einen Neustart mit Modus 0600 und ohne temporäre Dateien", () => {
   const f = fixture();
   try {
-    const config = { ...DEFAULT_SELF_HEALING_CONFIG, enabled: false, attempts: 2, retryDelaysSeconds: [5, 20] };
+    const config = { ...DEFAULT_SELF_HEALING_CONFIG, enabled: false, attempts: 2, retryDelaysSeconds: [5, 20], maintenanceDurationSeconds: null };
     const store = new SelfHealingConfigStore(f.file);
     assert.deepEqual(store.write(config), config);
     assert.deepEqual(new SelfHealingConfigStore(f.file).read(), config);

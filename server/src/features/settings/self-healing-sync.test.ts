@@ -21,9 +21,9 @@ function fixture() {
 
 test("Verbindung überträgt Werkswerte; unveränderte Sonden schonen Audit und Änderung überträgt erneut", async () => {
   const f = fixture();
-  await f.sync.observeHost(host, true);
+  await f.sync.syncHost(host);
   assert.deepEqual(f.sent, [{ hostId: host.id, config: DEFAULT_SELF_HEALING_CONFIG }]);
-  await f.sync.observeHost(host, true);
+  await f.sync.syncHost(host);
   assert.equal(f.sent.length, 1);
   f.change();
   await f.sync.syncConnected();
@@ -32,27 +32,23 @@ test("Verbindung überträgt Werkswerte; unveränderte Sonden schonen Audit und 
   assert.equal(f.recorded[1].revision, 2);
 });
 
-test("offline Host erhält Änderungen erst bei Wiederverbindung und auch unveränderte Werte erneut", async () => {
+test("Live-Wiederverbindung überträgt auch eine unveränderte Revision erneut", async () => {
   const f = fixture();
-  await f.sync.observeHost(host, true);
-  await f.sync.observeHost(host, false);
-  f.change();
-  await f.sync.syncConnected();
+  await f.sync.syncHost(host, true);
+  await f.sync.syncHost(host);
   assert.equal(f.sent.length, 1);
-  await f.sync.observeHost(host, true);
-  assert.equal(f.sent[1].config.enabled, false);
-  await f.sync.observeHost(host, false);
-  await f.sync.observeHost(host, true);
-  assert.equal(f.sent.length, 3);
+  await f.sync.syncHost(host, true);
+  assert.equal(f.sent.length, 2);
+  assert.deepEqual(f.sent[1].config, DEFAULT_SELF_HEALING_CONFIG);
 });
 
 test("fehlgeschlagene Übertragung wird protokolliert und bei nächster erfolgreicher Sonde wiederholt", async () => {
   const f = fixture();
   f.offline(true);
-  await f.sync.observeHost(host, true);
+  await f.sync.syncHost(host);
   assert.equal(f.recorded[0].status, "failed");
   f.offline(false);
-  await f.sync.observeHost(host, true);
+  await f.sync.syncHost(host);
   assert.equal(f.recorded[1].status, "synced");
   assert.equal(f.sent.length, 1);
 });

@@ -141,10 +141,9 @@ async function main(): Promise<void> {
     );
   }
 
-  // Background probes update shared host observations and synchronize configuration.
+  // Live connections and their health probes deliver the current configuration.
   const selfHealingSync = createRuntimeSettingsSync({ pool, repository, agentSecret: config.agentSecret });
   const hostCycle = startHostCycleService({
-    onHostReachability: selfHealingSync.observeHost,
     pool,
     repository,
     agentSecret: config.agentSecret,
@@ -164,6 +163,11 @@ async function main(): Promise<void> {
       const outcome = await hostCycle.syncHost(record, { kind: "system", name: "hub" });
       if (outcome.status !== "synced" && outcome.status !== "unchanged") throw new Error("host-resync-failed");
     },
+    onConnected: async (hostId) => {
+      const record = await repository.find(hostId);
+      if (record) await selfHealingSync.syncHost(record, true);
+    },
+    onHostReachable: async (record) => { await selfHealingSync.syncHost(record); },
     onError: (error) => console.error("Live-Ereignisse:", error)
   });
   liveEvents.start();
@@ -238,11 +242,7 @@ async function main(): Promise<void> {
         store: hostCycle.observations,
         staleAfterMs: staleAfterMs(hostCycle.intervalMs),
         now: () => Date.now(),
-        probe: async (record) => {
-          const health = await probeAgent(record.agentUrl, { timeoutMs: 3_000 });
-          await selfHealingSync.observeHost(record, health.reachable).catch(() => undefined);
-          return health;
-        }
+        probe: (record) => probeAgent(record.agentUrl, { timeoutMs: 3_000 })
       }),
       // ⚠️ Ohne diese Zeile trägt ein Arm nach einem angewandten
       // Compose-Entwurf bis zum nächsten Takt die alte Allowlist — mit den
@@ -308,7 +308,6 @@ async function main(): Promise<void> {
   // nicht, der Pool die App nicht.
   const registrationApp = createRegistrationApp(
     createRegistrationDeps({
-      onRegistered: (record) => selfHealingSync.observeHost(record, true),
       repository,
       log: (message) => console.log(message)
     })

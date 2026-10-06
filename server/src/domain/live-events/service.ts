@@ -17,6 +17,7 @@ export type LiveEventsDeps = {
   read: (hostId: string) => Promise<ContainerEntry[]>;
   resync: (hostId: string) => Promise<void>;
   onError?: (error: unknown) => void;
+  onConnected?: (hostId: string) => Promise<void>;
   wait?: (ms: number, signal: AbortSignal) => Promise<void>;
   now?: () => number;
 };
@@ -102,6 +103,8 @@ export function createLiveEvents(deps: LiveEventsDeps): LiveEvents {
         if (!active(entry)) break;
         // Open first: events occurring during the snapshot remain in the bounded transport buffer.
         await deps.resync(entry.host.id);
+        if (!active(entry)) break;
+        await deps.onConnected?.(entry.host.id);
         if (!active(entry)) break;
         await read(entry.host.id);
         if (!active(entry)) break;

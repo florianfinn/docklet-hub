@@ -44,7 +44,6 @@ import { createHostSync } from "./host-sync.js";
 const PROBE_TIMEOUT_MS = 3_000;
 
 export type HostCycleServiceOptions = {
-  onHostReachability?: (record: HostRecord, reachable: boolean) => Promise<void>;
   pool: Pool;
   repository: HostRepository;
   // Das Geheimnis aus der Umgebung. Es gilt AUSSCHLIESSLICH für den lokalen
@@ -124,8 +123,6 @@ function cycleDepsFor(
     // er geht nicht in die Beobachtung, und der nächste Takt schreibt neu.
     probeHost: async (record) => {
       const health = await probeAgent(record.agentUrl, { timeoutMs: PROBE_TIMEOUT_MS });
-      await options.onHostReachability?.(record, health.reachable).catch((error: unknown) =>
-        options.logError("Selbstheilungskonfiguration konnte nicht übertragen werden:", error));
       if (health.reachable) await markHostSeen(options.pool, record.id).catch(() => null);
       return health;
     },

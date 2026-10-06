@@ -7,7 +7,14 @@
   der gemeinsame Vertrag prüft Grenzen und einen Abstand je Versuch.
   Die Antwort `{ config }` quittiert die atomar mit Modus 0600 gespeicherten Werte.
   Bis zur ersten Übertragung gelten die Werkswerte. `GET /contract` nennt
-  Konfigurationsfelder und Grenzen.
+  Konfigurationsfelder, Grenzen und `null` als unbegrenzte Wartungsdauer-Vorgabe.
+  Ab Werk bleibt die Vorgabe eine Stunde. Die Route gehört zu Vertragsversion 12;
+  `CONTRACT_VERSION` bleibt für diesen unveröffentlichten Stand 12.
+- Die Konfigurationsroute protokolliert jede Anfrage genau einmal: gültige
+  Speicherung als `allowed`, Eingabefehler als `denied`, Speicherfehler als `error`.
+  Engine- und Dateifehler werden über `actionFailureOf` beantwortet; Diagnosen
+  bleiben im Audit. Konfigurationsannahme bleibt im Nur-Lese-Modus erlaubt,
+  weil sie keine Containeraktion ausführt.
 
 Protokollbruch: Hub und Agenten müssen gemeinsam aktualisiert werden.
 
