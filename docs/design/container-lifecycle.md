@@ -55,3 +55,31 @@ Vorgänge auf denselben Container oder dasselbe Projekt laufen nacheinander. Ein
 Ein Stopp wartet so lange, wie Docker dem Container zum Beenden gibt (`StopTimeout` bzw. `stop_grace_period`), zuzüglich eines Puffers. Eine feste Zeitgrenze darunter würde einen korrekt laufenden Stopp als gescheitert melden. Stack-Zeitgrenzen leiten sich aus der längsten dieser Fristen ab und sind nach oben begrenzt. Ist ein Host nicht erreichbar, lehnt der Hub die Aktion sofort ab und merkt sie nicht vor.
 
 Einen manuellen Stopp erkennt der Agent als Absicht für die Selbstheilung (siehe [self-healing.md](self-healing.md)).
+
+Der Agent begrenzt die Wartezeit auf eine Vorgangssperre auf 60 Sekunden.
+Containeraktionen prüfen Container-ID, Status und Startzeit unter dieser Sperre;
+bei Stacks enthält `expectedStack` dieselben Laufzeitwerte je Service. Health
+gehört nicht zur Erwartung, weil sie sich auch ohne einen Laufzeitvorgang ändert.
+
+Ein nie gestarteter Container im Zustand `created` gilt beim Stopp bereits als
+gestoppt; die idempotente Engine-Antwort 304 bleibt erfolgreich.
+
+Die HTTP-Frist für einen Container-Stopp oder -Neustart beträgt `StopTimeout`
+plus 10 Sekunden. Ohne gesetzten Wert gelten Dockers 10 Sekunden. Ein explizit
+unbegrenzter Docker-Stopp (`StopTimeout: -1`) erhält eine Agent-Frist von
+610 Sekunden. Die Stack-Frist beträgt die längste konfigurierte oder nachgelesene
+Stoppfrist plus 30 Sekunden, mindestens 60 Sekunden. Beim Neustart wird dieser
+Wert für die beiden Phasen verdoppelt; der gesamte Compose-Vorgang ist auf
+600 Sekunden begrenzt. Beide Neustartphasen teilen diese Frist, auch beim
+bestmöglichen Start nach einem fehlgeschlagenen Stopp.
+
+Der Stream ist über den Suffix `-stream` am Aktionsnamen oder den Accept-Header
+`application/x-ndjson` erreichbar. Ohne Stream-Anforderung antwortet derselbe
+Vorgang synchron. Vorprüfungsfehler vor der ersten Stream-Zeile behalten ihren
+HTTP-Status und liefern JSON. Während des Compose-Vorgangs liest der Agent
+vorhandene erlaubte Container im Sekundentakt nach und meldet Zustandsänderungen
+je Service; das Abschlussresultat enthält die neu verankerten IDs. Nach Beginn
+einer Mutation läuft der Vorgang auch bei getrennter Verbindung bis zum
+Nachlesen zu Ende. Die Gesamtbewertung beschreibt die nachgelesenen Zielzustände;
+ein zusätzlicher Ausführungs- oder Vorprüfungsfehler wird als Fehler mitgemeldet
+und verhindert `ok: true`, auch wenn der Zielzustand bereits erreicht war.

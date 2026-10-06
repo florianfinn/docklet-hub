@@ -164,20 +164,25 @@ test("the create scope of a stack up locks for an existing externally managed co
 const stackRoutes = fs.readFileSync(new URL("./routes/stack-routes.ts", import.meta.url), "utf8");
 const stackRuntime = fs.readFileSync(new URL("./runtime/stack.ts", import.meta.url), "utf8");
 
-test("stack start fallback and apply refuse an externally managed stack under the lock before compose up", () => {
+test("stack apply checks external ownership under its project lock", () => {
   const start = stackRoutes.indexOf("export async function handleStackAction(");
-  assert.ok(start >= 0, "handleStackAction is gone");
   const body = stackRoutes.slice(start, stackRoutes.indexOf("\n}\n", start));
   const lock = body.indexOf("stackLocks.runExclusive(");
-  const scope = body.indexOf("if (action === \"apply\" || usedFallbackUp) {");
+  const scope = body.indexOf('if (action === "apply") {');
   const check = body.indexOf("ensureCreateScopeNotExternallyManaged(prepared);");
-  const startOnly = body.indexOf("await composeStart(project);");
   const up = body.indexOf("await composeUp(project,");
-  assert.ok(lock >= 0 && scope > lock, "the create scope is not checked under the project lock");
-  assert.ok(check > scope && check < body.indexOf("}", scope), "the ownership check is not tied to apply and fallback up");
-  assert.ok(check < startOnly && check < up, "compose runs before the ownership check");
-  // No await between check and CLI call: the registry cannot change in between.
-  assert.doesNotMatch(body.slice(check, startOnly), /\bawait\b/);
+  assert.ok(lock >= 0 && scope > lock);
+  assert.ok(check > scope && check < up);
+  assert.doesNotMatch(body.slice(check, up), /\bawait\b/);
+});
+
+test("runtime creation uses the same external ownership check under the project lock", () => {
+  const source = fs.readFileSync(new URL("./runtime/stack-action.ts", import.meta.url), "utf8");
+  const lock = source.indexOf("stackLocks.runExclusive(");
+  const call = source.indexOf("executeStackRuntimeAction(");
+  const check = source.indexOf("ensureCreateScopeNotExternallyManaged(prepared);");
+  assert.ok(lock >= 0 && call > lock && check > call);
+  assert.match(source, /checkCreateScope:.*?ensureCreateScopeAllowlisted\(prepared\);.*?ensureCreateScopeNotExternallyManaged\(prepared\);/s);
 });
 
 test("the create scope check answers 403 externally-managed with the services", () => {

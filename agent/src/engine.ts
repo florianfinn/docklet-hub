@@ -1,3 +1,4 @@
+import { containerActionTimeoutMs } from "./runtime-actions.js";
 import http from "node:http";
 import type { Socket } from "node:net";
 import type { ParsedImageRef } from "./image-ref.js";
@@ -275,19 +276,21 @@ export class DockerEngine {
   }
 
   async start(containerId: string): Promise<void> {
-    await this.expectNoContent(`/containers/${encodeURIComponent(containerId)}/start`);
+    await this.expectNoContent(`/containers/${encodeURIComponent(containerId)}/start`, containerActionTimeoutMs("start", null));
   }
 
-  async stop(containerId: string): Promise<void> {
-    await this.expectNoContent(`/containers/${encodeURIComponent(containerId)}/stop`);
+  async stop(containerId: string, stopTimeout?: number | null): Promise<void> {
+    const timeout = stopTimeout === undefined ? (await this.inspect(containerId)).Config?.StopTimeout : stopTimeout;
+    await this.expectNoContent(`/containers/${encodeURIComponent(containerId)}/stop`, containerActionTimeoutMs("stop", timeout));
   }
 
-  async restart(containerId: string): Promise<void> {
-    await this.expectNoContent(`/containers/${encodeURIComponent(containerId)}/restart`);
+  async restart(containerId: string, stopTimeout?: number | null): Promise<void> {
+    const timeout = stopTimeout === undefined ? (await this.inspect(containerId)).Config?.StopTimeout : stopTimeout;
+    await this.expectNoContent(`/containers/${encodeURIComponent(containerId)}/restart`, containerActionTimeoutMs("restart", timeout));
   }
 
-  private async expectNoContent(path: string): Promise<void> {
-    const { status, body } = await this.request({ method: "POST", path });
+  private async expectNoContent(path: string, timeoutMs?: number): Promise<void> {
+    const { status, body } = await this.request({ method: "POST", path, timeoutMs });
     // 304 = already in the target state; that is not an error.
     if (status === 204 || status === 304) return;
     throw new EngineError(`engine responded ${status}: ${body.toString("utf8").slice(0, 500)}`, status);

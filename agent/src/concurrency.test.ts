@@ -207,3 +207,64 @@ test("a double release does not falsify the measured duration", () => {
   assert.equal(limit.longestMs, 10_000);
   assert.equal(limit.count, 0);
 });
+
+// Runtime actions opt into waiting on the same lock as other Compose operations.
+test("runtime queue waits in FIFO order and cannot be overtaken", async () => {
+  const mutex = new KeyedMutex();
+  const order: number[] = [];
+  let release!: () => void;
+  const active = mutex.runExclusive("project", () => new Promise<void>((resolve) => { release = resolve; }));
+  const second = mutex.runExclusive("project", async () => { order.push(2); }, { waitMs: 1000 });
+  const third = mutex.runExclusive("project", async () => { order.push(3); }, { waitMs: 1000 });
+  await assert.rejects(mutex.runExclusive("project", async () => {}), KeyedMutexBusyError);
+  assert.deepEqual(order, []);
+  release();
+  await Promise.all([active, second, third]);
+  assert.deepEqual(order, [2, 3]);
+  assert.equal(mutex.pendingKeys(), 0);
+});
+
+test("runtime queue timeout removes the waiter without executing it", async () => {
+  const mutex = new KeyedMutex();
+  let release!: () => void;
+  let executed = false;
+  const active = mutex.runExclusive("project", () => new Promise<void>((resolve) => { release = resolve; }));
+  await assert.rejects(mutex.runExclusive("project", async () => { executed = true; }, { waitMs: 5 }),
+    { message: "action-queue-timeout" });
+  release();
+  await active;
+  await mutex.runExclusive("project", async () => {});
+  assert.equal(executed, false);
+  assert.equal(mutex.pendingKeys(), 0);
+});
+
+test("a disconnected queued caller is discarded and its successor still runs", async () => {
+  const mutex = new KeyedMutex();
+  let release!: () => void;
+  let executed = false;
+  const active = mutex.runExclusive("project", () => new Promise<void>((resolve) => { release = resolve; }));
+  const controller = new AbortController();
+  const waiting = mutex.runExclusive("project", async () => { executed = true; }, { waitMs: 1000, signal: controller.signal });
+  const successor = mutex.runExclusive("project", async () => "successor", { waitMs: 1000 });
+  controller.abort();
+  await assert.rejects(waiting, { message: "action-caller-disconnected" });
+  release();
+  await active;
+  assert.equal(await successor, "successor");
+  assert.equal(executed, false);
+  assert.equal(mutex.pendingKeys(), 0);
+});
+
+test("disconnect after lock handoff still prevents mutation", async () => {
+  const mutex = new KeyedMutex();
+  let release!: () => void;
+  let executed = false;
+  const active = mutex.runExclusive("project", () => new Promise<void>((resolve) => { release = resolve; }));
+  const controller = new AbortController();
+  const waiting = mutex.runExclusive("project", async () => { executed = true; }, { waitMs: 1000, signal: controller.signal });
+  release();
+  queueMicrotask(() => controller.abort());
+  await active;
+  await assert.rejects(waiting, { message: "action-caller-disconnected" });
+  assert.equal(executed, false);
+});

@@ -401,3 +401,14 @@ export {
   specVolumeSchema
 } from "./agent/spec.js";
 export type { ContainerSpecInput, SpecPort, SpecVolume } from "./agent/spec.js";
+export {
+  runtimeActionSchema, expectedContainerSchema, containerActionRequestSchema,
+  runtimeStateSchema, runtimeServiceResultSchema, runtimeOutcomeSchema,
+  RUNTIME_ACTION_ERRORS, runtimeActionErrorSchema, stackRuntimeResultSchema,
+  containerRuntimeResultSchema, stackActionStreamLineSchema
+} from "./agent/runtime-actions.js";
+export type {
+  RuntimeAction, ExpectedContainer, ContainerActionRequest, RuntimeState, RuntimeServiceResult,
+  RuntimeOutcome, RuntimeActionError, StackRuntimeResult, ContainerRuntimeResult,
+  StackActionStreamLine
+} from "./agent/runtime-actions.js";

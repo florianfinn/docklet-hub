@@ -1,5 +1,10 @@
-import { applySpecRequestSchema } from "contract";
-import { actionFailureOf } from "../action-failure.js";
+import { runtimeStateOf } from "../runtime-actions.js";
+import { StackEndpointError } from "../stack-control.js";
+import { executeContainerRuntimeAction } from "../container-runtime-action.js";
+import { ACTION_QUEUE_WAIT_MS } from "../runtime-actions.js";
+import { ActionQueueError } from "../concurrency.js";
+import { actionConnection } from "../runtime/action-connection.js";
+import { applySpecRequestSchema, containerActionRequestSchema, type RuntimeAction } from "contract";
 import {
   EngineError
 } from "../engine.js";
@@ -361,85 +366,73 @@ export async function handleRemove(ctx: ContainerRouteContext): Promise<void> {
   return;
 }
 
-// --- Safe actions ----------------------------------------------------
 export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void> {
-  const { response, actor, containerId, action } = ctx;
-  const result = await gate(containerId, { mutating: true, action, actor });
-  const containerName = result.ok ? (result.inspect.Name ?? "").replace(/^\//, "") : null;
-  if (!result.ok) {
-    audit.write({
-      action,
-      containerId,
-      containerName,
-      actor,
-      outcome: "denied",
-      reason: result.reason
-    });
-    send(response, result.status, { error: result.reason });
+  const { request, response, actor, containerId, action } = ctx;
+  const parsed = parseRequest(containerActionRequestSchema, await readJsonBody(request));
+  if (!parsed.ok) {
+    rejectRequest(ctx, { action, containerId, containerName: null }, parsed.rejection);
     return;
   }
-
-  const executeSafeAction = async (): Promise<boolean> => {
-    if (!registry.isAllowed(containerId)) return false;
-    if (action === "start") await engine.start(containerId);
-    else if (action === "stop") await engine.stop(containerId);
-    else await engine.restart(containerId);
-    return true;
-  };
-  const safeContext = composeContextOf(
-    result.inspect.Config?.Labels ?? undefined,
-    composeBasePath
-  );
-  let executed: boolean;
+  const initial = await gate(containerId, { mutating: true, action, actor });
+  if (!initial.ok) { send(response, initial.status, { error: initial.reason }); return; }
+  const context = composeContextOf(initial.inspect.Config?.Labels ?? undefined, composeBasePath);
+  const projectName = initial.inspect.Config?.Labels?.["com.docker.compose.project"] ?? registry.get(containerId)?.compose?.projectName;
+  const lockKey = projectName ?? `container:${containerId}`;
+  const connection = actionConnection(request, response);
   try {
-    executed = safeContext
-      ? await stackLocks.runExclusive(safeContext.project, executeSafeAction)
-      : await executeSafeAction();
+    const result = await stackLocks.runExclusive(lockKey, async () => {
+      const fresh = await gate(containerId, { mutating: true, action, actor });
+      if (!fresh.ok && fresh.reason !== "container-gone" && fresh.reason !== "not-allowlisted") return { status: fresh.status, body: { error: fresh.reason } };
+      if (!fresh.ok && registry.get(containerId) && !registry.isAllowed(containerId)) return { status: fresh.status, body: { error: fresh.reason } };
+      const readState = async () => {
+        // Resolve through the checked project anchor after external replacement,
+        // and return the new id even when this action never reached the engine.
+        let id = containerId;
+        if (context) {
+          const matches = (await engine.listWithComposeLabels()).filter((container) => {
+            const current = composeContextOf(container.labels, composeBasePath);
+            return current?.project === context.project && current.projectDir === context.projectDir &&
+              current.composeFileName === context.composeFileName && current.serviceName === context.serviceName;
+          });
+          if (matches.length > 1) throw new Error("scaled-service-unsupported");
+          if (matches.length === 0) return null;
+          id = matches[0].id;
+        }
+        if (!id) return null;
+        if (!registry.isAllowed(id) && !registry.isAllowed(containerId)) throw new StackEndpointError(404, "not-allowlisted");
+        let inspect;
+        try { inspect = await engine.inspect(id); }
+        catch (error) { if (error instanceof EngineError && error.status === 404) return null; throw error; }
+        if (id !== containerId) {
+          if (inspect.Name !== initial.inspect.Name ||
+              inspect.Config?.Labels?.["com.docker.compose.project"] !== context?.project) throw new Error("container-anchor-mismatch");
+          if (!registry.isAllowed(id) && !registry.replaceContainerId(containerId, id)) throw new Error("registry-reanchor-failed");
+        }
+        return inspect;
+      };
+      const before = fresh.ok ? fresh.inspect : await readState();
+      if (!before || !fresh.ok) return { status: 409, body: {
+        ok: false, action: action as RuntimeAction, outcome: "failed" as const, error: "state-changed", state: runtimeStateOf(before)
+      } };
+      return executeContainerRuntimeAction({
+        inspect: readState,
+        execute: async (inspect) => {
+          if (config.readOnly) throw new StackEndpointError(503, "agent-read-only");
+          const access = registry.checkAccess(inspect.Id, true);
+          if (access !== "allowed") throw new StackEndpointError(403, access);
+          if (action === "start") await engine.start(inspect.Id);
+          else if (action === "stop") await engine.stop(inspect.Id, inspect.Config?.StopTimeout ?? null);
+          else await engine.restart(inspect.Id, inspect.Config?.StopTimeout ?? null);
+        }
+      }, action as RuntimeAction, parsed.value.expectedContainer, before, connection.signal);
+    }, { waitMs: ACTION_QUEUE_WAIT_MS, signal: connection.signal });
+    audit.write({ action, containerId, containerName: initial.inspect.Name.replace(/^\//, ""), actor,
+      outcome: result.status === 200 ? "allowed" : "error", reason: "error" in result.body ? String(result.body.error) : undefined });
+    send(response, result.status, result.body);
   } catch (error) {
-    // ⚠️ Without this catch the engine error falls into the global handler
-    // and becomes `500 {"error":"internal-error"}` there. That is exactly
-    // how the outage of 2026-08-25 reached the operator: twice
-    // "internal-error" for `restart` and `start` on sonarr, while the engine
-    // was in truth saying that it can no longer resolve the netns of the
-    // replaced gluetun container. The only place this sentence appeared was
-    // this container's stderr.
-    //
-    // The mapping itself (which status, what goes into the audit) lives in
-    // `action-failure.ts`: it is tested there, while this file has no test, and
-    // the recreate path uses exactly the same one.
-    const failure = actionFailureOf(error);
-    if (!failure) throw error;
-    audit.write({
-      action,
-      containerId,
-      containerName,
-      actor,
-      outcome: "error",
-      reason: failure.auditReason
-    });
-    send(response, failure.status, failure.body);
-    return;
+    if (!(error instanceof ActionQueueError) && !(error instanceof StackEndpointError)) throw error;
+    if (!response.destroyed) send(response, error instanceof StackEndpointError ? error.status : 409, { error: error.code });
+  } finally {
+    connection.dispose();
   }
-  if (!executed) {
-    audit.write({
-      action,
-      containerId,
-      containerName,
-      actor,
-      outcome: "denied",
-      reason: "stack-anchor-stale"
-    });
-    send(response, 409, { error: "stack-anchor-stale" });
-    return;
-  }
-
-  audit.write({
-    action,
-    containerId,
-    containerName,
-    actor,
-    outcome: "allowed"
-  });
-  send(response, 200, { ok: true });
-  return;
 }

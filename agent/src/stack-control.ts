@@ -19,20 +19,11 @@ export type StackDefinition = {
   couplings: StackCoupling[];
 };
 
-// `docker compose restart` starts engine containers largely in parallel and
-// ignores Compose dependencies without `restart: true` while doing so. With
-// service-shared network/PID/IPC namespaces the dependent container can
-// therefore start against the anchor that has just been stopped. As soon as a
-// detected S11 coupling exists, the stack needs the ordered stop->start path.
-export function stackNeedsDependencySafeRestart(couplings: readonly StackCoupling[]): boolean {
-  return couplings.length > 0;
-}
-
 // The shape is checked by `expectedStackSchema` (contract) when the request is
 // read; here only the comparison remains.
 export function expectedStackMatches(expected: ExpectedStack, actual: ExpectedStack): boolean {
   const sortServices = (
-    services: Array<{ serviceName: string; containerId: string | null }>
+    services: ExpectedStack["services"]
   ) => [...services].sort((left, right) => left.serviceName.localeCompare(right.serviceName));
   const expectedServices = sortServices(expected.services);
   const actualServices = sortServices(actual.services);
@@ -44,32 +35,15 @@ export function expectedStackMatches(expected: ExpectedStack, actual: ExpectedSt
     expectedServices.every(
       (service, index) =>
         service.serviceName === actualServices[index]?.serviceName &&
-        service.containerId === actualServices[index]?.containerId
+        service.containerId === actualServices[index]?.containerId &&
+        service.status === actualServices[index]?.status &&
+        service.startedAt === actualServices[index]?.startedAt
     )
   );
 }
 
-// For `network_mode`, `pid` and `ipc` Compose knows TWO spellings that mean
-// the same shared namespace:
-//
-//   network_mode: service:gluetun            -> service name in the same project
-//   network_mode: container:gluetun_arrstack -> CONTAINER name
-//
-// ⚠️ Up to v0.12.1 this function only knew the first. `arr_stack` uses only
-// the second — four services there hung off gluetun without a single
-// `network_mode` coupling being reported. On 2026-08-25 a stack update
-// therefore replaced gluetun and left sonarr, prowlarr and sabnzbd behind in a
-// netns that no longer existed; Docker kept reporting them as `running`. That
-// the single `restart` still triggered a confirmation prompt back then came
-// solely from `service_healthy` — a lucky hit of the same topology that a
-// stack without `depends_on` would not have had.
-//
-// ⚠️ Resolution only goes through an explicit `container_name:` in the same
-// file. Reproducing the name ASSIGNED by Compose (`<project>-<service>-1`)
-// here would be guesswork: it depends on the project name and the replica
-// counter, and `docker compose config` does not output it. If a reference
-// points to a container outside the project, "no coupling" is correctly the
-// result — a stack action could not take it along anyway.
+// Resolve shared namespaces only through explicit names in the definition.
+// Compose-generated container names depend on the project and replica count.
 function namespaceTarget(value: unknown, serviceByContainerName: ReadonlyMap<string, string>): string | null {
   if (typeof value !== "string") return null;
   if (value.startsWith("service:")) {
@@ -160,18 +134,22 @@ export function stackMutationBaseDeny(options: {
 
 export function stackActionDeny(options: {
   action: StackAction;
-  missingServices: readonly string[];
   projectName: string;
   confirmation: unknown;
-  allowFallbackUp: boolean;
 }): StackPolicyDeny | null {
-  // A `start` with a missing container needs `docker compose up`; that is
-  // decided before the CLI call, not from a Compose error message.
-  if (options.action === "start" && options.missingServices.length > 0 && !options.allowFallbackUp) {
-    return { status: 409, code: "stack-start-requires-apply" };
-  }
   if (options.action === "down" && options.confirmation !== options.projectName) {
     return { status: 409, code: "stack-confirmation-wrong" };
   }
   return null;
+}
+
+export class StackEndpointError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    readonly details: Record<string, unknown> = {}
+  ) {
+    super(code);
+    this.name = "StackEndpointError";
+  }
 }

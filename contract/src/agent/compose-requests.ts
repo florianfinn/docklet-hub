@@ -83,12 +83,14 @@ export type StackAdoptRequest = z.input<typeof stackAdoptRequestSchema>;
 /** One service of a stack as the caller last saw it. */
 export const expectedStackServiceSchema = z.object({
   serviceName: z.string(),
-  containerId: z.nullable(z.string())
+  containerId: z.nullable(z.string()),
+  status: z.string(),
+  startedAt: z.nullable(z.string())
 });
 
 /**
  * What the caller saw of a stack before acting on it. The agent refuses with
- * `409 stack-expectation-mismatch` when the stack looks different now.
+ * `409 state-changed` when the stack looks different now.
  */
 export const expectedStackSchema = z.object({
   projectName: z.string(),
@@ -103,8 +105,7 @@ export const stackActionRequestSchema = z.object({
   expectedStack: expectedStackSchema,
   // `down` only: the project name, typed again.
   confirmation: z.optional(z.string()),
-  // `start` only: bring up services that have no container yet.
-  allowFallbackUp: z._default(z.boolean(), false),
+  applyDefinition: z.boolean(),
   // `apply` only.
   forceRecreate: z._default(z.boolean(), false)
 });
