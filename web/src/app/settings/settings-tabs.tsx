@@ -4,7 +4,7 @@ import { AppearancePanel, AreaColorPanel, HostColorPanel } from "../../features/
 import { ContainerViewPanel } from "../../features/containers";
 import { LogSettingsPanel } from "../../features/logs";
 import { MarksPanel } from "../../features/marks";
-import { HubNetworkPanel, LanguagePanel, type SettingsTab } from "../../features/settings";
+import { HubNetworkPanel, LanguagePanel, RuntimeSettingsPanel, type SettingsTab } from "../../features/settings";
 import { SystemContainers } from "../containers/SystemContainers";
 import { TerminalPanel } from "./TerminalPanel";
 
@@ -76,6 +76,7 @@ export const SETTINGS_TABS: readonly SettingsTab[] = [
     icon: Boxes,
     render: ({ role }) => (
       <>
+        <RuntimeSettingsPanel role={role} />
         <ContainerViewPanel role={role} />
         <LogSettingsPanel role={role} />
         <TerminalPanel role={role} />

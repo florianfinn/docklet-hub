@@ -24,7 +24,10 @@ import {
   type IdCandidate
 } from "../own-container-id.js";
 
+import { SelfHealingConfigStore } from "../self-healing-config.js";
+
 export const config = loadConfig();
+export const selfHealingConfig = new SelfHealingConfigStore(path.join(path.dirname(config.registryFile), "self-healing-config.json"));
 export const engine = new DockerEngine({ socketPath: config.socketPath });
 export const registry = new AgentRegistry(config.registryFile);
 export const composeSelections = new ComposeSelectionStore(path.join(path.dirname(config.registryFile), "compose-selections.json"));

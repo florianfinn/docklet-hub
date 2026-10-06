@@ -1,4 +1,5 @@
 import type http from "node:http";
+import { handleSelfHealingConfig } from "./routes/self-healing-routes.js";
 import { CONTRACT_HEADERS, CONTRACT_VERSION } from "./contract.js";
 import { containerIdFromPath, checkRoute } from "./route-policy.js";
 import { EnvRedactionUnavailableError } from "./env-file.js";
@@ -219,6 +220,11 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
   try {
     if (request.method === "GET" && url.pathname === "/contract") {
       await handleContract(ctx);
+      return;
+    }
+
+    if (request.method === "PUT" && url.pathname === "/self-healing/config") {
+      await handleSelfHealingConfig(ctx);
       return;
     }
 

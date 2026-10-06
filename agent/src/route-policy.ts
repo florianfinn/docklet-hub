@@ -1,8 +1,9 @@
+import { SELF_HEALING_ACTOR } from "contract";
+
 // The agent's route table: one row per method and path, readable and countable
 // in a test instead of spread over the handlers.
 //
-// Pure and without imports, so the policy can be checked without Docker,
-// without a socket and without a running server.
+// Pure policy with shared actor names; no Docker, socket or running server.
 
 export type Method = "GET" | "PUT" | "POST" | "DELETE";
 
@@ -29,6 +30,7 @@ export type Route = {
 };
 
 export const ROUTES: readonly Route[] = [
+  { methods: ["PUT"], pattern: "/self-healing/config", mutating: true, audit: "self-healing-config", onlyActor: SELF_HEALING_ACTOR },
   // --- Before the secret check ------------------------------------------
   { methods: ["GET"], pattern: "/health", public: true, mutating: false, audit: "health" },
 

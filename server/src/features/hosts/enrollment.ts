@@ -505,6 +505,7 @@ function toRegistrationHost(record: HostRecord | null): RegistrationHost | null 
 }
 
 export type RegistrationDepsOptions = {
+  onRegistered?: (record: HostRecord) => Promise<void>;
   repository: HostRepository;
   log?: (message: string) => void;
   // Einspeisbar, damit der Integrationstest die Gegenprobe gegen einen
@@ -537,7 +538,8 @@ export function createRegistrationDeps({
   repository,
   log,
   probe = probeAgent,
-  probeTimeoutMs = 5_000
+  probeTimeoutMs = 5_000,
+  onRegistered
 }: RegistrationDepsOptions): RegistrationDeps {
   return {
     findHostByTunnelAddress: async (address) => toRegistrationHost(await repository.findByTunnelAddress(address)),
@@ -569,7 +571,11 @@ export function createRegistrationDeps({
       }
       return true;
     },
-    consumeToken: async (claim) => toRegistrationHost(await repository.consumeToken(claim)),
+    consumeToken: async (claim) => {
+      const record = await repository.consumeToken(claim);
+      if (record) await onRegistered?.(record).catch(() => log?.("Selbstheilungskonfiguration: Übertragung ausstehend."));
+      return toRegistrationHost(record);
+    },
     recordFailure: async (hostId) => {
       await repository.recordFailure(hostId);
     },

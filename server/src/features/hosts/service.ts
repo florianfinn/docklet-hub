@@ -57,6 +57,7 @@ export type HostsServiceDeps = {
   markSeen: (hostId: string) => Promise<Date | null>;
   readHostInfo: (hostId: string) => HostInfo | null;
   hostLoad: HostLoadOf;
+  onHostReachability?: (record: HostRecord, reachable: boolean) => Promise<void>;
   agent?: HostsAgent;
 };
 
@@ -89,7 +90,7 @@ export type AgentUpdateRead =
 
 const DEFAULT_AGENT: HostsAgent = { probeAgent, fetchContainers, requestSelfUpdate, fetchSelfUpdateStatus };
 
-export function createHostsService({ hosts, probe, markSeen, readHostInfo, hostLoad, agent = DEFAULT_AGENT }: HostsServiceDeps) {
+export function createHostsService({ hosts, probe, markSeen, readHostInfo, hostLoad, onHostReachability, agent = DEFAULT_AGENT }: HostsServiceDeps) {
   // Ein Arm hat eben geantwortet: den Zeitpunkt festhalten (#205).
   //
   // ⚠️ Scheitert das Schreiben, steht trotzdem „jetzt“ in der Antwort — die
@@ -124,6 +125,7 @@ export function createHostsService({ hosts, probe, markSeen, readHostInfo, hostL
         // ausstehendem Arm eine Frist lang.
         if (record.state === "pending") return toHostView(record, null);
         const health = await agent.probeAgent(record.agentUrl, { timeoutMs: 3_000 });
+        await onHostReachability?.(record, health.reachable).catch(() => undefined);
         return toHostView(health.reachable ? await withSeenNow(record) : record, health);
       })
     );

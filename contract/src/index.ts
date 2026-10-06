@@ -415,3 +415,20 @@ export type {
 } from "./agent/runtime-actions.js";
 
 export { liveEventSchema, liveStatusSchema, liveActionSchema, type LiveEvent, type LiveStatus, type LiveAction } from "./api/live-events.js";
+
+export {
+  DEFAULT_SELF_HEALING_CONFIG,
+  SELF_HEALING_ACTOR,
+  SELF_HEALING_LIMITS,
+  selfHealingConfigSchema,
+  selfHealingConfigResponseSchema
+} from "./agent/self-healing.js";
+export type { SelfHealingConfig } from "./agent/self-healing.js";
+export {
+  runtimeSettingsSchema,
+  runtimeSettingsResponseSchema,
+  selfHealingSettingsSchema,
+  selfHealingSettingsResponseSchema,
+  selfHealingSettingsRequestSchema
+} from "./api/settings.js";
+export type { RuntimeSettings, SelfHealingSettings, SelfHealingDelivery } from "./api/settings.js";

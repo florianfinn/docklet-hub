@@ -2,6 +2,13 @@
 
 ## Unveröffentlicht
 
+- `PUT /self-healing/config` übernimmt die globale Selbstheilungskonfiguration,
+  gebunden an `system:hub`. Alle fünf Konfigurationsfelder sind Pflichtwerte;
+  der gemeinsame Vertrag prüft Grenzen und einen Abstand je Versuch.
+  Die Antwort `{ config }` quittiert die atomar mit Modus 0600 gespeicherten Werte.
+  Bis zur ersten Übertragung gelten die Werkswerte. `GET /contract` nennt
+  Konfigurationsfelder und Grenzen.
+
 Protokollbruch: Hub und Agenten müssen gemeinsam aktualisiert werden.
 
 - Die Kopfzeile `x-docker-agent-tier` entfällt. Der Agent verlangt und

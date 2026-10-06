@@ -15,6 +15,8 @@
 // it.
 
 export const deAccount = {
+  setupComposeDefinitionLabel: "Compose-Definition bei Start und Neustart anwenden",
+  setupComposeDefinitionHint: "An: Hub-eigene Stacks übernehmen beim Start die Compose-Definition; ein Neustart erstellt ihre Container neu. Fremdverwaltete Stacks bleiben unverändert. Später in den Einstellungen änderbar.",
   // Der Bildschirm, der beim ersten Start erscheint — und danach nie wieder.
   setupTitle: "Erstanmeldung",
   setupLead:

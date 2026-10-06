@@ -62,6 +62,7 @@ export type HostRouteOptions = {
   repository: HostRepository;
   enrollment: Enrollment;
   agentSecret: string;
+  onHostReachability?: (record: HostRecord, reachable: boolean) => Promise<void>;
   probeHost?: (record: HostRecord) => Promise<AgentHealth>;
   readHostInfo?: (hostId: string) => HostInfo | null;
   /** The load by containers (#214). `features.ts` hands it in; why there, it says. */
@@ -71,7 +72,7 @@ export type HostRouteOptions = {
 
 export function registerHostRoutes(
   router: Router,
-  { auth, pool, repository, enrollment, agentSecret, probeHost, readHostInfo = () => null, hostLoad, liveEvents }: HostRouteOptions
+  { auth, pool, repository, enrollment, agentSecret, probeHost, readHostInfo = () => null, hostLoad, liveEvents, onHostReachability }: HostRouteOptions
 ): void {
   // Resolved once at registration; see `resolveProbeHost` in
   // `domain/hosts/health.ts`.
@@ -81,7 +82,8 @@ export function registerHostRoutes(
     probe,
     markSeen: (hostId) => markHostSeen(pool, hostId),
     readHostInfo,
-    hostLoad
+    hostLoad,
+    onHostReachability
   });
 
   router.get(

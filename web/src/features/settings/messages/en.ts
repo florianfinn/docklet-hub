@@ -5,6 +5,27 @@
 import type { deSettingsPage } from "./de";
 
 export const enSettingsPage = {
+  settingsRuntimeTitle: "Runtime actions",
+  settingsComposeDefinitionLabel: "Apply Compose definition on start and restart",
+  settingsComposeDefinitionHint: "On: hub-owned stacks apply their Compose definition on start; restart recreates all containers. Off: existing containers are reused. Externally managed stacks and individual containers are never recreated.",
+  settingsRuntimeSave: "Save",
+  settingsRuntimeSaved: "Saved in the hub.",
+  settingsRuntimeFailed: "The settings could not be loaded or saved.",
+  settingsSelfHealingTitle: "Self-healing",
+  settingsSelfHealingHint: "These values apply globally to all agents. Each agent persists them and uses them even when disconnected from the hub.",
+  settingsHealingEnabled: "Enable self-healing",
+  settingsHealingAttempts: "Number of attempts",
+  settingsHealingDelay: "Delay before attempt {attempt} (seconds)",
+  settingsHealingStability: "Stability window (seconds)",
+  settingsHealingMaintenance: "Default maintenance duration (seconds)",
+  settingsHealingLimits: "1–10 attempts, each with a delay of 1–86,400 seconds. Stability: 1–86,400 seconds. Maintenance: 60–604,800 seconds. All values are whole numbers.",
+  settingsHealingInvalid: "Please use values within the limits and one delay per attempt.",
+  settingsSelfHealingDeliveryLabel: "Delivery status per host",
+  settingsSelfHealingDeliveryHint: "Unreachable hosts receive the saved configuration on their next connection. Delivered confirms storage in the agent, not a performed healing action.",
+  settingsDeliverySynced: "delivered",
+  settingsDeliveryFailed: "delivery failed; retry on connection",
+  settingsDeliveryPending: "delivery pending",
+
   settingsTitle: "Settings",
   // Für wen eine Einstellung gilt. Bei der Sprache ist die Antwort: für dieses
   // Konto — sie liegt dort und nicht im Browser (docs/design/language-layer.md).

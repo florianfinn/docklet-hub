@@ -18,6 +18,27 @@
 // it.
 
 export const deSettingsPage = {
+  settingsRuntimeTitle: "Laufzeitaktionen",
+  settingsComposeDefinitionLabel: "Compose-Definition bei Start und Neustart anwenden",
+  settingsComposeDefinitionHint: "An: Hub-eigene Stacks übernehmen beim Start die Compose-Definition; ein Neustart erstellt alle Container neu. Aus: Bestehende Container werden weiterverwendet. Fremdverwaltete Stacks und einzelne Container werden nie neu erstellt.",
+  settingsRuntimeSave: "Speichern",
+  settingsRuntimeSaved: "Im Hub gespeichert.",
+  settingsRuntimeFailed: "Die Einstellungen konnten nicht geladen oder gespeichert werden.",
+  settingsSelfHealingTitle: "Selbstheilung",
+  settingsSelfHealingHint: "Diese Werte gelten global für alle Agents. Jeder Agent speichert sie dauerhaft und verwendet sie auch ohne Verbindung zum Hub.",
+  settingsHealingEnabled: "Selbstheilung einschalten",
+  settingsHealingAttempts: "Anzahl Versuche",
+  settingsHealingDelay: "Abstand vor Versuch {attempt} (Sekunden)",
+  settingsHealingStability: "Stabilitätsfenster (Sekunden)",
+  settingsHealingMaintenance: "Wartungsdauer-Vorgabe (Sekunden)",
+  settingsHealingLimits: "1–10 Versuche, je 1–86.400 Sekunden Abstand. Stabilität: 1–86.400 Sekunden. Wartung: 60–604.800 Sekunden. Alle Werte sind ganze Zahlen.",
+  settingsHealingInvalid: "Bitte die Wertgrenzen und einen Abstand je Versuch einhalten.",
+  settingsSelfHealingDeliveryLabel: "Übertragungsstand je Host",
+  settingsSelfHealingDeliveryHint: "Nicht erreichbare Hosts erhalten den gespeicherten Stand bei der nächsten Verbindung. Übertragen bestätigt die Speicherung im Agent, keine ausgeführte Heilung.",
+  settingsDeliverySynced: "übertragen",
+  settingsDeliveryFailed: "Übertragung fehlgeschlagen; erneuter Versuch bei Verbindung",
+  settingsDeliveryPending: "Übertragung ausstehend",
+
   settingsTitle: "Einstellungen",
   // Für wen eine Einstellung gilt. Bei der Sprache ist die Antwort: für dieses
   // Konto — sie liegt dort und nicht im Browser (docs/design/language-layer.md).
