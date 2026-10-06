@@ -73,6 +73,8 @@ in docs/design/ und sind dort im Index verlinkt.
 
 - Releases, wichtige Features und überprüfbare Zwischenschritte bekommen
   Meilensteine vor ihrem Beginn. Neue track-Sammel-Issues werden nicht angelegt.
+  Thematisch begrenzte Review-Nacharbeiten dürfen nach
+  [review-workflow.md](docs/design/review-workflow.md) gebündelt werden.
 - Jeder Meilenstein nennt Ziel, Umfang, Abhängigkeiten und
   Abnahmekriterium. Ein Abschluss-Issue trägt den Nachweis.
 - Issues entstehen nur für Feature-Arbeit, Produkt- und
@@ -102,51 +104,20 @@ in docs/design/ und sind dort im Index verlinkt.
   Datierte Messungen bleiben Nachweise. Historische Pläne werden in
   docs/history/ abgelegt und dort indiziert.
 
-## Branches und unabhängige Agentenreviews
+## Branches, Push und Review
+
+- Vor Push, PR-Erstellung, Review und Merge ist
+  [review-workflow.md](docs/design/review-workflow.md) zu lesen und einzuhalten,
+  auch von unabhängigen Reviewern. Dort stehen Prüfauftrag, Korrekturrunden,
+  Befundbehandlung, Sammelissues, Review-Beleg und Merge-Voraussetzungen.
 
 - Jedes Feature wird auf einem eigenen Feature-Branch integriert.
   Arbeitsschritte entstehen auf eigenen Branches und kommen per PR auf diesen
   Feature-Branch. Branch-Namen sind nicht vorgegeben.
 - Erst das vollständige Feature kommt mit einem Abschluss-PR auf main.
   Eigenständige Fehlerkorrekturen und Dokumentation dürfen direkt per PR dorthin.
-- Direkt nach dem Anlegen eines PRs entfernt die Sitzung Zeilen, die ihr
-  Werkzeug an den PR-Text anhängt, etwa eine Fußzeile mit Sitzungslink, und
-  wartet auf eine grüne Prüfung pr-text. Erst dann startet der Review.
-- Vor jedem Merge startet die bearbeitende Sitzung ohne zusätzliche
-  Aufforderung einen unabhängigen Reviewer: einen Agenten mit eigenem Kontext,
-  der den PR nicht umgesetzt hat und Repo-Regeln, Issues und den vollständigen
-  Diff zum Zielbranch erhält. Umfang und Tiefe richten sich nach der Änderung;
-  er darf Tests ausführen und prüft auch die Veröffentlichbarkeit.
-- Das Ergebnis steht als PR-Kommentar unter dem Konto des Maintainers. Die
-  erste Zeile lautet Independent review, direkt darunter folgen Reviewer, Head
-  (volle SHA) und Result (pass oder fail), nach einer Leerzeile die Befunde.
-  Der Workflow review-status setzt den Status review am aktuellen PR-Head:
-  success nur, wenn der Kommentar genau diesen Head mit pass nennt, sonst
-  failure, auch für einen unlesbaren Beleg.
-- Pflicht-Checks erkennt GitHub nur am Namen. Ein PR, der Dateien unter
-  .github/workflows/ oder von Workflows ausgeführte Skripte ändert, kann sie
-  selbst grün melden; solche Diffs prüft der Maintainer vor dem Merge selbst.
-  Workflows aus Forks laufen erst nach Freigabe (Actions-Einstellung „Require
-  approval for all external contributors“).
-- Die Sitzung behebt blockierende Befunde sofort selbst. Nach jeder Änderung
-  prüft ein neuer unabhängiger Reviewer mit frischem Kontext den neuen Stand.
-  Fehlgeschlagene Zwischenrunden bleiben in der Sitzung; gepostet wird der
-  Beleg für den finalen Head mit den behobenen Befunden. Optionale Befunde
-  werden entschieden und im Beleg kurz begründet. Ist ein Befund im PR nicht
-  behebbar, wird der Beleg mit fail gepostet oder ein Issue angelegt.
-- Jeder neue Push und jeder Wechsel des Zielbranches braucht einen neuen
-  Review; neue Commits auf demselben Zielbranch ohne Konflikt nicht.
-- Für main gilt ein aktives Ruleset mit PR-Pflicht und den erforderlichen
-  Prüfungen checks, pr-text und review, ohne strikte Aktualität zur Basis.
-  Gemergt wird per Squash über GitHub, sobald alle Prüfungen grün sind. Ein Fehler
-  aus dem Zusammenspiel zweier PRs fällt im vollen CI-Lauf auf main auf und
-  wird sofort per Fix oder Revert behoben.
-- Auf Feature-Branches gelten dieselben Schritte als Arbeitsregel; GitHub
-  erzwingt sie dort nicht.
 - Der Feature-Branch übernimmt main regelmäßig per Merge. Geteilte Historie
   wird nicht rebased oder force-gepusht. Ungeprüfte Zwischenstände bleiben lokal.
-- Der einzige Root-Commit wird vor Erstveröffentlichung als vollständiger
-  Quellbaum unabhängig geprüft. Danach gilt das PR-Verfahren für jede Änderung.
 
 ## Git und Veröffentlichungen
 

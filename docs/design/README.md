@@ -20,7 +20,7 @@ Zielbild und Begründungen. Arbeitsstand steht in GitHub Issues und Meilensteine
 | [phase-5-write-access.md](phase-5-write-access.md) | Schreibzugriff: Herkunft, Compose, Dateien, Logs und Shell |
 | [proxy-management.md](proxy-management.md) | Proxyverwaltung HTTP/S |
 | [publication-policy.md](publication-policy.md) | Öffentliche Daten und Prüfungen |
-| [review-workflow.md](review-workflow.md) | Unabhängige Agentenreviews |
+| [review-workflow.md](review-workflow.md) | Push, unabhängige Reviews, Befundbehandlung und Merge |
 | [self-healing.md](self-healing.md) | Begrenzte Selbstheilung und manuelle Stopp-Absicht |
 | [sign-in-and-setup.md](sign-in-and-setup.md) | Anmeldung und Erstanmeldung |
 | [update-and-rollback.md](update-and-rollback.md) | Updates, Rollback und Sicherungen |

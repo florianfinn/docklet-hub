@@ -44,30 +44,10 @@ branch take the full chain locally.
 
 Develop a feature on its own feature branch; branch names are not prescribed.
 Task branches open pull requests against that branch. Integrate the complete feature with one final PR to main.
-Right after opening a pull request, the session removes lines its tooling
-appends to the PR body, such as a footer with a session link, and waits for a
-green pr-text check before the review starts.
-Before merging, the working session starts an independent agent review: a
-reviewer with its own context that did not implement the change, sized to the
-change and allowed to run tests. The session fixes blocking findings right
-away; after every change a new independent reviewer with fresh context checks
-the new state. Only the final head's review is posted, as a PR comment from
-the maintainer's account: the line "Independent review", directly followed by
-Reviewer, Head (full SHA) and Result (pass or fail), then a blank line and the
-fixed findings. The review-status workflow turns it into the required review
-status on the current head; see [review workflow](docs/design/review-workflow.md).
-Every new push needs a new review, and so does retargeting a PR to another
-base branch; after retargeting, also push again so checks reruns.
-
-Main requires the checks, pr-text and review checks; squash-merge through
-GitHub once they pass. The PR title becomes the commit subject and the PR body
-the commit message, so titles are Conventional Commits, reverts included
-(`revert: …`). pr-text enforces this and checks title and body for
-transliterated umlauts, double-encoded characters and session links. Required
-checks are matched by name only: a PR that changes .github/workflows/ or
-scripts run by workflows can report them itself, so the maintainer reads such
-diffs before merging, and fork workflows need approval for all external
-contributors.
+Before pushing, opening a PR, reviewing or merging, read and follow the
+[review workflow](docs/design/review-workflow.md), including as an independent
+reviewer. It defines the initial review, focused follow-up reviews, finding
+decisions, bounded correction rounds, review evidence and merge requirements.
 
 Open issues only for feature work, product or architecture decisions and
 findings that are not fixed in the current session. Small self-contained
@@ -76,6 +56,9 @@ straight to a pull request without an issue or milestone. Feature and release
 issues state scope, dependencies and acceptance criteria and belong to
 feature/intermediate milestones; release:first-public joins the release scope.
 Practical release acceptance is distinct from implementation completion.
+Small deferred review findings can share a themed work package using the
+[review follow-ups template](.github/ISSUE_TEMPLATE/review-follow-ups.md).
+The review workflow defines grouping, traceability and completion.
 
 ## Code and protocol
 
