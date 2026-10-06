@@ -64,7 +64,7 @@ const BLOCKED_COMPOSE_FILES = new Set([
 // copies that contain the same values.
 //
 // This is a backstop, not a boundary: the boundary is the self-management lock
-// and the fact that only an internal manager sets up paths.
+// and the fact that only the hub's allowlist sync sets up paths.
 function isBlockedName(name: string): boolean {
   return (
     name === ENV_FILE_NAME ||

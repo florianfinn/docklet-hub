@@ -191,7 +191,7 @@ test("ein Container, den dieser Arm nicht führt, ist 404 container-unknown", as
   }
 });
 
-// ── 3. Die zwölf Ablehnungen des Agenten, übersetzt ─────────────────────────
+// ── 3. Die Ablehnungen des Agenten, übersetzt ─────────────────────────
 
 const AGENT_CASES: { key: string; agentStatus: number; status: number; error: string }[] = [
   { key: "unauthorized", agentStatus: 401, status: 502, error: "agent-unreachable" },
@@ -199,16 +199,15 @@ const AGENT_CASES: { key: string; agentStatus: number; status: number; error: st
   { key: "not-allowlisted", agentStatus: 404, status: 403, error: "agent-forbidden" },
   { key: "container-gone", agentStatus: 404, status: 404, error: "container-unknown" },
   { key: "self-management-locked: /mnt/user/appdata", agentStatus: 403, status: 403, error: "agent-forbidden" },
-  { key: "hardening-violated: privileged", agentStatus: 403, status: 403, error: "agent-forbidden" },
   { key: "container-not-started", agentStatus: 409, status: 409, error: "container-not-running" },
   { key: "too-many-sessions", agentStatus: 429, status: 429, error: "too-many-sessions" },
   { key: "no-shell", agentStatus: 409, status: 409, error: "no-shell" },
   { key: "exec-start-failed", agentStatus: 502, status: 502, error: "agent-unreachable" }
 ];
 
-test("alle zwölf Ablehnungen des Agenten werden übersetzt, nicht durchgereicht", async () => {
+test("alle Ablehnungen des Agenten werden übersetzt, nicht durchgereicht", async () => {
   // ⚠️ ÜBER DEN SCHLÜSSEL UND NICHT ÜBER DEN STATUS. Diese Tabelle enthält
-  // absichtlich zwei `409`, zwei `404` und drei `403` mit VERSCHIEDENEM
+  // absichtlich zwei `409` und zwei `404` mit VERSCHIEDENEM
   // Ausgang — eine Abbildung nach dem Status träfe für den ersten Fall zu und
   // für die späteren nicht.
   const agent = await startAgent();

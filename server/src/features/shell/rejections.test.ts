@@ -7,14 +7,13 @@ import { describeSessionRejection, describeStartRejection, execRejectionKey, SES
 // The tables of the agent's refusals, checked without Express (#260): they
 // return what the route writes, `{ status, error, message }`.
 
-test("execRejectionKey trifft auch die beiden Schlüssel mit angehängtem Text", () => {
-  // ⚠️ `self-management-locked: <directory>` und `hardening-violated: …`
-  // tragen einen Zusatz hinter einem Doppelpunkt. Wer sie mit `===`
-  // vergleicht, trifft sie NIE — der Zweig läuft ins `default`, und der
-  // Betreiber bekommt eine pauschale Ablehnung.
+test("execRejectionKey trifft auch den Schlüssel mit angehängtem Text", () => {
+  // ⚠️ `self-management-locked: <directory>` trägt einen Zusatz hinter einem
+  // Doppelpunkt. Wer ihn mit `===` vergleicht, trifft ihn NIE — der Zweig
+  // läuft ins `default`, und der Betreiber bekommt eine pauschale Ablehnung.
   assert.equal(execRejectionKey("no-shell"), "no-shell");
   assert.equal(execRejectionKey("self-management-locked: /opt/stacks/hub"), "self-management-locked");
-  assert.equal(execRejectionKey("hardening-violated: privileged"), "hardening-violated");
+  assert.equal(execRejectionKey("some-key: with detail"), "some-key");
   assert.equal(execRejectionKey(" too-many-sessions "), "too-many-sessions");
   assert.equal(execRejectionKey(""), null);
   assert.equal(execRejectionKey(": nur-zusatz"), null);
@@ -50,7 +49,7 @@ test("observe-only des Agenten ab v0.30.0 hat an der Stromroute und an den kurze
   assert.notEqual(start.error, describeStartRejection(refusal(403, "not-allowlisted")).error);
   assert.notEqual(start.message, session.message, "opening and typing are two different situations");
   // Any other 403 at a short call still is a vague one, not the observer class.
-  assert.equal(describeSessionRejection(refusal(403, "hardening-violated")).error, "agent-unreachable");
+  assert.equal(describeSessionRejection(refusal(403, "externally-managed")).error, "agent-unreachable");
 });
 
 test("ein Schlüssel mit angehängtem Text nennt den rohen Wert im Satz", () => {

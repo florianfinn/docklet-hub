@@ -262,7 +262,7 @@ export const deCompose = {
   hardeningService: "Service {service}",
   hardeningConfirmFinding: "Befund an Service {service} bestätigen",
   hardeningDelegationLockNote:
-    "Ein kritischer Befund heißt: Der Container kann den Host übernehmen, oder das ist nicht auszuschließen. Der Agent erlaubt verändernde Aktionen daran, meldet sie aber und protokolliert sie gesondert.",
+    "Ein kritischer Befund heißt: Der Container kann den Host übernehmen, oder das ist nicht auszuschließen. Der Agent erlaubt verändernde Aktionen daran und protokolliert sie gesondert.",
   hardeningRuleDockerSocket: "Docker-Socket eingehängt",
   hardeningRuleDockerSocketText:
     "Über den Docker-Socket kann der Container weitere Container starten, auch privilegierte mit dem Dateisystem des Hosts. Das entspricht Root-Zugriff auf den Host.",

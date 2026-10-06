@@ -217,7 +217,7 @@ export async function checkWebftpAccess(
   }
 
   // The STORED path is checked too, not only the entered one. It can only be
-  // set via the internal management route, but it lives in a file the agent
+  // set via `PUT /registry`, but it lives in a file the agent
   // reads at startup — and a guarantee that depends on the state of a file is
   // no guarantee.
   const share = checkSharePath(rawShare, composeContext.projectDir);

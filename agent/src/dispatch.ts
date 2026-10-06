@@ -539,7 +539,7 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
         reason: "redaction-unavailable"
       });
       // All three log paths read the secret set before their response headers.
-      // That way even an external grant stays fail-closed on EACCES/EIO.
+      // That way every log read stays fail-closed on EACCES/EIO.
       send(response, 503, { error: "redaction-unavailable" });
       return;
     }

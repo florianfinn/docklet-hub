@@ -14,9 +14,9 @@ export type Rejection = { status: number; error: string; message: string };
 /**
  * Der Schlüssel einer Ablehnung, ohne den angehängten Text.
  *
- * ⚠️ ZWEI DER ELF SCHLÜSSEL TRAGEN EINEN TEXT HINTER EINEM DOPPELPUNKT —
- * `self-management-locked: <directory>` und `hardening-violated: …`. Wer
- * sie mit `===` vergleicht, trifft sie NIE: die Gleichheit scheitert am
+ * ⚠️ EINER DER ZEHN SCHLÜSSEL TRÄGT EINEN TEXT HINTER EINEM DOPPELPUNKT —
+ * `self-management-locked: <directory>`. Wer ihn mit `===` vergleicht,
+ * trifft ihn NIE: die Gleichheit scheitert am
  * Zusatz, der Zweig läuft ins `default`, und der Betreiber bekommt eine
  * pauschale Ablehnung statt der Auskunft, welches Verzeichnis gesperrt ist.
  *
@@ -31,18 +31,18 @@ export function execRejectionKey(raw: unknown): string | null {
 }
 
 /**
- * Die Übersetzung der elf Ablehnungen des Agenten an der Stromroute.
+ * Die Übersetzung der zehn Ablehnungen des Agenten an der Stromroute.
  *
  * Die Reihenfolge ist die Prüfreihenfolge des Agenten (`exec-protokoll.md` §1);
  * sie steht hier nur der Lesbarkeit halber, entschieden wird über den
  * SCHLÜSSEL und nicht über den Status. Ein `409` heißt an dieser Fläche zwei
- * verschiedene Dinge (`container-not-started` und `no-shell`), ein `404`
- * ebenso, ein `403` sogar drei — eine Abbildung nach dem Status träfe für die
+ * verschiedene Dinge (`container-not-started` und `no-shell`), ein `404` und
+ * ein `403` ebenso — eine Abbildung nach dem Status träfe für die
  * erste Aufrufstelle zu und für die späteren nicht.
  *
- * ⚠️ ZWEI SCHLÜSSEL TRAGEN EINEN ANGEHÄNGTEN TEXT hinter einem Doppelpunkt
- * (`self-management-locked: <directory>`, `hardening-violated: …`). Wer sie
- * mit `===` verglich, träfe sie nie. Deshalb steht hier der reine Schlüssel und
+ * ⚠️ EIN SCHLÜSSEL TRÄGT EINEN ANGEHÄNGTEN TEXT hinter einem Doppelpunkt
+ * (`self-management-locked: <directory>`). Wer ihn mit `===` verglich, träfe
+ * ihn nie. Deshalb steht hier der reine Schlüssel und
  * davor `execRejectionKey` — die Funktion weiter oben, die genau dafür
  * gebaut ist. Der Zusatz geht nicht verloren: `appendRaw` hängt den rohen Wert
  * an den Satz, damit der Betreiber erfährt, WELCHES Verzeichnis gesperrt ist.
@@ -111,15 +111,6 @@ const AGENT_START_REJECTIONS: ReadonlyMap<
     }
   ],
   [
-    "hardening-violated",
-    {
-      status: 403,
-      error: "agent-forbidden",
-      message: "Der Arm hat eine Regel seiner Härtung verletzt gesehen.",
-      appendRaw: true
-    }
-  ],
-  [
     "container-not-started",
     {
       status: 409,
@@ -177,7 +168,7 @@ function rejectionKeyOf(error: AgentError): string | null {
 /**
  * Die Fehlerübersetzung an der Grenze — VOR der ersten Stromzeile.
  *
- * Alle elf Ablehnungen des Agenten fallen dort hin (`exec-protokoll.md` §1),
+ * Alle zehn Ablehnungen des Agenten fallen dort hin (`exec-protokoll.md` §1),
  * und deshalb darf und muss diese Funktion einen echten Statuscode setzen. Ab
  * der ersten Zeile geht das nicht mehr; dort steht die `error`-Zeile.
  */

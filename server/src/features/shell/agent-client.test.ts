@@ -214,12 +214,12 @@ test("der Abbruch durch den Aufrufer ist kein Fehler und ergibt unterminated", {
   assert.deepEqual(seen, ["noch da"]);
 });
 
-// ── Die zwölf Ablehnungen ───────────────────────────────────────────────────
+// ── Die Ablehnungen ───────────────────────────────────────────────────────
 
 test("eine Ablehnung vor der ersten Stromzeile trägt Status UND Schlüssel", { timeout: DEADLINE_MS }, async () => {
   // ⚠️ Der Grund für `openExecStream`. `agentStreamPost` lässt den Fehlerrumpf
   // ABSICHTLICH ungelesen — bei einem Strom gehört er dem Aufrufer. Bei einer
-  // Ablehnung gibt es aber keinen Strom, und der Status allein hält die zwölf
+  // Ablehnung gibt es aber keinen Strom, und der Status allein hält die
   // Ablehnungen nicht auseinander: `409` heißt `container-not-started`
   // ODER `no-shell`.
   const agent = agentSending([], { status: 409, payload: { error: "no-shell" } });

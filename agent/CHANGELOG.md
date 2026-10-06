@@ -12,7 +12,8 @@ Protokollbruch: Hub und Agenten müssen gemeinsam aktualisiert werden.
   das Feld `tier` je Route entfallen; `/health` trägt `public: true`.
 - `GET /monitor-events` beantwortet einen fremden Aufrufer mit
   `403 actor-not-allowed`. Die Schlüssel `tier-missing` und
-  `internal-only-action` entfallen.
+  `internal-only-action` entfallen. `hardening-violated` steht nicht mehr
+  unter den Ablehnungen der Shell, weil `gate()` ihn nicht mehr erzeugt.
 - Audit-Einträge tragen kein Feld `networkTier` mehr.
 - Eine mutierende Aktion auf einem Container mit Delegationssperre wird mit
   dem Grund `delegation-lock-allowed: <Regeln>` protokolliert.
