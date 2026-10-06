@@ -70,7 +70,7 @@ export const GONE: AgentHealth = { reachable: false, error: "keine Verbindung" }
 type ExecReply =
   /** Der Strom: der Test füttert ihn Zeile für Zeile. */
   | { kind: "stream" }
-  /** Eine der zwölf Ablehnungen — Status plus Fehlerrumpf. */
+  /** Eine der Ablehnungen — Status plus Fehlerrumpf. */
   | { kind: "status"; status: number; body: unknown };
 
 export type FakeAgent = {

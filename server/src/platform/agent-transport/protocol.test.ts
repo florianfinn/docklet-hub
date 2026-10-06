@@ -99,7 +99,7 @@ test("ein Verbindungsfehler wird nicht zu einem Protokollfehler", async () => {
   );
 });
 
-test("die schreibende Richtung trägt dieselben drei Kopfzeilen plus content-type", async () => {
+test("die schreibende Richtung trägt dieselben Kopfzeilen plus content-type", async () => {
   // ⚠️ Es gibt keinen zweiten Weg zum Agenten. `agentPut` ist dieselbe
   // Anfrage wie `agentGet`, nur mit Methode und Rumpf — eine eigene Fassung
   // wäre die Stelle, an der eine später ergänzte Kopfzeile in genau einem der
@@ -199,7 +199,7 @@ function streamWith(status: number, body: string, headers: Record<string, string
   return (async () => new Response(body, { status, headers })) as unknown as typeof fetch;
 }
 
-test("der Strom trägt dieselben drei Kopfzeilen, aber accept ndjson", async () => {
+test("der Strom trägt dieselben Kopfzeilen, aber accept ndjson", async () => {
   let seen: { url: string; method: string | undefined; headers: Record<string, string> } | null = null;
   const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
     seen = { url: String(input), method: init?.method, headers: init?.headers as Record<string, string> };
@@ -421,7 +421,7 @@ function jsonReply(body: unknown, status = 200): () => Response {
   return () => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-test("agentPost trägt dieselben drei Kopfzeilen, POST und einen JSON-Rumpf", async () => {
+test("agentPost trägt dieselben Kopfzeilen, POST und einen JSON-Rumpf", async () => {
   const { fetchImpl, seen } = capture(jsonReply({ ok: true, name: "neu" }));
 
   const answer = await agentPost(

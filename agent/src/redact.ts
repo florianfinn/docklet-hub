@@ -11,9 +11,8 @@ import type { ContainerStats } from "./stats.js";
 // plain text does not leave the agent at all, instead of carrying it through
 // the API and the network and only hiding it at render time.
 //
-// Env plain text is bound to docker.control.destructive; the agent only
-// returns it when it is explicitly requested AND the main API sends the
-// corresponding proof along.
+// Env plain text only goes out when a caller sets `includeEnvPlaintext`; no
+// route does today.
 
 export type ContainerSummary = {
   id: string;
@@ -103,7 +102,7 @@ export function envPlaintextOf(env: string[] | null | undefined): Record<string,
 }
 
 export type SummaryOptions = {
-  // Only true if the main API has proven destructive rights. The default is
+  // Plain-text env values in the summary. No route sets it; the default is
   // deliberately false: whoever specifies nothing gets no secrets.
   includeEnvPlaintext?: boolean;
   // Base path of the bind mount allowlist (stage 5a). Without it this one rule

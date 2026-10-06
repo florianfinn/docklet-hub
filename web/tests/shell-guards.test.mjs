@@ -135,7 +135,7 @@ test("jede Kennung, mit der der Hub eine Shell ablehnt, hat einen Satz", () => {
 
   const fromServer = new Set([
     ...failWithKeys(exec),
-    // Die Übersetzungstabelle der zwölf Ablehnungen des Agenten steht in
+    // Die Übersetzungstabelle der Ablehnungen des Agenten steht in
     // `features/shell/rejections.ts` als Objektliteral mit `error: "…"`.
     ...errorFieldKeys(exec),
     ...errorFieldKeys(admin),

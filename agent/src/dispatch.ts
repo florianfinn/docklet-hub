@@ -91,11 +91,6 @@ import { handleApplySpec, handleRemove, handleSafeAction } from "./routes/defini
 // if the main API waves it through. Precisely in the attack that the socket
 // isolation protects against, a check only in the API would already be bypassed.
 //
-// State as of stage 3: reading, safe actions (start/stop/restart), pull against
-// the pinned ref and a host discovery reduced to id/name/image for maintaining
-// the allowlist. destructive/exec/webftp/compose come later, each with its own
-// stage — they are already in the route table, so that their rejection does
-//
 // The dispatcher stands in this file and not in index.ts (#272), so that a
 // test can serve the real handlers from its own server: the round-trip tests
 // (`server/src/agent/agent-roundtrip.test.ts` and its sibling in

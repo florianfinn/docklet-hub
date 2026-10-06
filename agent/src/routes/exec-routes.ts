@@ -132,10 +132,11 @@ export async function handleExecInput(ctx: RouteContext, execMatch: RegExpMatchA
 // code. The NDJSON plumbing, on the other hand, has been in place since S6
 // and is proven.
 //
-// ⚠️ `mutating: true` is not a formality. It activates two barriers, both
+// ⚠️ `mutating: true` is not a formality. It activates three barriers, all
 // right for code execution in the container: the kill switch
-// (`agent-read-only`) and the self-management lock (no shell in the
-// containers that carry the dashboard itself).
+// (`agent-read-only`), the observer class (`observe-only`) and the
+// self-management lock (no shell in the containers that carry the dashboard
+// itself).
 export async function handleExec(ctx: ContainerRouteContext): Promise<void> {
   const { request, response, actor, containerId } = ctx;
   const result = await gate(containerId, { mutating: true, action: "exec", actor });
