@@ -27,8 +27,6 @@ import type { de } from "./de";
 // sonst; der typografische Apostroph ’ steht stattdessen.
 
 export const en = {
-  liveStateStale: "Live state disconnected or stale",
-  liveMeasurementStale: "Measurements stale",
   // The tab bar of the stack page. The texts of the tabs themselves live in
   // the features `logs` and `compose` (`web/src/features/<name>/messages/`).
   stackTabsLabel: "Tabs for this stack",
@@ -37,7 +35,11 @@ export const en = {
 
   appTitle: "docklet hub",
 
-  // Gemeinsames
+  // Live status shared by host and container views.
+  liveStateStale: "Live state disconnected or stale",
+  liveMeasurementStale: "Measurements stale",
+
+  // Shared actions
   loading: "Loading …",
   retry: "Try again",
   signOut: "Sign out",

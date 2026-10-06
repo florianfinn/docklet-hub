@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { createHostSync } from "./host-sync.js";
 import type { AgentHealth } from "./health.js";
 import type { DiscoveredStack, HostInventoryContainer, RegistryEntryInput } from "../containers/index.js";
 import type { HostRecord } from "./index.js";
 import { DEFAULT_HOST_THEME } from "contract";
-import { registryFingerprint, runHostCycle, type HostCycleDeps, type HostObservation } from "./host-cycle.js";
+import { cycleHost, registryFingerprint, runHostCycle, type HostCycleDeps, type HostObservation } from "./host-cycle.js";
 
 // Der Hintergrundlauf, geprüft mit eingespeisten Attrappen — ohne Netz, ohne
 // Agenten und ohne Uhr (AGENTS.md verlangt Tests ohne echte Dienste).
@@ -451,4 +452,55 @@ test("eine schweigende Ausstattung hält den Schub der Allowlist nicht auf", asy
   const result = await running;
   assert.equal(result.hosts[0].status, "synced");
   assert.deepEqual(kit.observations.get("h1")?.hostInfo, { cpuCores: 6, memTotalBytes: 600 });
+});
+
+test("background and live reconciliations serialize a host and coalesce waiting demand", async () => {
+  const record = host("h1");
+  let release = () => undefined as void;
+  let firstSending = () => undefined as void;
+  const sending = new Promise<void>((resolve) => { firstSending = resolve; });
+  const writes: string[][] = [];
+  const kit = harness([record], {
+    sendRegistry: async (_record, entries) => {
+      if (writes.length === 0) {
+        firstSending();
+        await new Promise<void>((resolve) => { release = resolve; });
+      }
+      writes.push(entries.map((entry) => entry.containerId));
+    }
+  }, { h1: [container("old")] });
+  const sync = createHostSync((next) => cycleHost(next, kit.deps));
+  kit.deps.syncHost = (next) => sync(next, { kind: "system", name: "hub" });
+  const background = runHostCycle(kit.deps);
+  await sending;
+  kit.inventory.set("h1", [container("new")]);
+  const requests = Array.from({ length: 20 }, () => sync(record, { kind: "system", name: "hub" }));
+  assert.equal(kit.probed.length, 1);
+  release();
+  await Promise.all([background, ...requests]);
+  assert.deepEqual(writes, [["old"], ["new"]]);
+  assert.equal(kit.probed.length, 2);
+  assert.equal(kit.observations.get("h1")?.syncedFingerprint?.includes('"new"'), true);
+});
+
+test("host reconciliation does not block other hosts or lose actor attribution after rejection", async () => {
+  let release = () => undefined as void;
+  const actors: string[] = [];
+  const sync = createHostSync(async (record, actor) => {
+    actors.push(`${record.id}:${actor.kind === "user" ? actor.id : actor.name}`);
+    if (actors.length === 1) {
+      await new Promise<void>((resolve) => { release = resolve; });
+      throw new Error("synthetic-cycle-failure");
+    }
+    return { hostId: record.id, hostName: record.name, status: "unchanged", entryCount: 0, error: null };
+  });
+  const first = sync(host("h1"), { kind: "system", name: "hub" });
+  const rejected = assert.rejects(first, /synthetic-cycle-failure/);
+  const userOne = sync(host("h1"), { kind: "user", id: "one" });
+  const userTwo = sync(host("h1"), { kind: "user", id: "two" });
+  await sync(host("h2"), { kind: "system", name: "hub" });
+  assert.deepEqual(actors, ["h1:hub", "h2:hub"]);
+  release();
+  await Promise.all([rejected, userOne, userTwo]);
+  assert.deepEqual(actors, ["h1:hub", "h2:hub", "h1:one", "h1:two"]);
 });

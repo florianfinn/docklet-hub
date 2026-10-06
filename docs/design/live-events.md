@@ -30,6 +30,12 @@ und Neu-Lesen nach Wiederverbindung erscheinen dagegen als `system:hub`.
 Der Hub gleicht die Hostliste alle fünf Sekunden ab und prüft erreichbare
 Agenten unabhängig vom Ereignisfluss alle 15 Sekunden mit drei Sekunden
 Verbindungsfrist. Eine negative Sonde bricht auch einen stillen Monitorstrom ab.
+Ein ruhiger Strom ist bei einem Host ohne Lifecycle-Änderungen zulässig. Antwortet
+`/health` weiterhin erfolgreich, erkennt die Sonde einen halboffenen oder nur
+auf `/monitor-events` hängenden Strom nicht. Der Monitorvertrag enthält keinen
+Heartbeat; eine reine Ruhezeitgrenze könnte daher gesunde Verbindungen abbrechen
+und belegt keinen Ereignisverlust. Diese Grenze bleibt für die praktische Abnahme
+relevant; die Web-Heartbeats bestätigen nur den Web-Hub-Transport.
 Host-Entfernung über die Hub-Route bricht sofort ab; ein Listenausgleich erkennt
 anderweitig entfernte Hosts. Geänderte Endpoints warten auf das Ende des alten
 Abonnements. Entfernte Hosts können durch einen bereits begonnenen Listenabruf
@@ -55,6 +61,14 @@ Ein neuer Container kann beim Create-Ereignis noch außerhalb der alten Allowlis
 liegen. Deshalb melden auch Bestandsänderungen des vorhandenen periodischen
 Registry-Abgleichs einen Refresh. Das ist insbesondere nach einem Recreate
 relevant, wenn Destroy vor dem Entstehen des neuen Containers eintraf.
+Create- und Destroy-Hinweise werden je Host über 150 Millisekunden gebündelt.
+Der Monitorleser wartet nicht auf diesen Abgleich. Weitere Hinweise während
+eines laufenden Abgleichs setzen nur einen weiteren Bedarf; nach dem Abgleich
+invalidiert ein Recreate-Hinweis ohne IDs den gesamten Host und seine Ressourcen.
+Hintergrundlauf, Live-Abgleich und expliziter Abgleich teilen eine Sperre je Host.
+Wartende Anforderungen desselben Akteurs teilen einen frischen Folgeabgleich;
+unterschiedliche Akteure behalten ihre eigene Audit-Zuordnung. Andere Hosts
+können unabhängig weiterlaufen.
 Ein abgeschalteter Hostzyklus bietet diesen zusätzlichen periodischen Abgleich
 nicht; bekannte Lifecycle-Ereignisse und explizite Refresh-Aufrufe bleiben aktiv.
 
@@ -73,7 +87,10 @@ Bei einem Ausfall bleiben die letzten Containerzeilen, Hostlast und Messverläuf
 im Sitzungscache erhalten. Die Hostdaten und Fehlermeldungen zeigen weiterhin
 den aktuellen Fehler. Eine getrennte Verbindung, ein fehlender Monitorstand
 oder eine fehlgeschlagene gezielte Abfrage kennzeichnet den Live-Stand als
-veraltet. Messwerte tragen zusätzlich eine Veraltet-Marke, wenn ihr Zeitstempel
+veraltet. Noch nicht registrierte Hosts erhalten keine Live-Marke. Eine
+Monitor-Momentaufnahme ist keine vollständige Hostliste: fehlende Hosts bleiben
+mit ihrer Reihenfolge im Cache, bis eine explizite Entfernung oder ein HTTP 404
+sie entfernt. Messwerte tragen zusätzlich eine Veraltet-Marke, wenn ihr Zeitstempel
 fehlt, unlesbar ist oder länger als 30 Sekunden zurückliegt. Die Prüfung läuft
 alle zehn Sekunden und berücksichtigt die Zehn-Sekunden-Samplingrate. Null wird
 nicht als Null-Prozent-Messung dargestellt. Ein neuer Container mit neuer ID
@@ -89,6 +106,9 @@ zurück und meldet einen Refresh an alle Web-Sitzungen. `target` ist
 `{ containerId }`, `{ project }` oder `{ host: true }`. Eine verschwundene
 Container-ID liefert eine leere Liste und wird trotzdem invalidiert. Der Aufruf
 vergibt keine Aktionsberechtigung und führt keine Laufzeitaktion aus.
+Ein bereits erfolgreich synchronisierter Hintergrundlauf verwendet
+`refresh(hostId, { host: true }, { resync: false })`: er liest den aktuellen
+Bestand und meldet den Refresh, ohne die Registry erneut abzugleichen.
 
 Die App reicht dieselbe Instanz über `ApiOptions.liveEvents` an Routen weiter.
 Spätere Aktionsrouten rufen die Schnittstelle nach ihrer abgeschlossenen Aktion
@@ -97,6 +117,11 @@ beendeter Dienst oder fehlgeschlagener Abgleich lässt das Promise scheitern.
 Parallele Bestandsleser desselben Hosts teilen eine laufende Abfrage. Ein
 Aktions-Refresh wartet zunächst auf einen schon begonnenen Leser und startet
 seine eigene Abfrage erst danach; er übernimmt keinen Stand von vor der Aktion.
+Fehler im Hostlisten-Abgleich oder Monitor werden mit lokalen Fehlerkategorien,
+HTTP-Status und bekannten Transportcodes protokolliert. Freie Fehlermeldungen,
+Antworttexte und Zugangsdaten werden nicht übernommen. Gleichartige Fehler
+erscheinen höchstens alle 30 Sekunden; die nächste Meldung zählt unterdrückte
+Wiederholungen mit. Die Drossel hält höchstens 32 Kategorien.
 
 ## Prüfgrenzen
 

@@ -263,7 +263,7 @@ export function HostCard({ host, role, counters, onRemoved, onAgentUpdated, rend
           {kindKey === null ? t("hostKindUnknown", { kind: host.kind }) : t(kindKey)}
         </Badge>
         <HostStatusBadge status={host.status} />
-        <LiveStatusLabel hostId={host.id} />
+        <LiveStatusLabel hostId={host.id} state={host.state} />
         <span className="ml-auto">
           <HostCounts counters={counters} />
         </span>

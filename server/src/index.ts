@@ -155,7 +155,7 @@ async function main(): Promise<void> {
     agentSecret: config.agentSecret,
     intervalSeconds: config.hostCycleIntervalSeconds,
     onInventoryChanged: async (hostId) => {
-      await liveEvents.refresh(hostId, { host: true }).catch(() => undefined);
+      await liveEvents.refresh(hostId, { host: true }, { resync: false }).catch(() => undefined);
     },
     log: (message) => console.log(message),
     logError: (message, error) => console.error(message, error)
@@ -169,7 +169,7 @@ async function main(): Promise<void> {
       const outcome = await hostCycle.syncHost(record, { kind: "system", name: "hub" });
       if (outcome.status !== "synced" && outcome.status !== "unchanged") throw new Error("host-resync-failed");
     },
-    onError: () => console.error("Live-Abonnements konnten nicht abgeglichen werden.")
+    onError: (error) => console.error("Live-Ereignisse:", error)
   });
   liveEvents.start();
 

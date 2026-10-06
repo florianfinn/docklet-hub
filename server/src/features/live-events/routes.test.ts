@@ -69,7 +69,7 @@ test("heartbeat and periodic authentication end an expired session", async (cont
   } finally { answer.end(); }
 });
 
- test("a browser that left during authentication never occupies a session slot", async () => {
+test("a browser that left during authentication never occupies a session slot", async () => {
   const h = setup(); const closed = new Answer(); closed.destroyed = true;
   await h.connect(closed);
   assert.equal(h.listeners.size, 0);

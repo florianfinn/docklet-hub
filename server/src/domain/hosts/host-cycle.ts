@@ -98,6 +98,8 @@ export type HostCycleResult = {
 
 export type HostCycleDeps = {
   listHosts: () => Promise<readonly HostRecord[]>;
+  // The service shares this coordinator with explicit and live reconciliations.
+  syncHost?: (record: HostRecord) => Promise<HostCycleOutcome>;
   // Der Halter, als zwei Funktionen und nicht als Objekt: der Lauf braucht
   // genau diese zwei Zugriffe, und ein Test speist sie in drei Zeilen ein.
   readObservation: (hostId: string) => HostObservation | undefined;
@@ -118,15 +120,8 @@ export type HostCycleDeps = {
   now: () => number;
 };
 
-/**
- * Was ein Abgleich für EINEN Arm braucht.
- *
- * ⚠️ Ohne `listHosts`, und das ist der ganze Unterschied. Ein Abgleich, der
- * einen Arm meint, soll den Bestand nicht lesen können — sonst wäre die Frage
- * „welcher Arm?" zweimal beantwortbar, einmal vom Aufrufer und einmal aus der
- * Liste.
- */
-export type SingleHostCycleDeps = Omit<HostCycleDeps, "listHosts">;
+/** Dependencies of one host cycle, excluding listing and service coordination. */
+export type SingleHostCycleDeps = Omit<HostCycleDeps, "listHosts" | "syncHost">;
 
 /**
  * Die stabile Abbildung einer gerechneten Allowlist.
@@ -299,24 +294,11 @@ export async function cycleHost(record: HostRecord, deps: SingleHostCycleDeps): 
   }
 }
 
-/**
- * Ein Durchlauf über alle Arme.
- *
- * ⚠️ `Promise.allSettled` und nicht `Promise.all`, obwohl `cycleHost` selbst
- * schon jeden Fehler fängt. Der Unterschied zählt für genau einen Fall: einen
- * Fehler IN `cycleHost` — eine geworfene `now()`-Attrappe, ein Halter, der bei
- * `writeObservation` wirft. Mit `Promise.all` nähme der die übrigen Arme mit,
- * und weil ein unbehandelter Fehler in einem Zeitgeber den Prozess beendet,
- * stürbe der Hub nachts an einem Arm. Der Preis dafür sind vier Zeilen.
- *
- * Was diese Funktion selbst NICHT fängt: einen Fehler aus `listHosts` — dann
- * gibt es keinen Durchlauf, über den zu berichten wäre. Der Aufrufer
- * (`host-cycle-timer.ts`) fängt ihn und meldet ihn.
- */
+/** A failed host cycle never cancels its siblings; listing failures reach the caller. */
 export async function runHostCycle(deps: HostCycleDeps): Promise<HostCycleResult> {
   const startedAt = deps.now();
   const records = await deps.listHosts();
-  const settled = await Promise.allSettled(records.map((record) => cycleHost(record, deps)));
+  const settled = await Promise.allSettled(records.map((record) => deps.syncHost ? deps.syncHost(record) : cycleHost(record, deps)));
 
   const hosts = settled.map((entry, index): HostCycleOutcome => {
     if (entry.status === "fulfilled") return entry.value;

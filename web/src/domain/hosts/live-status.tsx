@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useTranslations } from "use-intl";
-import type { HostContainers, HostOverview, LiveStatus } from "contract";
+import type { HostContainers, HostOverview, HostView, LiveStatus } from "contract";
 
 import { queryKeys } from "../../platform/query/query-keys";
 
@@ -13,10 +13,10 @@ export function useLiveStale(hostId: string): boolean {
   });
   return !data?.transport || data.hosts[hostId] !== "connected" || data.unavailable?.[hostId] === true;
 }
-export function LiveStatusLabel({ hostId }: { hostId: string }) {
+export function LiveStatusLabel({ hostId, state }: { hostId: string; state: HostView["state"] }) {
   const t = useTranslations();
   const stale = useLiveStale(hostId);
-  return stale ? <span role="status" data-testid={`live-stale-${hostId}`} className="text-xs text-muted-foreground">{t("liveStateStale")}</span> : null;
+  return state === "registered" && stale ? <span role="status" data-testid={`live-stale-${hostId}`} className="text-xs text-muted-foreground">{t("liveStateStale")}</span> : null;
 }
 export function MeasurementStale({ hostId, sampledAt }: { hostId?: string; sampledAt: string | null }) {
   const t = useTranslations();
