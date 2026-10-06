@@ -8,6 +8,7 @@ import { AGENT_VERSION } from "./version.js";
 
 import {
   config,
+  dockerEvents,
   registry,
   audit,
   ownContainerId,
@@ -40,6 +41,7 @@ try {
 }
 
 server.listen(config.listenPort, config.listenHost, async () => {
+  dockerEvents.start();
   console.log(
     `[agent] listening on ${config.listenHost}:${config.listenPort}, ` +
       `readOnly=${config.readOnly}, allowlist entries=${registry.size()}`
@@ -160,3 +162,9 @@ server.listen(config.listenPort, config.listenHost, async () => {
     );
   }
 });
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    void dockerEvents.stop().finally(() => process.exit(0));
+  });
+}

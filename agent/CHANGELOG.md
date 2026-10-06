@@ -44,6 +44,9 @@ Protokollbruch: Hub und Agenten müssen gemeinsam aktualisiert werden.
 - Fehler bei `compose config` werden für Laufzeitaktionen vor der Mutation abgefangen; die bisherige Toleranz unlesbarer Definitionen anderer Kontextabfragen bleibt erhalten. Nach einer fehlgeschlagenen Mutation wird der Zustand weiterhin nachgelesen; scheitert auch die Nachlese, bleiben beide Diagnosen erhalten und der Zustand wird als unbekannt gemeldet.
 - Stack-Streams beantworten Fehler vor der ersten Zeile mit JSON und HTTP-Status. Danach tragen Fehlerzeilen den spezifischen Schlüssel in `reason`, den Fehlerstatus in `status` und das bereinigte Ergebnis in `body`. `CONTRACT_VERSION` bleibt für diesen unveröffentlichten Stand 12; der Vertragsfingerabdruck wird aktualisiert.
 
+- Manuelle Stopp-Absichten entstehen aus `kill` → `die` und bleiben unter Projekt und Service beziehungsweise Containername im lokalen Zustandsverzeichnis erhalten. Der nächste Start löscht sie; eine erkannte Unterbrechung der Daemon-Kontinuität verwirft sie. Hub-Stopps annotieren den Akteur erst beim tatsächlichen Engine- oder Compose-Aufruf; ohne bestätigende Ereignisse entsteht keine Absicht (#19).
+- Ein Hintergrund-Watcher liest den einzigen Docker-Ereignisstrom auch ohne Hub-Verbindung und verteilt alle bisherigen Lifecycle- und Health-Aktionen an `/monitor-events`. `kill` und Container-Metadaten bleiben lokal. `GET /stop-intents` liefert Absichten, die letzten 256 Ausfallklassifikationen und den Beobachtungsstatus; fehlende Beobachtung ergibt `503`. Diese Ergänzung gehört zur unveröffentlichten Vertragsversion 12.
+
 ## 0.32.0
 
 Der erste Quellstand von docklet hub übernimmt Hub und Agent als Monorepo.

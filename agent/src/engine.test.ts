@@ -474,3 +474,12 @@ test("runtime requests pass the calculated stop deadline to HTTP instead of the 
   await engine.start("id");
   assert.deepEqual(deadlines, [100_000, 100_000, 20_000, 30_000]);
 });
+
+test("kill evidence keeps Docker time and Compose metadata only inside the agent", () => {
+  const atMs = Date.parse("2026-10-01T10:00:00.000Z");
+  assert.deepEqual(monitorEventOf({ Type: "container", Action: "kill", time: atMs / 1_000,
+    timeNano: atMs * 1_000_000, Actor: { ID: "a".repeat(64), Attributes: {
+      name: "/demo-web", "com.docker.compose.project": "demo", "com.docker.compose.service": "web", signal: "15"
+    } } }), { action: "kill", containerId: "a".repeat(64), containerName: "demo-web", atMs,
+    composeProject: "demo", composeService: "web" });
+});

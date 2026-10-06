@@ -73,6 +73,7 @@ type RequestOptions = {
   // Additional fixed engine headers. Currently exclusively for the transient
   // X-Registry-Auth of a private image pull.
   headers?: Record<string, string>;
+  onConnected?: () => void;
   // A body that is NOT JSON — so far only the tar stream of put-archive
   // (S19). Excludes `body`; at most one of the two is ever set.
   rawBody?: Buffer;
@@ -170,6 +171,7 @@ export class DockerEngine {
         (response) => {
           const status = response.statusCode ?? 0;
           const failed = status < 200 || status >= 300;
+          if (!failed) options.onConnected?.();
           const errorChunks: Buffer[] = [];
           let errorSize = 0;
           response.on("data", (chunk: Buffer) => {
@@ -610,11 +612,12 @@ export class DockerEngine {
     return this.json<EngineInfo>({ method: "GET", path: "/info" });
   }
 
-  // Monitoring forwards lifecycle, health, create and destroy actions with
-  // container IDs. Docker names, attributes and labels stay on the host.
+  // One lifecycle stream, shared by local intent tracking and hub monitoring.
+  // Container metadata stays inside the agent.
   async monitorEvents(
     onEvent: (event: DockerMonitorEvent) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options: { since?: number; onConnected?: () => void } = {}
   ): Promise<void> {
     let rest = "";
     const consume = (text: string) => {
@@ -634,7 +637,8 @@ export class DockerEngine {
     const { status, errorBody } = await this.stream(
       {
         method: "GET",
-        path: "/events",
+        path: options.since === undefined ? "/events" : `/events?since=${Math.floor(options.since)}`,
+        onConnected: options.onConnected,
         raw: true,
         timeoutMs: 24 * 60 * 60_000,
         signal
