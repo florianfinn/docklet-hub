@@ -36,7 +36,7 @@ test("the list of GET routes with an effect is read from the server source", () 
     GET_ROUTES_WITH_EFFECT.length >= 11,
     `GET_ROUTES_WITH_EFFECT aus server/src/platform/http/request-origin.ts gelesen: ${GET_ROUTES_WITH_EFFECT.length} Einträge, erwartet mindestens 11`
   );
-  assert.ok(GET_ROUTES_WITH_EFFECT.every((path) => path.startsWith("/hosts/")));
+  assert.ok(GET_ROUTES_WITH_EFFECT.every((path) => path.startsWith("/hosts/") || path === "/live-events"));
   assert.deepEqual(readGetRoutesWithEffect('export const GET_ROUTES_WITH_EFFECT: readonly string[] = [\n  // "/not/this"\n  "/a",\n  "/b/:id"\n];'), [
     "/a",
     "/b/:id"
@@ -192,6 +192,7 @@ const SESSION_ONLY_WRITE = new Map([
 // steht, wird ebenfalls rot: sonst bliebe eine Ausnahme stehen, die niemand
 // mehr liest.
 const SESSION_ONLY_GET_WITH_EFFECT = new Map([
+  ["/live-events", "denn der Strom belegt eine begrenzte Hub-Verbindung; Live-Zustände lesen dürfen angemeldete User"],
   [
     "/hosts/:hostId/containers/:containerId/logs-stream",
     "denn sie ändert nichts — sie belegt einen der begrenzten Ströme des Arms und schreibt in dessen Audit-Log; " +

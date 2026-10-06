@@ -40,7 +40,7 @@ export type ContainersService = {
    * that points from this hub to a person. The background cycle appears there
    * as `system:hub`, and an inventory taken from it would delete that trace.
    */
-  overview: (caller: { userId: string }) => Promise<HostOverview[]>;
+  overview: (caller: { userId: string; hostId?: string }) => Promise<HostOverview[]>;
   // `{ ok: false }` for anything that is not a boolean.
   updateViewSettings: (
     showSystem: unknown
@@ -57,8 +57,8 @@ export function createContainersService({
   agent = DEFAULT_AGENT
 }: ContainersServiceDeps): ContainersService {
   return {
-    overview: async ({ userId }) =>
-      buildOverview(await hosts.list(), {
+    overview: async ({ userId, hostId }) =>
+      buildOverview((await hosts.list()).filter((record) => hostId === undefined || record.id === hostId), {
         // ⚠️ The REACHABILITY comes from the holder of the background cycle,
         // not from a probe per request (B4a-C2, #5). Before, this one surface
         // waited for N agents with 3 s each, and the wait grew with every new

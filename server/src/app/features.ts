@@ -10,6 +10,7 @@ import { registerHostRoutes } from "../features/hosts/index.js";
 import { readLogSettings, registerLogRoutes } from "../features/logs/index.js";
 import { readHostDecoration, registerMarkRoutes } from "../features/marks/index.js";
 import { hostLoad, registerMetricsRoutes } from "../features/metrics/index.js";
+import { registerLiveEventRoutes } from "../features/live-events/index.js";
 import { registerResourcesRoutes } from "../features/resources/index.js";
 import { registerSettingsRoutes } from "../features/settings/index.js";
 import { registerShellRoutes } from "../features/shell/index.js";
@@ -131,5 +132,6 @@ export const FEATURES: readonly RegisterFeature[] = [
   registerMarkRoutes,
   // The feature `resources`: images, volumes and networks of one host (#10).
   // Its one pattern matches no other route, so its place moves nothing.
-  registerResourcesRoutes
+  registerResourcesRoutes,
+  registerLiveEventRoutes
 ];

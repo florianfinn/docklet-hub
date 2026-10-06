@@ -2,6 +2,7 @@ import { useTranslations } from "use-intl";
 
 import type { ContainerEntry } from "contract";
 
+import { MeasurementStale } from "../../domain/hosts";
 import { byteSize, useLanguage } from "../../platform/i18n";
 import { formatPercent } from "./metric-values";
 
@@ -15,7 +16,7 @@ import { formatPercent } from "./metric-values";
 // ⚠️ Erst ab mittlerer Breite. Die Zeile trägt schon Punkt, Namen, Marken und
 // den Statustext des Agenten; auf einem Telefon schöben zwei Zahlen mehr den
 // Namen aus der Zeile.
-export function RowUsage({ container }: { container: ContainerEntry }) {
+export function RowUsage({ container, hostId }: { container: ContainerEntry; hostId?: string }) {
   const t = useTranslations();
   const { language } = useLanguage();
   if (!container.running || container.stats === null) return null;
@@ -31,6 +32,7 @@ export function RowUsage({ container }: { container: ContainerEntry }) {
     >
       {cpuPercent === null ? null : <span>{t("metricsRowCpu", { value: formatPercent(cpuPercent, language) })}</span>}
       {memory === null ? null : <span>{t(memory.key, { value: memory.value })}</span>}
+      <MeasurementStale hostId={hostId} sampledAt={container.stats.sampledAt} />
     </span>
   );
 }

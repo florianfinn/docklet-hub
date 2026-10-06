@@ -1,6 +1,6 @@
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 
-import { summarize, type DockerHost, type HostCounters } from "../../domain/hosts";
+import { retainHostContainers, summarize, type DockerHost, type HostCounters } from "../../domain/hosts";
 import { fetchHostContainers } from "./api";
 import { queryKeys } from "../../platform/query/query-keys";
 
@@ -29,10 +29,11 @@ export type HostCountersResult = {
 };
 
 export function useHostCounters(hosts: DockerHost[]): HostCountersResult {
+  const client = useQueryClient();
   return useQueries({
     queries: hosts.map((host) => ({
       queryKey: queryKeys.hosts.containers(host.id),
-      queryFn: () => fetchHostContainers(host.id),
+      queryFn: async () => retainHostContainers(await fetchHostContainers(host.id), client.getQueryData(queryKeys.hosts.containers(host.id))),
       enabled: COUNTABLE.includes(host.status)
     })),
     combine: (results) => {
@@ -41,7 +42,7 @@ export function useHostCounters(hosts: DockerHost[]): HostCountersResult {
       hosts.forEach((host, index) => {
         const result = results[index];
         updatedAt = Math.max(updatedAt, result.dataUpdatedAt);
-        if (!COUNTABLE.includes(host.status)) {
+        if (!COUNTABLE.includes(host.status) && result.data === undefined) {
           counters[host.id] = { state: "unavailable" };
         } else if (result.data !== undefined) {
           counters[host.id] =

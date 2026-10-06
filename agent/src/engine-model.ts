@@ -110,7 +110,7 @@ export type EngineInfo = {
 };
 
 export type DockerMonitorEvent = {
-  action: "die" | "start" | "health_status" | "oom";
+  action: "die" | "start" | "stop" | "restart" | "create" | "destroy" | "health_status" | "oom";
   containerId: string;
   // Stays inside the agent and only serves to assign a freshly created
   // container to its stable monitor already on the first event. The name is
@@ -137,7 +137,7 @@ export function monitorEventOf(value: unknown): DockerMonitorEvent | null {
       ? raw.Actor.Attributes.name.trim().replace(/^\/+/, "")
       : undefined;
   const action = raw.Action;
-  if (action === "die" || action === "start" || action === "oom") {
+  if (action === "die" || action === "start" || action === "stop" || action === "restart" || action === "create" || action === "destroy" || action === "oom") {
     return { action, containerId, ...(containerName ? { containerName } : {}) };
   }
   if (typeof action === "string" && action.startsWith("health_status:")) {

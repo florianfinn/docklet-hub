@@ -64,6 +64,7 @@ const EXPECTED_LAYERS = [
   "POST /hosts/:hostId/containers/:containerId/exec/:session/size",
   "POST /hosts/:hostId/containers/:containerId/exec/:session/close",
   "GET /overview",
+  "GET /hosts/:hostId/overview",
   // Moved up from behind `PUT /settings/network` with the feature `containers`
   // (#282). No other registered pattern can match `PUT /settings/containers`,
   // so the order changes no answer; the case below holds (`MOVED_BY_FEATURES`).
@@ -83,6 +84,7 @@ const EXPECTED_LAYERS = [
   "PUT /hosts/:hostId/stacks/:project/hidden",
   "PUT /hosts/:hostId/containers/:name/marks",
   "GET /hosts/:hostId/resources",
+  "GET /live-events",
   // The JSON 404 for everything under `/api` that matched nothing.
   "use <anonymous>"
 ];

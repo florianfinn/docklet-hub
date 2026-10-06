@@ -401,3 +401,5 @@ export {
   specVolumeSchema
 } from "./agent/spec.js";
 export type { ContainerSpecInput, SpecPort, SpecVolume } from "./agent/spec.js";
+
+export { liveEventSchema, liveStatusSchema, liveActionSchema, type LiveEvent, type LiveStatus, type LiveAction } from "./api/live-events.js";
