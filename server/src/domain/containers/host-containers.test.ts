@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { fetchHostContainers, parseHostContainerList } from "./host-containers.js";
-import { ACTOR_HEADER, HUB_TIER, SECRET_HEADER, TIER_HEADER } from "contract";
+import { ACTOR_HEADER, SECRET_HEADER } from "contract";
 import { AgentError } from "../../platform/agent-transport/protocol.js";
 
 // Geprüft gegen die Form, die der Agent unter GET /host-containers liefert —
@@ -104,7 +104,7 @@ test("eine leere Liste ist eine gültige Antwort", () => {
   assert.deepEqual(parseHostContainerList({ containers: [] }), []);
 });
 
-test("die Anfrage trägt Geheimnis, Aufrufer und Netzstufe", async () => {
+test("die Anfrage trägt Geheimnis und Aufrufer, aber keine Netzstufe", async () => {
   let seen: { url: string; headers: Record<string, string>; method: string | undefined } | null = null;
   const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
     seen = { url: String(input), headers: init?.headers as Record<string, string>, method: init?.method };
@@ -123,14 +123,11 @@ test("die Anfrage trägt Geheimnis, Aufrufer und Netzstufe", async () => {
   // ⚠️ `system:hub` und kein Benutzerkonto: der Abgleich läuft ohne Menschen
   // davor, und der Agent schreibt diesen Wert in sein Audit-Log.
   assert.equal(request.headers[ACTOR_HEADER], "system:hub");
-  assert.equal(request.headers[TIER_HEADER], HUB_TIER);
+  assert.equal(request.headers["x-docker-agent-tier"], undefined);
 });
 
 test("ein 403 nennt das Audit-Log, ein 401 das gemeinsame Geheimnis", async () => {
   // Beide sehen im Log gleich aus und haben völlig verschiedene Ursachen.
-  // `GET /host-containers` ist `intern-only`; ein 403 hieße hier, dass der Hub
-  // sich nicht als `internal` meldet — oder dass die Route umbenannt wurde,
-  // denn `route-policy.ts` ist default deny.
   await assert.rejects(
     fetchHostContainers(TARGET, { actor: ACTOR, fetchImpl: replyWith(403) }),
     (error: unknown) =>

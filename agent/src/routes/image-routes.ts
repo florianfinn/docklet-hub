@@ -25,13 +25,12 @@ import { gate } from "../runtime/gate.js";
 // code on the host" as soon as the API is compromised.
 //
 // The pull ONLY swaps the image in the local cache. The running container
-// keeps using its old image until it is recreated — and recreate is
-// destructive and therefore intern-only (stage 5). The response says so
+// keeps using its old image until it is recreated. The response says so
 // explicitly via `imageChanged`/`recreateRequired`, instead of suggesting a
 // success that has not reached the application.
 export async function handlePull(ctx: ContainerRouteContext): Promise<void> {
-  const { response, actor, tier, parsedTier, containerId, action } = ctx;
-  const result = await gate(containerId, { mutating: true, action, tier: parsedTier, actor });
+  const { response, actor, containerId, action } = ctx;
+  const result = await gate(containerId, { mutating: true, action, actor });
   const containerName = result.ok ? (result.inspect.Name ?? "").replace(/^\//, "") : null;
   if (!result.ok) {
     audit.write({
@@ -39,7 +38,6 @@ export async function handlePull(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: result.reason
     });
@@ -58,7 +56,6 @@ export async function handlePull(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: expected ? "image-ref-unreadable" : "no-image-ref"
     });
@@ -80,7 +77,6 @@ export async function handlePull(ctx: ContainerRouteContext): Promise<void> {
     containerId,
     containerName,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `${expected} (${imageChanged ? "new image" : "unchanged"}, ${mutability})`
   });
@@ -102,12 +98,11 @@ export async function handlePull(ctx: ContainerRouteContext): Promise<void> {
 // happens instead of being buffered until the end. That is the part the UI
 // shows as terminal output.
 //
-// Intern-only (route table): the output names the registry, layer ids and
-// sizes — the silent `pull` does not, and therefore stays allowed
-// externally.
+// The output names the registry, layer ids and sizes — the silent `pull`
+// does not.
 export async function handlePullStream(ctx: ContainerRouteContext): Promise<void> {
-  const { response, actor, tier, parsedTier, containerId, action } = ctx;
-  const result = await gate(containerId, { mutating: true, action, tier: parsedTier, actor });
+  const { response, actor, containerId, action } = ctx;
+  const result = await gate(containerId, { mutating: true, action, actor });
   const containerName = result.ok ? (result.inspect.Name ?? "").replace(/^\//, "") : null;
   if (!result.ok) {
     audit.write({
@@ -115,7 +110,6 @@ export async function handlePullStream(ctx: ContainerRouteContext): Promise<void
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: result.reason
     });
@@ -131,7 +125,6 @@ export async function handlePullStream(ctx: ContainerRouteContext): Promise<void
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: expected ? "image-ref-unreadable" : "no-image-ref"
     });
@@ -149,7 +142,6 @@ export async function handlePullStream(ctx: ContainerRouteContext): Promise<void
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: "too-many-streams"
     });
@@ -200,7 +192,6 @@ export async function handlePullStream(ctx: ContainerRouteContext): Promise<void
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "allowed",
       reason: `${expected} (${imageChanged ? "new image" : "unchanged"}, ${mutability}, streamed)`
     });
@@ -225,7 +216,6 @@ export async function handlePullStream(ctx: ContainerRouteContext): Promise<void
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       // "denied" in this log consistently means "the permission check said
       // no". An abort was allowed and merely not carried through — counted
       // as "denied" it would fake a permission violation. The reason below
@@ -273,11 +263,10 @@ export async function handlePullStream(ctx: ContainerRouteContext): Promise<void
 //
 // The preview is read-only and changes nothing.
 export async function handleRecreatePreview(ctx: ContainerRouteContext): Promise<void> {
-  const { response,  parsedTier, containerId } = ctx;
+  const { response, containerId } = ctx;
   const result = await gate(containerId, {
     mutating: false,
-    action: "recreate",
-    tier: parsedTier
+    action: "recreate"
   });
   if (!result.ok) {
     send(response, result.status, { error: result.reason });

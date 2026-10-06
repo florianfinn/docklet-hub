@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { ACTOR_HEADER, HUB_TIER, SECRET_HEADER, TIER_HEADER } from "contract";
+import { ACTOR_HEADER, SECRET_HEADER } from "contract";
 import { AgentError } from "../../platform/agent-transport/protocol.js";
 import {
   buildRegistryEntries,
@@ -296,7 +296,7 @@ test("der Abgleich schickt die vollständige Liste als PUT /registry", async () 
   assert.equal(request.url, "http://docker-agent:8099/registry");
   assert.equal(request.method, "PUT");
   assert.equal(request.headers[SECRET_HEADER], "s".repeat(32));
-  assert.equal(request.headers[TIER_HEADER], HUB_TIER);
+  assert.equal(request.headers["x-docker-agent-tier"], undefined);
   // ⚠️ `system:hub` und kein Benutzerkonto. Der Agent schreibt diesen Wert in
   // sein Audit-Log; ein `user:<id>` behauptete, ein Mensch habe den Abgleich
   // ausgelöst, und wer das Log später liest, suchte nach einer Entscheidung,

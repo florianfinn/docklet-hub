@@ -52,7 +52,6 @@ export type AuditEntry = {
   containerName: string | null;
   // Supplied by the main API; the agent logs what it was given.
   actor: string | null;
-  networkTier: string | null;
   outcome: "allowed" | "denied" | "error";
   reason?: string;
 };
@@ -112,7 +111,6 @@ export class AgentAuditLog {
       containerId: null,
       containerName: null,
       actor: null,
-      networkTier: null,
       outcome: "allowed"
     });
   }
@@ -128,7 +126,6 @@ export class AgentAuditLog {
       containerId: truncateField(entry.containerId),
       containerName: truncateField(entry.containerName),
       actor: truncateField(entry.actor),
-      networkTier: truncateField(entry.networkTier),
       ...(entry.reason === undefined ? {} : { reason: truncateField(entry.reason) })
     });
   }

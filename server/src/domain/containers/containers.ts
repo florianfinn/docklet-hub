@@ -35,8 +35,7 @@ import { agentGet, AgentError, type AgentTarget, type RequestOptions } from "../
 // der Vergleich gegen den tatsächlichen Bestand des Hosts liefe über
 // `GET /host-containers` und gehört in die Phase, die den Bestand pflegt.
 //
-// Gefüllt wird sie über `PUT /registry`, und diese Route steht dem Hub offen
-// (protocol.ts, HUB_TIER). Bedient wird sie hier trotzdem nicht: wer die
+// Gefüllt wird sie über `PUT /registry`. Bedient wird sie hier trotzdem nicht: wer die
 // Allowlist schreibt, bestimmt, worauf der Agent überhaupt Aktionen zulässt —
 // das ist der Gegenstand der Phase, die diese Aktionen einführt, und nicht
 // der Übersicht.

@@ -6,9 +6,7 @@
 // instead of with a filtered full text.
 //
 // ⚠️ The most important exclusion is the HOST PATHS. They are a map of the
-// server — for the same reason the hardening finding has been intern-only
-// since stage 4. An external compose view showing `/mnt/user/docker/…` would
-// have undone this decision through the back door.
+// server, which is why the hardening details have their own route.
 //
 // That is why this module is an ALLOWLIST and not a filter: it builds a new
 // object from six named fields. What is not explicitly copied here cannot

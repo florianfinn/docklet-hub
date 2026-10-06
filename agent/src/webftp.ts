@@ -40,8 +40,8 @@ import { ENV_FILE_NAME } from "./env-file.js";
 // The same block list as for the file logs (log-file.ts) and for the same
 // reason: the `.env` is the source the redaction draws its secrets from.
 // Making it downloadable via Web FTP would turn the protection against
-// itself. Compose files have their own, intern-only path with
-// `docker.compose.raw` — via the share they would bypass it.
+// itself. Compose files have their own path with `docker.compose.raw` — via
+// the share they would bypass it.
 //
 // Usually neither of them is inside the share at all, because the share is a
 // real subdirectory. The block is the fallback for the case that a project

@@ -14,7 +14,7 @@ export type Rejection = { status: number; error: string; message: string };
 /**
  * Der Schlüssel einer Ablehnung, ohne den angehängten Text.
  *
- * ⚠️ ZWEI DER ZWÖLF SCHLÜSSEL TRAGEN EINEN TEXT HINTER EINEM DOPPELPUNKT —
+ * ⚠️ ZWEI DER ELF SCHLÜSSEL TRAGEN EINEN TEXT HINTER EINEM DOPPELPUNKT —
  * `self-management-locked: <directory>` und `hardening-violated: …`. Wer
  * sie mit `===` vergleicht, trifft sie NIE: die Gleichheit scheitert am
  * Zusatz, der Zweig läuft ins `default`, und der Betreiber bekommt eine
@@ -31,8 +31,7 @@ export function execRejectionKey(raw: unknown): string | null {
 }
 
 /**
- * Die Übersetzung der Ablehnungen des Agenten an der Stromroute: zwölf, seit
- * v0.30.0 dreizehn (`observe-only`, #234).
+ * Die Übersetzung der elf Ablehnungen des Agenten an der Stromroute.
  *
  * Die Reihenfolge ist die Prüfreihenfolge des Agenten (`exec-protokoll.md` §1);
  * sie steht hier nur der Lesbarkeit halber, entschieden wird über den
@@ -52,32 +51,13 @@ const AGENT_START_REJECTIONS: ReadonlyMap<
   string,
   { status: number; error: string; message: string; appendRaw?: true }
 > = new Map([
-  // 1–3 sind allesamt Fehler des HUBS und keine der Anfrage: ein falsches
-  // Geheimnis, eine fehlende Netzstufe, eine Route, die der Agent nur intern
-  // zulässt. Der Hub meldet sich dauerhaft als `internal`; feuert die dritte,
-  // ist er falsch eingerichtet. Für den Browser sind alle drei dasselbe.
+  // A wrong secret is a fault of the HUB's set-up, not of the request.
   [
     "unauthorized",
     {
       status: 502,
       error: "agent-unreachable",
       message: "Hub und Arm tragen verschiedene Geheimnisse. Das ist ein Fehler der Einrichtung des Hubs."
-    }
-  ],
-  [
-    "tier-missing",
-    {
-      status: 502,
-      error: "agent-unreachable",
-      message: "Der Arm konnte die Netzstufe dieser Anfrage nicht bestimmen. Das ist ein Fehler des Hubs."
-    }
-  ],
-  [
-    "internal-only-action",
-    {
-      status: 502,
-      error: "agent-unreachable",
-      message: "Der Arm lässt diese Aktion nur intern zu. Der Hub meldet sich falsch an."
     }
   ],
   [
@@ -197,7 +177,7 @@ function rejectionKeyOf(error: AgentError): string | null {
 /**
  * Die Fehlerübersetzung an der Grenze — VOR der ersten Stromzeile.
  *
- * Alle zwölf Ablehnungen des Agenten fallen dort hin (`exec-protokoll.md` §1),
+ * Alle elf Ablehnungen des Agenten fallen dort hin (`exec-protokoll.md` §1),
  * und deshalb darf und muss diese Funktion einen echten Statuscode setzen. Ab
  * der ersten Zeile geht das nicht mehr; dort steht die `error`-Zeile.
  */

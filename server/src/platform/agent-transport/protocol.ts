@@ -13,7 +13,7 @@
 // tatsächlich ein zweiter Weg — notgedrungen: `agentRequest` liest den Rumpf
 // mit `response.json()` am Stück und legt eine feste Frist über den ganzen
 // Aufruf. Beides ist für einen Strom falsch. Was beide Wege trotzdem teilen,
-// steht an einer Stelle: die drei Kopfzeilen aus `contract/src/agent/`, die
+// steht an einer Stelle: die Kopfzeilen aus `contract/src/agent/`, die
 // Übersetzung der Fehlerstatus in `assertAgentAccepted`.
 //
 // Seit der Datei-Fläche (Etappe B5/E1, #5) kommen drei Wege dazu, und sie sind
@@ -29,7 +29,7 @@
 //                  von UNBEKANNTER Größe, und `agentRequest` läse sie mit
 //                  `response.json()` am Stück in den Speicher.
 //
-// Was alle teilen, steht weiter an einer Stelle: die drei Kopfzeilen aus
+// Was alle teilen, steht weiter an einer Stelle: die Kopfzeilen aus
 // `contract/src/agent/` und die Übersetzung der Fehlerstatus in
 // `assertAgentAccepted`. Ein Weg an der Übersetzung vorbei wäre eine zweite
 // Wahrheit — ein `403` hieße dann je nach Route etwas anderes.
@@ -38,47 +38,12 @@
 // spätere Phase setzt darauf auf, dass Hub und Agent sich einig sind — über
 // die Kopfzeilen, über die Route und über die Form der Antwort.
 
-// Die drei Kopfzeilen und die Netzstufe stehen seit #272 in
-// `contract/src/agent/` und werden von dort IMPORTIERT — zusammen mit allem
-// anderen, was am Agenten abgelesen und nicht vom Hub erfunden ist. Ein
-// Re-Export von hier wäre ein zweiter Name für dieselbe Sache und verfehlte
-// den Zweck der Vertragsdatei; wer sie braucht, holt sie dort.
-//
-// Was gleich bleibt: es sind Konstanten und keine Zeichenketten an der
-// Aufrufstelle. Ein Tippfehler in einem Kopfzeilennamen ergibt keine
-// Fehlermeldung, sondern eine Anfrage, die als unbeglaubigt gilt.
-import { ACTOR_HEADER, HUB_TIER, SECRET_HEADER, TIER_HEADER } from "contract";
+// The two headers (secret and actor) come from `contract/src/agent/`, like
+// everything else read off the agent rather than invented by the hub. They
+// are constants and not strings at the call site: a typo in a header name
+// gives no error message, only a request that counts as unauthenticated.
+import { ACTOR_HEADER, SECRET_HEADER } from "contract";
 import { streamFetch } from "./stream-fetch.js";
-
-// Warum dieser Hub dauerhaft `internal` meldet. Die Begründung bleibt HIER und
-// wandert nicht in den Vertrag: sie ist eine Entscheidung dieses Hubs und
-// keine Messung am Agenten.
-//
-// Sie ist eine Konstante, und zwar nicht aus Bequemlichkeit: der Agent
-// beantwortet mit `tier` die Frage „auf welchem Weg kam DER MENSCH herein"
-// (`src/route-policy.ts`, Kommentar zu #536). Dieser Hub steht ausschließlich
-// im eigenen Netz — LAN oder VPN, nie öffentlich (SECURITY.md, Grundsatz 4).
-// Es gibt damit nur einen Weg, und eine Skala mit einem Wert ist eine
-// Konstante.
-//
-// ⚠️ Damit ist die Tier-Prüfung des Agenten für diesen Hub dauerhaft
-// erfüllt — das gehört ehrlich benannt. Was an ihre Stelle tritt, sind die
-// Schranken, die ohnehin die tragenden sind: die Anmeldung des Hubs, das
-// gemeinsame Geheimnis, die Allowlist des Agenten und seine Härtungsprüfung,
-// die von der Netzstufe unabhängig arbeitet. Und für einen Arm außerhalb des
-// eigenen Netzes die Tunnelverbindung selbst (SECURITY.md, Grundsatz 1):
-// Sicherheit sitzt dort an der Verbindung, nicht an den Rechten des Agenten.
-//
-// Die frühere Fassung meldete `external`, um die Delegationssperren des
-// Agenten scharf zu halten. Das war eine Fehllesung der Skala: sie sagt nichts
-// über das Vertrauen in den Aufrufer, sondern über die Herkunft des Menschen —
-// und mit `external` bleiben `PUT /registry`, `GET /host-containers`,
-// `GET /host-info` sowie die Compose-, Env- und Exec-Routen zu, auf denen die
-// Phasen 5 bis 7 stehen.
-//
-// Der Wert steht an genau EINER Stelle — seit #272 in `contract/src/agent/`,
-// als `HUB_TIER`: eine spätere Änderung ist dort eine Zeile und keine Suche durch
-// den Bestand.
 
 // Wer die Anfrage ausgelöst hat. Der Agent schreibt den Wert in sein
 // Audit-Log; er ist dort die einzige Spur, die von diesem Hub zurück auf einen
@@ -192,15 +157,12 @@ function assertAgentAccepted(response: { status: number; ok: boolean }, path: st
     );
   }
   if (response.status === 403) {
-    // ⚠️ Mit `internal` ist die Netzstufe kein Grund mehr für eine
-    // Ablehnung. Was übrig bleibt, sind die Schranken darunter: eine Route,
-    // die an genau einen Aufrufer gebunden ist, ein Container außerhalb der
-    // Allowlist, eine Delegationssperre der Härtung. Die Meldung nennt
-    // deshalb keine Ursache, die sie nicht kennt — sie nennt die Stelle, an
-    // der sie steht.
+    // A 403 comes from the agent's own barriers: a route bound to one caller,
+    // the allowlist, external management or the self-management lock. The
+    // message names no cause it does not know, only where it is recorded.
     throw new AgentError(
       `Der Agent hat „${path}" abgelehnt (403). Sein Audit-Log auf dem Zielhost nennt den Grund; ` +
-        "in Frage kommen die Allowlist, eine Delegationssperre der Härtung oder eine Route, die an einen anderen Aufrufer gebunden ist.",
+        "in Frage kommen die Allowlist, die Fremdverwaltung, die Selbstschutzsperre oder eine Route, die an einen anderen Aufrufer gebunden ist.",
       403
     );
   }
@@ -213,11 +175,11 @@ function assertAgentAccepted(response: { status: number; ok: boolean }, path: st
  * Der eine Weg zum Agenten — lesend wie schreibend.
  *
  * Die Fehlerfälle sind hier das Produkt: `401` heißt, dass Hub und Agent
- * verschiedene Geheimnisse tragen, `403` heißt, dass die Route den externen
- * Weg nicht zulässt, und beides sieht ohne diese Übersetzung gleich aus.
+ * verschiedene Geheimnisse tragen, `403` heißt, dass eine Schranke des
+ * Agenten die Anfrage ablehnt, und beides sieht ohne diese Übersetzung gleich aus.
  *
  * ⚠️ Beide Richtungen teilen sich diese Funktion und laufen nicht
- * nebeneinander her. Die drei Kopfzeilen, die Frist und die Übersetzung der
+ * nebeneinander her. Die Kopfzeilen, die Frist und die Übersetzung der
  * Fehler sind für beide dieselben — eine zweite Fassung davon wäre die Stelle,
  * an der eine später ergänzte Kopfzeile in genau einem der Wege fehlt. Das
  * fiele nicht auf: die Anfrage gälte dann als unbeglaubigt, und der Agent
@@ -259,7 +221,6 @@ async function agentRequest(
       headers: {
         [SECRET_HEADER]: target.secret,
         [ACTOR_HEADER]: actorHeaderValue(options.actor),
-        [TIER_HEADER]: HUB_TIER,
         // Auch beim binären Upload: die ANTWORT ist JSON
         // (`{ ok: true, name, size }`). `accept` beschreibt die Rückrichtung,
         // `content-type` die Hinrichtung — sie sind hier verschieden, und das
@@ -339,7 +300,7 @@ export async function agentPut(
  * Eine beglaubigte POST-Anfrage mit JSON-Rumpf.
  *
  * Sie ist `agentPut` mit einer anderen Methode und teilt sich alles Übrige:
- * die drei Kopfzeilen, die Frist, die Übersetzung der Fehlerstatus.
+ * die Kopfzeilen, die Frist, die Übersetzung der Fehlerstatus.
  *
  * ⚠️ SIE IST TROTZDEM NICHT DASSELBE, und der Unterschied liegt bei der
  * Gegenseite. `POST /containers/:id/files` ist die einzige mutierende Route
@@ -387,7 +348,7 @@ export async function agentDelete(
  * Stelle, an der Speicher knapp ist — sein Host hat 2 GB und läuft im Swap.
  *
  * ⚠️ KEIN ZWEITER WEG ZUM AGENTEN. Er läuft durch `agentRequest` wie `agentPut`
- * und damit durch dieselben drei Kopfzeilen und dieselbe Fehlerübersetzung. Ein
+ * und damit durch dieselben Kopfzeilen und dieselbe Fehlerübersetzung. Ein
  * eigener `fetch` an `assertAgentAccepted` vorbei wäre eine zweite Wahrheit:
  * ein `403` hieße dann je nach Route etwas anderes.
  *
@@ -463,7 +424,6 @@ export async function agentDownload(
       headers: {
         [SECRET_HEADER]: target.secret,
         [ACTOR_HEADER]: actorHeaderValue(options.actor),
-        [TIER_HEADER]: HUB_TIER,
         // Der einzige Unterschied zu `agentRequest` in den Kopfzeilen.
         accept: "application/octet-stream"
       }
@@ -622,7 +582,6 @@ async function openStream(
       headers: {
         [SECRET_HEADER]: target.secret,
         [ACTOR_HEADER]: actorHeaderValue(options.actor),
-        [TIER_HEADER]: HUB_TIER,
         // Der einzige Unterschied zu `agentRequest` in den Kopfzeilen. Der
         // Agent antwortet auf den Log-Strom mit
         // `application/x-ndjson; charset=utf-8`.

@@ -68,13 +68,12 @@ import { gate } from "../runtime/gate.js";
 //   * ONLY directories. A file mount (nginx.conf) is not a directory one
 //     could browse.
 //
-// Intern-only: the response reveals the structure of the project directory.
+// The response reveals the structure of the project directory.
 export async function handleShareCandidates(ctx: ContainerRouteContext): Promise<void> {
-  const { response, actor,  parsedTier, containerId } = ctx;
+  const { response, actor, containerId } = ctx;
   const result = await gate(containerId, {
     mutating: false,
     action: "share-candidates",
-    tier: parsedTier,
     actor
   });
   if (!result.ok) {
@@ -153,7 +152,7 @@ export async function handleShareCandidates(ctx: ContainerRouteContext): Promise
 //
 // Listing the share (or a subdirectory in it).
 export async function handleFileList(ctx: ContainerRouteContext): Promise<void> {
-  const { response, url, actor, tier, parsedTier, containerId } = ctx;
+  const { response, url, actor, containerId } = ctx;
   // TRANSITION (#418, reasoning in request-keys.ts): the dashboard sends
   // `share` and `path`; queryObject still accepts the legacy names. Without
   // them the access check would find no share, and every path would be the
@@ -167,7 +166,6 @@ export async function handleFileList(ctx: ContainerRouteContext): Promise<void> 
   const before = await checkWebftpAccess(containerId, {
     mutating: false,
     action: "webftp-read",
-    tier: parsedTier,
     actor,
     share: query.value.share
   });
@@ -177,7 +175,6 @@ export async function handleFileList(ctx: ContainerRouteContext): Promise<void> 
       containerId,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: before.reason
     });
@@ -195,7 +192,6 @@ export async function handleFileList(ctx: ContainerRouteContext): Promise<void> 
       containerId,
       containerName: before.containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: checked.reason
     });
@@ -210,7 +206,6 @@ export async function handleFileList(ctx: ContainerRouteContext): Promise<void> 
       containerId,
       containerName: before.containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: listing.reason
     });
@@ -229,7 +224,6 @@ export async function handleFileList(ctx: ContainerRouteContext): Promise<void> 
     containerId,
     containerName: before.containerName,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: checked.relative || "."
   });
@@ -260,7 +254,7 @@ export async function handleFileList(ctx: ContainerRouteContext): Promise<void> 
 
 // Download (GET) or upload (PUT) a file.
 export async function handleFile(ctx: ContainerRouteContext): Promise<void> {
-  const { request, response, url, actor, tier, parsedTier, containerId } = ctx;
+  const { request, response, url, actor, containerId } = ctx;
   const writing = request.method === "PUT";
   const auditAction = writing ? "webftp-upload" : "webftp-download";
   // TRANSITION (#418, reasoning in request-keys.ts): the dashboard sends
@@ -276,7 +270,6 @@ export async function handleFile(ctx: ContainerRouteContext): Promise<void> {
   const before = await checkWebftpAccess(containerId, {
     mutating: writing,
     action: writing ? "webftp-write" : "webftp-read",
-    tier: parsedTier,
     actor,
     share: query.value.share
   });
@@ -286,7 +279,6 @@ export async function handleFile(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: before.reason
     });
@@ -300,7 +292,6 @@ export async function handleFile(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName: before.containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: reason
     });
@@ -325,7 +316,6 @@ export async function handleFile(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName: before.containerName,
       actor,
-      networkTier: tier,
       outcome: "allowed",
       reason: `${checked.relative} (${opened.entry.size} B)`
     });
@@ -392,7 +382,6 @@ export async function handleFile(ctx: ContainerRouteContext): Promise<void> {
     containerId,
     containerName: before.containerName,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `${[validatedDestination.relative, validatedName.name].filter(Boolean).join("/")} (${content.length} B, uid=${result.uid})`
   });
@@ -408,7 +397,7 @@ export async function handleFile(ctx: ContainerRouteContext): Promise<void> {
 // reason — the dashboard and the service in the container share the file, and
 // overwriting blindly is the one error you no longer see afterwards.
 export async function handleFileText(ctx: ContainerRouteContext): Promise<void> {
-  const { request, response, url, actor, tier, parsedTier, containerId } = ctx;
+  const { request, response, url, actor, containerId } = ctx;
   const writing = request.method === "PUT";
   const auditAction = writing ? "webftp-text-write" : "webftp-text-read";
   // TRANSITION (#418, reasoning in request-keys.ts): the dashboard sends
@@ -424,7 +413,6 @@ export async function handleFileText(ctx: ContainerRouteContext): Promise<void> 
   const before = await checkWebftpAccess(containerId, {
     mutating: writing,
     action: writing ? "webftp-write" : "webftp-read",
-    tier: parsedTier,
     actor,
     share: query.value.share
   });
@@ -434,7 +422,6 @@ export async function handleFileText(ctx: ContainerRouteContext): Promise<void> 
       containerId,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: before.reason
     });
@@ -448,7 +435,6 @@ export async function handleFileText(ctx: ContainerRouteContext): Promise<void> 
       containerId,
       containerName: before.containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: reason
     });
@@ -471,7 +457,6 @@ export async function handleFileText(ctx: ContainerRouteContext): Promise<void> 
       containerId,
       containerName: before.containerName,
       actor,
-      networkTier: tier,
       outcome: "allowed",
       reason: `${checked.relative} (${loaded.size} B)`
     });
@@ -503,7 +488,6 @@ export async function handleFileText(ctx: ContainerRouteContext): Promise<void> 
       containerId,
       containerName: before.containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: `file-changed-externally: ${checked.relative}`
     });
@@ -542,7 +526,6 @@ export async function handleFileText(ctx: ContainerRouteContext): Promise<void> 
     containerId,
     containerName: before.containerName,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     // ⚠️ Only path and size — never the content. The audit log is
     // append-only; whatever is in it once stays (§16.4.4).
@@ -554,7 +537,7 @@ export async function handleFileText(ctx: ContainerRouteContext): Promise<void> 
 
 // Create, rename, delete folders.
 export async function handleFileAction(ctx: ContainerRouteContext): Promise<void> {
-  const { request, response, url, actor, tier, parsedTier, containerId } = ctx;
+  const { request, response, url, actor, containerId } = ctx;
   // TRANSITION (#418, reasoning in request-keys.ts): the dashboard sends
   // `share` and `path`; queryObject still accepts the legacy names. Without
   // them the access check would find no share, and every path would be the
@@ -568,7 +551,6 @@ export async function handleFileAction(ctx: ContainerRouteContext): Promise<void
   const before = await checkWebftpAccess(containerId, {
     mutating: true,
     action: "webftp-write",
-    tier: parsedTier,
     actor,
     share: query.value.share
   });
@@ -588,7 +570,6 @@ export async function handleFileAction(ctx: ContainerRouteContext): Promise<void
       containerId,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: before.reason
     });
@@ -602,7 +583,6 @@ export async function handleFileAction(ctx: ContainerRouteContext): Promise<void
       containerId,
       containerName: before.containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: reason
     });
@@ -614,7 +594,6 @@ export async function handleFileAction(ctx: ContainerRouteContext): Promise<void
       containerId,
       containerName: before.containerName,
       actor,
-      networkTier: tier,
       outcome: "allowed",
       reason: reason
     });

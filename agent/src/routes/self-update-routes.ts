@@ -26,7 +26,7 @@ import { send, readJsonBody, parseRequest, rejectRequest, RouteContext } from ".
 // built as an error: from here the agent cannot determine whether the watcher
 // is alive, and an invented promise would be worse than a missing answer.
 export async function handleSelfUpdateStart(ctx: RouteContext): Promise<void> {
-  const { request, response, actor, tier } = ctx;
+  const { request, response, actor } = ctx;
   const ownId = ownContainerId();
   const reject = (reason: string, status: number): void => {
     audit.write({
@@ -34,7 +34,6 @@ export async function handleSelfUpdateStart(ctx: RouteContext): Promise<void> {
       containerId: ownId,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: reason
     });
@@ -106,7 +105,6 @@ export async function handleSelfUpdateStart(ctx: RouteContext): Promise<void> {
     containerId: ownId,
     containerName: (self.Name ?? "").replace(/^\//, "") || null,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `${job.jobId}: ${imageRef} -> ${target.imageRef} (${AGENT_VERSION})`
   });

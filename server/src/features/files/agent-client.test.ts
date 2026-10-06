@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { ACTOR_HEADER, FILE_ACTIONS, MAX_ENTRIES, SECRET_HEADER, TIER_HEADER } from "contract";
+import { ACTOR_HEADER, FILE_ACTIONS, MAX_ENTRIES, SECRET_HEADER } from "contract";
 import {
   applyFileAction,
   downloadFile,
@@ -99,7 +99,7 @@ test("der Aufrufer geht als Mensch hinaus und nie als System", async () => {
   assert.equal(request.headers[ACTOR_HEADER], "user:u-7");
   assert.ok(!request.headers[ACTOR_HEADER].startsWith("system:"), "kein Systemaufrufer auf dieser Fläche");
   assert.equal(request.headers[SECRET_HEADER], "s".repeat(32));
-  assert.equal(request.headers[TIER_HEADER], "internal");
+  assert.equal(request.headers["x-docker-agent-tier"], undefined);
 });
 
 test("eine Container-Kennung mit Schrägstrich verschiebt die Route nicht", async () => {

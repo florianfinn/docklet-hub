@@ -32,24 +32,14 @@ export async function handleContract(ctx: RouteContext): Promise<void> {
 
 // --- Allowlist sync (stage plan 3.4) --------------------------------------
 //
-// ⚠️ Intern-only, since v0.8.0 also checked here (security review 2026-08).
-//
 // This route writes the list AGAINST which the agent checks everything else:
 // `allowed` decides whether a container exists at all, `imageRef` what a
 // `pull` may pull, `compose.origin` whether a foreign compose file may be
 // overwritten, and `shares` which directory is readable and writable via
 // Web FTP. It is therefore more powerful than any single action it
 // authorises.
-//
-// Up to v0.7.0 it was the only one of the writing routes that required NO
-// tier. `/host-containers` — the more harmless sibling that only READS —
-// required it. A request from the external path could thus have rewritten
-// the allowlist and then helped itself, via the externally allowed actions
-// (start/stop/restart/pull), to a container that nobody ever approved.
-// `docker.registry.manage` is class "never" in the stage plan — up to this
-// point that was only stated in the main API.
 export async function handleRegistrySync(ctx: RouteContext): Promise<void> {
-  const { request, response, actor, tier } = ctx;
+  const { request, response, actor } = ctx;
   // ⚠️ A broken entry refuses the WHOLE list (`400`), instead of being
   // dropped silently as before #272: an allowlist the agent shortened on its
   // own, acknowledged with 200, was exactly the silent outage described at
@@ -69,7 +59,6 @@ export async function handleRegistrySync(ctx: RouteContext): Promise<void> {
     containerId: null,
     containerName: null,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `${registry.size()} Eintraege`
   });
@@ -80,15 +69,14 @@ export async function handleRegistrySync(ctx: RouteContext): Promise<void> {
 // --- Host discovery (only for allowlist maintenance) ----------------------
 // The only endpoint that also shows containers that are NOT allowlisted:
 // without it the allowlist could only be filled by hand-written SQL. That is
-// why it is hard-bound to the internal path (docker.registry.manage is class
-// "never") and reduced to id/name/image/status — no env, no mounts.
+// why it is reduced to id/name/image/status — no env, no mounts.
 //
 // Plus the two compose labels (project/service), so that the maintenance
 // view can show containers that belong together grouped instead of as a
 // flat list of two dozen names. ONLY these two, not the whole label map —
 // see composeLabelsOf().
 export async function handleHostContainers(ctx: RouteContext): Promise<void> {
-  const { response, actor, tier } = ctx;
+  const { response, actor } = ctx;
   const listed = await engine.listWithComposeLabels();
   // The hub derives the registry's `externallyManaged` from this field.
   const containers = await mapLimit(listed, 6, async (container) => ({
@@ -107,7 +95,6 @@ export async function handleHostContainers(ctx: RouteContext): Promise<void> {
     containerId: null,
     containerName: null,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `${containers.length} Container`
   });
@@ -159,11 +146,11 @@ export async function handleHostInfo(ctx: RouteContext): Promise<void> {
   return;
 }
 
-// S13/K2b: the main API holds this internal long-lived stream and, on a
+// S13/K2b: the main API holds this long-lived stream and, on a
 // relevant state change, triggers its existing monitor logic. Raw Docker
 // event material (names, labels, attributes) never leaves the agent.
 export async function handleMonitorEvents(ctx: RouteContext): Promise<void> {
-  const { response, actor, tier } = ctx;
+  const { response, actor } = ctx;
   // R3: a cap of its own, so that a stuck predecessor does not lock out its
   // successor, while a caller in a reconnect loop still cannot hold an
   // arbitrary number of long-lived streams open.
@@ -174,7 +161,6 @@ export async function handleMonitorEvents(ctx: RouteContext): Promise<void> {
       containerId: null,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: "too-many-streams"
     });
@@ -214,8 +200,7 @@ export async function handleMonitorEvents(ctx: RouteContext): Promise<void> {
 //
 // A separate list of its own (monitors), NOT the allowlist. Deliberately does
 // NOT go through gate(): a monitor entry is not a control permission.
-// Externally allowed (W3) — hence no tier check; the response is reduced to
-// running/since-when/health/status (W2, toMonitorStatus) and names neither
+// The response is reduced to running/since-when/health/status (W2, toMonitorStatus) and names neither
 // names nor image nor any other reconnaissance surface.
 export async function handleMonitorList(ctx: RouteContext): Promise<void> {
   const { response } = ctx;
@@ -236,11 +221,10 @@ export async function handleMonitorList(ctx: RouteContext): Promise<void> {
 }
 
 // Sync of the watch-only list (analogous to PUT /registry). Separately
-// authenticated, not part of the action path — and intern-only for the same
-// reason as there: whoever writes this list decides which containers the
-// agent gives information about at all.
+// authenticated, not part of the action path. Whoever writes this list
+// decides which containers the agent gives information about at all.
 export async function handleMonitorSync(ctx: RouteContext): Promise<void> {
-  const { request, response, actor, tier } = ctx;
+  const { request, response, actor } = ctx;
   const sync = parseRequest(monitorSyncRequestSchema, await readJsonBody(request));
   if (!sync.ok) {
     rejectRequest(ctx, { action: "monitor-sync", containerId: null, containerName: null }, sync.rejection);
@@ -252,7 +236,6 @@ export async function handleMonitorSync(ctx: RouteContext): Promise<void> {
     containerId: null,
     containerName: null,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `${monitors.size()} Eintraege`
   });
@@ -272,7 +255,7 @@ export async function handleMonitorSync(ctx: RouteContext): Promise<void> {
 // What the agent keeps writing in the meantime is explicitly not part of
 // the handoff — it starts at byte N+1 and stays for the next run.
 export async function handleAuditArchive(ctx: RouteContext): Promise<void> {
-  const { response, actor, tier } = ctx;
+  const { response, actor } = ctx;
   const handoff = await audit.prepareHandoff();
   if (handoff === null) {
     send(response, 404, { error: "no-log" });
@@ -296,7 +279,6 @@ export async function handleAuditArchive(ctx: RouteContext): Promise<void> {
     containerId: null,
     containerName: null,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `${handoff.bytes} B sha256:${handoff.sha256}`
   });
@@ -330,7 +312,7 @@ export async function handleAuditArchive(ctx: RouteContext): Promise<void> {
 // The caller thereby does not say "delete the log" but "I have a copy of
 // exactly these bytes" — and only that can the agent verify.
 export async function handleAuditArchiveDiscard(ctx: RouteContext): Promise<void> {
-  const { request, response, actor, tier } = ctx;
+  const { request, response, actor } = ctx;
   // Like every mutating route, behind the kill switch. An agent that is
   // not supposed to change anything on the host right now does not change
   // its log either.
@@ -355,7 +337,6 @@ export async function handleAuditArchiveDiscard(ctx: RouteContext): Promise<void
       containerId: null,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: `${result.reason} (${bytes} B sha256:${sha256})`
     });
@@ -370,7 +351,6 @@ export async function handleAuditArchiveDiscard(ctx: RouteContext): Promise<void
     containerId: null,
     containerName: null,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `${result.removed} B discarded, ${result.rest} B kept, sha256:${sha256}`
   });

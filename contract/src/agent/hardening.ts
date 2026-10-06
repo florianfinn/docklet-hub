@@ -21,9 +21,9 @@ export const HARDENING_RULES = [
 ] as const;
 export type HardeningRule = (typeof HARDENING_RULES)[number];
 
-// "delegation-lock": the container effectively is the host; the agent refuses
-// mutating actions on it from every tier but internal. "warning": a host
-// system directory is mounted. "notice": hygiene, blocks nothing.
+// "delegation-lock": the container effectively is the host; the agent reports
+// and audits mutating actions on it but does not block them. "warning": a
+// host system directory is mounted. "notice": hygiene, blocks nothing.
 export const HARDENING_SEVERITIES = ["delegation-lock", "warning", "notice"] as const;
 export type HardeningSeverity = (typeof HARDENING_SEVERITIES)[number];
 

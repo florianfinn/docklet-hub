@@ -24,7 +24,6 @@ import {
 import { engine, registry } from "./state.js";
 import { composeBasePath } from "./containers.js";
 import { rawOps } from "./raw-ops.js";
-import { AgentTier } from "./http.js";
 import { gate } from "./gate.js";
 
 // The shared precheck for everything attached to the `.env` of a Compose
@@ -59,14 +58,7 @@ export type EnvPrecheck =
     }
   | { ok: false; status: number; body: Record<string, unknown>; reason: string };
 
-export async function checkEnvAccess(
-  containerId: string,
-  tier: AgentTier | null
-): Promise<EnvPrecheck> {
-  if (tier !== "internal") {
-    const reason = tier ? "internal-only-action" : "tier-missing";
-    return { ok: false, status: tier ? 403 : 400, body: { error: reason }, reason };
-  }
+export async function checkEnvAccess(containerId: string): Promise<EnvPrecheck> {
   if (!registry.isAllowed(containerId)) {
     return { ok: false, status: 404, body: { error: "not-allowlisted" }, reason: "not-allowlisted" };
   }
@@ -148,10 +140,8 @@ export type WebftpPrecheck =
 
 // Four barriers, and each one on its own can stop everything:
 //
-//  1. `gate()` — kill switch, tier, allowlist, fresh inspect and (for external
-//     mutating actions) the delegation lock. E4 explicitly demands "only
-//     without delegation lock" for external write access; gate() does exactly
-//     that for EVERY mutating action, it needs no second rule for it.
+//  1. `gate()` — kill switch, allowlist, fresh inspect and, for mutating
+//     actions, the self-management lock.
 //  2. The project directory comes from the labels AND must be confirmed by the
 //     registry anchor (requiredComposeContextForFileLogs, the same fail-closed
 //     rule as for the file logs). Without confirmation it would be a file
@@ -166,7 +156,6 @@ export async function checkWebftpAccess(
   options: {
     mutating: boolean;
     action: string;
-    tier: AgentTier | null;
     actor: string | null;
     // Which of the shared roots is meant. If it is missing and there is exactly
     // one, that one is taken; if there are several, it is a usage error.
@@ -176,7 +165,6 @@ export async function checkWebftpAccess(
   const result = await gate(containerId, {
     mutating: options.mutating,
     action: options.action,
-    tier: options.tier,
     actor: options.actor
   });
   if (!result.ok) return { ok: false, status: result.status, reason: result.reason };
@@ -199,9 +187,8 @@ export async function checkWebftpAccess(
 
   if (forcedManagement(composeContext.projectDir) === "read-only") {
     // ⚠️ WITHOUT the path. The reason travels all the way into the user's HTTP
-    // response (handleAgentError passes `reason` on regardless of tier, only
-    // `details` is bound to internal) — an absolute host path would be a map
-    // of the server there (§16.3). The S8 log file route has always done it
+    // response — an absolute host path would be a map of the server there
+    // (§16.3). The S8 log file route has always done it
     // this way: path into the audit, response without it.
     return { ok: false, status: 403, reason: "self-management-locked" };
   }

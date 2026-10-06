@@ -14,9 +14,6 @@ import { agentGet, AgentError, type AgentTarget, type RequestOptions } from "../
 // nennt je Container nur Projekt- und Servicenamen aus den Labels; `projectDir`
 // und `composeFileName` stehen ausschließlich hier (gemessen am 2026-09-07 an
 // `florianfinn/dashboard-docker-agent`@6ffc3c8, v0.19.1, `src/stacks.ts:48`).
-//
-// Die Route ist `intern-only`; der Hub meldet sich dauerhaft als `internal`
-// (`protocol.ts`, `HUB_TIER`) und kommt an sie heran.
 
 /** Ein Dienst eines Stacks, verbunden mit dem Container, der ihn ausführt. */
 export type DiscoveredStackService = {

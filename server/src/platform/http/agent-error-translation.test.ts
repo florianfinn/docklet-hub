@@ -43,8 +43,7 @@ const NAMED: { agentStatus: number; key: string; status: number; error: string }
   { agentStatus: 403, key: "self-management-locked", status: 403, error: "agent-forbidden" },
   // Fehler des Hubs und keiner der Anfrage — dieselbe Einordnung wie an der
   // Exec-Fläche (`AGENT_START_REJECTIONS`).
-  { agentStatus: 400, key: "tier-missing", status: 502, error: "agent-unreachable" },
-  { agentStatus: 403, key: "internal-only-action", status: 502, error: "agent-unreachable" }
+  { agentStatus: 403, key: "actor-not-allowed", status: 502, error: "agent-unreachable" }
 ];
 
 for (const row of NAMED) {

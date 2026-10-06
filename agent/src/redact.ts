@@ -11,9 +11,9 @@ import type { ContainerStats } from "./stats.js";
 // plain text does not leave the agent at all, instead of carrying it through
 // the API and the network and only hiding it at render time.
 //
-// Env plain text is bound to docker.control.destructive and thus
-// internal-only; the agent only returns it when it is explicitly requested
-// AND the main API sends the corresponding proof along.
+// Env plain text is bound to docker.control.destructive; the agent only
+// returns it when it is explicitly requested AND the main API sends the
+// corresponding proof along.
 
 export type ContainerSummary = {
   id: string;
@@ -35,7 +35,7 @@ export type ContainerSummary = {
   // Result of the continuous check (stage 4, three levels since S9),
   // deliberately without details: the rule names tell the UI that something is
   // wrong without naming host paths. The details come from
-  // /containers/:id/hardening — internal-only.
+  // /containers/:id/hardening.
   hardening: {
     delegationLock: HardeningRule[];
     warning: HardeningRule[];

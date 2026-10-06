@@ -14,8 +14,12 @@ test("die Vertragsauskunft liest die aktive Routen- und Registry-Politik", () =>
   assert.ok(AGENT_CONTRACT.errors.sharedHttp.some((entry) => entry.status === 403 && entry.code === "externally-managed"));
   assert.ok(AGENT_CONTRACT.errors.sharedHttp.some((entry) => entry.status === 403 && entry.code === "observe-only"));
   assert.equal(AGENT_CONTRACT.contractVersion, CONTRACT_VERSION);
-  assert.deepEqual(AGENT_CONTRACT.routes.filter((route) => route.tier === "public")
+  assert.deepEqual(AGENT_CONTRACT.routes.filter((route) => route.public === true)
     .map((route) => route.pattern), ["/health"]);
+  assert.deepEqual(Object.keys(AGENT_CONTRACT.headers).sort(), ["actor", "secret"]);
+  assert.equal("tiers" in AGENT_CONTRACT, false);
+  assert.ok(AGENT_CONTRACT.routes.every((route) => !("tier" in route)));
+  assert.ok(AGENT_CONTRACT.errors.sharedHttp.some((entry) => entry.status === 403 && entry.code === "actor-not-allowed"));
 });
 
 test("jede im Handler gesendete NDJSON-Art steht in der Vertragsauskunft", () => {
@@ -39,7 +43,8 @@ test("a changed contract needs a new contract number", () => {
     7: "5edd3eb74a69cbcc57125b269616acbb3b558e3442699043d956a37cecc46676",
     8: "acc30e178edd0b6862f3e59188e630184fefbe1bf9eab67bb6bfc9b18e2e64e1",
     9: "316edce52066f64f7ad6d774ca40a68bc16d8321f3400741ada74c5aeb2b69b6",
-    10: "14858fa82db200035630dc67291bc686be0d6c3961cded9ec4d6fab926deafe2"
+    10: "14858fa82db200035630dc67291bc686be0d6c3961cded9ec4d6fab926deafe2",
+    11: "131c3b084c20c29860f2b9647732c2e4d90756f7c2725a4b7465fb5940ac605b"
   };
   const actual = createHash("sha256").update(JSON.stringify(AGENT_CONTRACT)).digest("hex");
   assert.equal(actual, hashes[CONTRACT_VERSION]);

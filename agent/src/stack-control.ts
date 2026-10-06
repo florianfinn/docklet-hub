@@ -1,5 +1,5 @@
 // Pure S11 building blocks for project-wide Compose actions. No engine or
-// file system access here: coupling detection and tier decision thereby stay
+// file system access here: coupling detection and action policy thereby stay
 // small, deterministic and separately testable.
 
 import type { ExpectedStack } from "contract";
@@ -147,14 +147,6 @@ export function isStackAction(value: string): value is StackAction {
   return value === "start" || value === "stop" || value === "restart" || value === "apply" || value === "down";
 }
 
-// `start` is normally a safe action. As soon as a declared container is
-// missing, however, Compose has to create it with `up`; from then on it is
-// internal-only like apply/destructive. This decision is made BEFORE the CLI
-// call and therefore does not depend on a Compose error message.
-export function stackActionNeedsInternal(action: StackAction, missingServices: readonly string[]): boolean {
-  return action === "apply" || action === "down" || (action === "start" && missingServices.length > 0);
-}
-
 export type StackPolicyDeny = { status: number; code: string };
 
 export function stackMutationBaseDeny(options: {
@@ -168,15 +160,13 @@ export function stackMutationBaseDeny(options: {
 
 export function stackActionDeny(options: {
   action: StackAction;
-  tier: "internal" | "external";
   missingServices: readonly string[];
   projectName: string;
   confirmation: unknown;
   allowFallbackUp: boolean;
 }): StackPolicyDeny | null {
-  if (stackActionNeedsInternal(options.action, options.missingServices) && options.tier !== "internal") {
-    return { status: 403, code: "internal-only-action" };
-  }
+  // A `start` with a missing container needs `docker compose up`; that is
+  // decided before the CLI call, not from a Compose error message.
   if (options.action === "start" && options.missingServices.length > 0 && !options.allowFallbackUp) {
     return { status: 409, code: "stack-start-requires-apply" };
   }

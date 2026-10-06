@@ -7,8 +7,7 @@ import { agentGet, AgentError, type AgentTarget, type RequestOptions } from "../
 // als Nenner für die Last durch Container — eine Summe von `docker stats`
 // sagt ohne die Zahl der Kerne nicht, ob 250 % viel oder wenig ist.
 //
-// ⚠️ Die Route steht beim Agenten unter `intern-only`: sie verrät den Aufbau
-// des Hosts. Der Hub meldet sich immer mit `internal` (`HUB_TIER`).
+// ⚠️ The route reveals the host's layout.
 
 export type HostInfo = {
   cpuCores: number | null;

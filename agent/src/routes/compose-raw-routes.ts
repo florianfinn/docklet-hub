@@ -55,7 +55,7 @@ import { send, readJsonBody, parseRequest, rejectRequest, ContainerRouteContext 
 // section per entry point would be the construction that finding S1 came
 // from — a control that has to be maintained in two places drifts apart.
 export async function handleComposeRaw(ctx: ContainerRouteContext): Promise<void> {
-  const { request, response, actor, tier, parsedTier, containerId, action } = ctx;
+  const { request, response, actor, containerId, action } = ctx;
   const previewing = action === "compose-raw-preview";
   const streaming = action === "compose-raw-stream";
   // ⚠️ The streamed route falls under `writing` here without exception — it
@@ -128,7 +128,6 @@ export async function handleComposeRaw(ctx: ContainerRouteContext): Promise<void
       containerId,
       containerName: anchorName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: `self-management-locked: ${location.projectDir}`
     });
@@ -187,7 +186,6 @@ export async function handleComposeRaw(ctx: ContainerRouteContext): Promise<void
       containerId,
       containerName: anchorName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: `stack-service-not-allowlisted: ${notAllowlisted.join(",")}`
     });
@@ -210,7 +208,6 @@ export async function handleComposeRaw(ctx: ContainerRouteContext): Promise<void
       containerId,
       containerName: anchorName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: `externally-managed: ${managed.join(",")}`
     });
@@ -226,12 +223,6 @@ export async function handleComposeRaw(ctx: ContainerRouteContext): Promise<void
   // confirmation fields — it decides nothing, so nobody confirms anything
   // either.
   if (previewing) {
-    // As below: the table binds this route as internal, the branch is
-    // unreachable and exists only for the type guarantee.
-    if (!parsedTier) {
-      send(response, 400, { error: rawReason("tier-missing") });
-      return;
-    }
     const preview = parseRequest(composeRawPreviewRequestSchema, await readJsonBody(request));
     if (!preview.ok) {
       rejectRequest(ctx, { action: "compose-raw-preview", containerId, containerName: anchorName }, preview.rejection);
@@ -244,7 +235,6 @@ export async function handleComposeRaw(ctx: ContainerRouteContext): Promise<void
       // different text than the one about to be written.
       content: preview.value.content,
       actor,
-      tier: parsedTier,
       containerId,
       stackName
     });
@@ -263,7 +253,6 @@ export async function handleComposeRaw(ctx: ContainerRouteContext): Promise<void
       containerId,
       containerName: anchorName,
       actor,
-      networkTier: tier,
       outcome: "allowed",
       reason: location.projectDir
     });
@@ -307,18 +296,10 @@ export async function handleComposeRaw(ctx: ContainerRouteContext): Promise<void
       containerId,
       containerName: anchorName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: "confirmation-missing"
     });
     send(response, 400, { error: rawReason("confirmation-missing"), expected: stackName });
-    return;
-  }
-
-  // As above: the table binds this route as internal, the branch is
-  // unreachable and exists only for the type guarantee.
-  if (!parsedTier) {
-    send(response, 400, { error: rawReason("tier-missing") });
     return;
   }
   const execution: RawExecution = {
@@ -328,7 +309,6 @@ export async function handleComposeRaw(ctx: ContainerRouteContext): Promise<void
     currentServices,
     confirmations,
     actor,
-    tier: parsedTier,
     containerId,
     stackName
   };
@@ -357,7 +337,6 @@ export async function handleComposeRaw(ctx: ContainerRouteContext): Promise<void
         containerId,
         containerName: anchorName,
         actor,
-        networkTier: tier,
         outcome: "denied",
         reason: "too-many-streams"
       });
@@ -434,9 +413,9 @@ export async function handleComposeRaw(ctx: ContainerRouteContext): Promise<void
 //
 // Deliberately NO gate(): the container behind the old id no longer
 // exists — inspecting it would be exactly the error this route is meant
-// to fix. Allowlist and tier are checked anyway.
+// to fix. The allowlist is checked anyway.
 export async function handleResolve(ctx: ContainerRouteContext): Promise<void> {
-  const { response, actor, tier, containerId } = ctx;
+  const { response, actor, containerId } = ctx;
   if (!registry.isAllowed(containerId)) {
     send(response, 404, { error: "not-allowlisted" });
     return;
@@ -527,7 +506,6 @@ export async function handleResolve(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName: name,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: `name-mismatch: ${resolvedName}`
     });
@@ -541,7 +519,6 @@ export async function handleResolve(ctx: ContainerRouteContext): Promise<void> {
     containerId: resolved,
     containerName: name,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `alt ${containerId.slice(0, 12)} -> neu ${resolved.slice(0, 12)}${moved ? "" : " (unverändert)"}`
   });

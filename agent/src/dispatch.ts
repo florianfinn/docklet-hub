@@ -1,6 +1,6 @@
 import type http from "node:http";
 import { CONTRACT_HEADERS, CONTRACT_VERSION } from "./contract.js";
-import { containerIdFromPath, checkTier } from "./route-policy.js";
+import { containerIdFromPath, checkRoute } from "./route-policy.js";
 import { EnvRedactionUnavailableError } from "./env-file.js";
 import { KeyedMutexBusyError } from "./concurrency.js";
 import { AGENT_VERSION } from "./version.js";
@@ -19,7 +19,6 @@ import {
   errorText,
   InvalidJsonError,
   SAFE_ACTIONS,
-  parseTier,
   isAuthorized,
   send,
   firstHeader,
@@ -88,7 +87,7 @@ import { handleApplySpec, handleRemove, handleSafeAction } from "./routes/defini
 // with its own shared secret. No host port, no public route.
 //
 // The agent is the LAST AUTHORITY, not an executing assistant: it checks
-// allowlist, tier and hardening itself and rejects what does not suit it — even
+// allowlist and hardening itself and rejects what does not suit it — even
 // if the main API waves it through. Precisely in the attack that the socket
 // isolation protects against, a check only in the API would already be bypassed.
 //
@@ -107,11 +106,8 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
   const url = new URL(request.url ?? "/", "http://agent");
   // ⚠️ Via firstHeader instead of a cast: a header set twice yields a string[]
   // in Node, and `as string` would have turned that into an array that only
-  // turns out to be something else at the comparison (parseTier) or at the
-  // session owner (actor).
+  // turns out to be something else at the session owner.
   const actor = firstHeader(request, CONTRACT_HEADERS.actor);
-  const tier = firstHeader(request, CONTRACT_HEADERS.tier);
-  const parsedTier = parseTier(tier);
 
   // /health is deliberately unprotected and says nothing about containers —
   // only that the process is alive.
@@ -203,43 +199,28 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
     // Nothing is concealed by this: the first attempt of a window is logged
     // immediately, all further ones go as a counter into the next entry. An
     // attack thus looks like more in the log, not like less.
-    logUnauth(request.method ?? "?", url.pathname, actor, tier);
+    logUnauth(request.method ?? "?", url.pathname, actor);
     send(response, 401, { error: "unauthorized" });
     return;
   }
 
-  // The tier decision. ONE point, against the table in route-policy.ts.
-  //
-  // ⚠️ It used to live in three places — in INTERNAL_ONLY_ACTIONS, in the `if` in
-  // gate() and in sixteen handwritten `if`s per special route. Two routes had
-  // never received the third place; exactly that was finding S1. What stands
-  // here is therefore not a rebuild out of love of order: "which route requires
-  // which tier?" is from now on a line in a table and not a property one has to
-  // piece together from 6,400 lines.
-  //
-  // The check applies BEFORE any work on the request — before reading the body,
-  // before collecting the secrets, before any engine call.
-  // Whatever is not in the table counts as internal-only (default deny).
-  //
-  // gate() then checks the action level a second time on the container: the
-  // agent is the last authority, and it does not give up this promise even
-  // towards itself.
-  const tierDecision = checkTier(request.method ?? "", url.pathname, parsedTier, actor);
-  if (!tierDecision.ok) {
+  // The route-level check against the table in route-policy.ts, BEFORE any
+  // work on the request. gate() then checks the action on the container.
+  const routeDecision = checkRoute(request.method ?? "", url.pathname, actor);
+  if (!routeDecision.ok) {
     audit.write({
-      action: tierDecision.audit,
+      action: routeDecision.audit,
       containerId: containerIdFromPath(url.pathname),
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
-      reason: tierDecision.reason
+      reason: routeDecision.reason
     });
-    send(response, tierDecision.status, { error: tierDecision.reason });
+    send(response, routeDecision.status, { error: routeDecision.reason });
     return;
   }
 
-  const ctx: RouteContext = { request, response, url, actor, tier, parsedTier };
+  const ctx: RouteContext = { request, response, url, actor };
   try {
     if (request.method === "GET" && url.pathname === "/contract") {
       await handleContract(ctx);
@@ -357,15 +338,13 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
     // --- Back channel of a shell session (S16 — K1d, §20.1) -------------------
     //
     // Input, window size and closing sit NEXT TO the output stream, because an
-    // HTTP request is only good at one direction. Three points nevertheless make
+    // HTTP request is only good at one direction. Two points nevertheless make
     // this safe:
     //
     //   1. The session id is 256 random bits — not guessable, not
     //      enumerable.
     //   2. It is NOT ENOUGH: the actor has to be the same as when opening.
     //      Otherwise an overheard id would be a way into someone else's shell.
-    //   3. The tier is checked again. A session that started internally cannot
-    //      be continued from the outside.
     //
     // ⚠️ Deliberately NOTHING that goes through is logged here: that would be the
     // recording that condition 1 of §20.1 rules out. Rejected attempts, however,
@@ -532,7 +511,6 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
         containerId: containerIdFromPath(url.pathname),
         containerName: null,
         actor,
-        networkTier: tier,
         outcome: "denied",
         reason: "invalid-json"
       });
@@ -545,7 +523,6 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
         containerId: null,
         containerName: null,
         actor,
-        networkTier: tier,
         outcome: "denied",
         reason: "stack-busy"
       });
@@ -558,7 +535,6 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
         containerId: null,
         containerName: null,
         actor,
-        networkTier: tier,
         outcome: "denied",
         reason: "redaction-unavailable"
       });
@@ -573,7 +549,6 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
       containerId: null,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "error",
       // ⚠️ With the MESSAGE, not just the name. `error.name` is simply "Error"
       // for almost every error — a line that says nothing, at exactly the place

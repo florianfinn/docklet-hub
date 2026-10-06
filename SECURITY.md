@@ -4,7 +4,7 @@
 
 The hub and web interface do not mount docker.sock. Only the agent does; that
 socket provides powerful Docker Engine access even when mounted read-only.
-Agents independently check authentication, caller tier, allowlists, paths,
+Agents independently check authentication, allowlists, paths,
 ownership and hardening constraints. Registration is a separate minimal
 application with a one-time enrollment token. Remote agents use a tunnel;
 the local agent is reached on the private Compose network.

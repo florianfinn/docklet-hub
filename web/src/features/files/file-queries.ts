@@ -52,8 +52,8 @@ export function useContainerShare(hostId: string, containerId: string) {
  * `GET …/share-candidates`, only when `enabled`.
  *
  * ⚠️ ASKED ONLY WITHOUT A SHARE, never in advance: the candidates name the bind
- * mounts of the container and with them the layout of the host (`intern-only`
- * at the agent). Whoever has a share does not need them.
+ * mounts of the container and with them the layout of the host. Whoever has a
+ * share does not need them.
  */
 export function useShareCandidates(hostId: string, containerId: string, enabled: boolean) {
   return useQuery({

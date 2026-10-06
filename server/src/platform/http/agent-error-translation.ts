@@ -35,11 +35,11 @@ export type TranslatedAgentError = { status: number; error: string; message: str
 /**
  * Gründe, die ein Fehler DES HUBS sind und keiner der Anfrage.
  *
- * Der Hub meldet sich dauerhaft als `internal`; feuert einer davon, ist er
- * falsch eingerichtet. Für den Browser ist das dasselbe wie ein falsches
- * Geheimnis — dieselbe Einordnung wie in `AGENT_START_REJECTIONS`.
+ * `actor-not-allowed` means the hub called a route bound to another caller.
+ * For the browser that is the same as a wrong secret — the same class as in
+ * `AGENT_START_REJECTIONS`.
  */
-const HUB_FAULT_REASONS: ReadonlySet<string> = new Set(["tier-missing", "internal-only-action"]);
+const HUB_FAULT_REASONS: ReadonlySet<string> = new Set(["actor-not-allowed"]);
 
 const UNREACHABLE = "agent-unreachable";
 

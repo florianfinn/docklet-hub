@@ -146,10 +146,9 @@ export function checkConfirmation(
 
 // --- Hardening: before/after ----------------------------------------------
 //
-// In the stage plan (3.3) the scope `docker.compose.raw` is intern-only with the
-// reason "can bypass any hardening". 5d then deliberately allowed blocking
-// findings internally — otherwise `homepage`, `dozzle` (docker.sock) and
-// `upsnap` (network_mode: host) would not even have been restartable after the
+// The scope `docker.compose.raw` "can bypass any hardening", yet blocking
+// findings must stay operable — otherwise `homepage`, `dozzle` (docker.sock)
+// and `upsnap` (network_mode: host) would not even be restartable after the
 // takeover.
 //
 // Both hold at the same time if you ask the question differently: not "is the

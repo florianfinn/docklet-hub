@@ -24,10 +24,10 @@ Je Host zeigt eine eigene Seite die Speicherbelegung nach Art von
 `docker system df` sowie Images, Volumes und Netze mit den Containern, die
 sie verwenden. Die Seite liest nur. Der Agent beantwortet
 `GET /resources` mit fünf festen Lesezugriffen auf die Engine und kann
-keinen anderen Pfad nennen. Die Route ist `intern-only` und im Hub nur für
-Admins erreichbar, weil sie wie die Host-Erhebung auch Container außerhalb der
-Allowlist nennt. Labels gehen nur als Compose-Projekt hinaus, Mountpoints und
-Treiberoptionen gar nicht.
+keinen anderen Pfad nennen. Die Route ist im Hub nur für Admins erreichbar,
+weil sie wie die Host-Erhebung auch Container außerhalb der Allowlist nennt.
+Labels gehen nur als Compose-Projekt hinaus, Mountpoints und Treiberoptionen
+gar nicht.
 
 Jeder Abschnitt steht auf einem eigenen Engine-Aufruf. Scheitert einer, nennt
 sein Abschnitt den Grund, und die übrigen bleiben lesbar. Die Verwendung

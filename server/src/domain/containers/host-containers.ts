@@ -12,10 +12,6 @@ import { agentGet, AgentError, type AgentTarget, type RequestOptions } from "../
 // daraus speiste, sähe null Container und schriebe null Container zurück. Er
 // bliebe für immer wirkungslos, und zwar lautlos.
 //
-// `GET /host-containers` ist `intern-only` (`src/route-policy.ts`). Der Hub
-// meldet sich dauerhaft als `internal` (`protocol.ts`, `HUB_TIER`), die Route
-// steht ihm also offen.
-//
 // ⚠️ Der Compose-Anker steht hier NICHT vollständig. Gemessen an
 // `src/index.ts:2463` und `src/redact.ts:138` trägt ein Container hier nur
 // `{ project, service }` — kein `projectDir` und kein `composeFileName`. Wer

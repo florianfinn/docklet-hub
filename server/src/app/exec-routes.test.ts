@@ -195,8 +195,6 @@ test("ein Container, den dieser Arm nicht führt, ist 404 container-unknown", as
 
 const AGENT_CASES: { key: string; agentStatus: number; status: number; error: string }[] = [
   { key: "unauthorized", agentStatus: 401, status: 502, error: "agent-unreachable" },
-  { key: "tier-missing", agentStatus: 400, status: 502, error: "agent-unreachable" },
-  { key: "internal-only-action", agentStatus: 403, status: 502, error: "agent-unreachable" },
   { key: "agent-read-only", agentStatus: 503, status: 503, error: "agent-read-only" },
   { key: "not-allowlisted", agentStatus: 404, status: 403, error: "agent-forbidden" },
   { key: "container-gone", agentStatus: 404, status: 404, error: "container-unknown" },

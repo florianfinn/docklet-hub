@@ -176,8 +176,8 @@ export const GET_ROUTES_WITH_EFFECT: readonly string[] = [
   // tragen `requireAdmin` als erste Zwischenschicht, weil eine Freigabe eine
   // Betreiberentscheidung ist (§4, Tabelle „Fähigkeit / Rolle").
 
-  // Nennt die Bind-Mounts des Containers, also die Struktur des Hosts. Beim
-  // Agenten deshalb `intern-only`; Audit-Handler `share-candidates`.
+  // Nennt die Bind-Mounts des Containers, also die Struktur des Hosts;
+  // Audit-Handler `share-candidates`.
   "/hosts/:hostId/containers/:containerId/share-candidates",
 
   // Die Verzeichnisliste der Freigabe; Audit-Handler `webftp-list`.

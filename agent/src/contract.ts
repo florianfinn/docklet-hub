@@ -1,6 +1,5 @@
 import {
   ACTOR_HEADER,
-  agentTierSchema,
   COMPOSE_RAW_FAILURE_REASONS,
   composeApplyStreamLineSchema,
   CONTRACT_VERSION,
@@ -15,8 +14,7 @@ import {
   registryEntrySchema,
   registryOriginSchema,
   SECRET_HEADER,
-  SHARED_HTTP_ERRORS,
-  TIER_HEADER
+  SHARED_HTTP_ERRORS
 } from "contract";
 
 import { ROUTES } from "./route-policy.js";
@@ -39,11 +37,8 @@ function fieldPresence<Shape extends Record<string, { _zod: { optin?: string } }
 
 export const CONTRACT_HEADERS = {
   secret: SECRET_HEADER,
-  tier: TIER_HEADER,
   actor: ACTOR_HEADER
 } as const;
-
-export const CONTRACT_TIERS = agentTierSchema.options;
 
 // The `kind` values a stream schema allows, in its order.
 type KindOption = { _zod: { def: { shape: { kind: { _zod: { def: { values: readonly unknown[] } } } } } } };
@@ -65,7 +60,6 @@ const NDJSON_KINDS = {
 export const AGENT_CONTRACT = {
   contractVersion: CONTRACT_VERSION,
   headers: CONTRACT_HEADERS,
-  tiers: CONTRACT_TIERS,
   routes: ROUTES.map((route) => ({ ...route })),
   registry: {
     entryFields: fieldPresence(registryEntrySchema.shape),

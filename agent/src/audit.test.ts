@@ -25,7 +25,6 @@ test("entries are appended as JSONL, not overwritten", () => {
     containerId: "abc",
     containerName: "minecraft",
     actor: "marwin",
-    networkTier: "internal",
     outcome: "allowed"
   });
   audit.write({
@@ -33,9 +32,8 @@ test("entries are appended as JSONL, not overwritten", () => {
     containerId: "abc",
     containerName: "minecraft",
     actor: "marwin",
-    networkTier: "external",
     outcome: "denied",
-    reason: "scope-requires-internal"
+    reason: "not-allowlisted"
   });
 
   const lines = fs.readFileSync(file, "utf8").trim().split("\n");
@@ -43,8 +41,9 @@ test("entries are appended as JSONL, not overwritten", () => {
   const second = JSON.parse(lines[1]);
   assert.equal(second.action, "stop");
   assert.equal(second.outcome, "denied");
-  assert.equal(second.reason, "scope-requires-internal");
+  assert.equal(second.reason, "not-allowlisted");
   assert.ok(second.at, "timestamp missing");
+  assert.deepEqual(Object.keys(second).sort(), ["action", "actor", "at", "containerId", "containerName", "outcome", "reason"]);
 });
 
 test("assertWritable writes a start entry", () => {
@@ -70,7 +69,6 @@ test("a non-writable path throws instead of failing silently", () => {
       containerId: "abc",
       containerName: null,
       actor: null,
-      networkTier: null,
       outcome: "allowed"
     })
   );
@@ -88,7 +86,6 @@ test("long fields are visibly truncated instead of bloating the log", () => {
     containerId: null,
     containerName: null,
     actor: "b".repeat(20_000),
-    networkTier: null,
     outcome: "denied",
     reason: "c".repeat(20_000)
   });
@@ -108,7 +105,6 @@ test("control characters in a field do not corrupt the line", () => {
     containerId: null,
     containerName: null,
     actor: "mar\u0000win",
-    networkTier: null,
     outcome: "denied",
     reason: "grund"
   });
@@ -134,7 +130,6 @@ function write(audit: AgentAuditLog, action: string): void {
     containerId: null,
     containerName: null,
     actor: "marwin",
-    networkTier: "internal",
     outcome: "allowed"
   });
 }

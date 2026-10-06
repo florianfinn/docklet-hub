@@ -38,11 +38,9 @@ import { externallyManagedServices } from "../raw-ownership.js";
 // That way there is only ONE state, and the consequence deliberately accepted
 // in 5b (env values in plain text in the app database) goes away.
 //
-// Internal-only for the same reason as /hardening: the file names host paths
-// and env values in plain text — it sits on the same level as the destructive
-// actions (3.9).
+// The file names host paths and env values in plain text.
 export async function handleCompose(ctx: ContainerRouteContext): Promise<void> {
-  const { response, actor, tier, containerId } = ctx;
+  const { response, actor, containerId } = ctx;
   if (!registry.isAllowed(containerId)) {
     send(response, 404, { error: "not-allowlisted" });
     return;
@@ -108,7 +106,6 @@ export async function handleCompose(ctx: ContainerRouteContext): Promise<void> {
     containerId,
     containerName: (inspect.Name ?? "").replace(/^\//, ""),
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: context.projectDir
   });
@@ -137,11 +134,10 @@ export async function handleCompose(ctx: ContainerRouteContext): Promise<void> {
 // of six fields (derived-config.ts), not a filtered copy of the inspect. Host
 // paths, labels, env and capabilities structurally cannot show up here.
 export async function handleConfiguration(ctx: ContainerRouteContext): Promise<void> {
-  const { response, actor, tier, parsedTier, containerId } = ctx;
+  const { response, actor, containerId } = ctx;
   const result = await gate(containerId, {
     mutating: false,
-    action: "configuration",
-    tier: parsedTier
+    action: "configuration"
   });
   if (!result.ok) {
     audit.write({
@@ -149,7 +145,6 @@ export async function handleConfiguration(ctx: ContainerRouteContext): Promise<v
       containerId,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: result.reason
     });
@@ -173,17 +168,16 @@ export async function handleConfiguration(ctx: ContainerRouteContext): Promise<v
 // about access. Decide first, then fetch.
 //
 // It returns names and ids, no file content and no values — but it names the
-// project directory and is therefore internal-only like /compose.
+// project directory.
 export async function handleStackServices(ctx: ContainerRouteContext): Promise<void> {
-  const { response, actor, tier, parsedTier, containerId } = ctx;
-  const before = await checkEnvAccess(containerId, parsedTier);
+  const { response, actor, containerId } = ctx;
+  const before = await checkEnvAccess(containerId);
   if (!before.ok) {
     audit.write({
       action: "stack-services",
       containerId,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: before.reason
     });
@@ -202,32 +196,30 @@ export async function handleStackServices(ctx: ContainerRouteContext): Promise<v
 
 // --- Environment: the `.env` next to the Compose file (S5b, §16) -------
 //
-// It hangs off docker.compose.raw and is therefore internal-only (§16.2):
-// whoever may write the Compose file can put any value in there anyway — a
-// separate scope would be theatre. The main API checks the scope, the agent
-// checks the tier once more itself.
+// It hangs off docker.compose.raw (§16.2): whoever may write the Compose file
+// can put any value in there anyway — a separate scope would be theatre. The
+// main API checks the scope.
 //
 // The directory comes from the LABELS of the running container, never from
 // the request (security review 5c, finding 4). There is no way to name a path
 // to the agent here.
 export async function handleEnv(ctx: ContainerRouteContext): Promise<void> {
-  const { request, response, url, actor, tier, parsedTier, containerId } = ctx;
+  const { request, response, url, actor, containerId } = ctx;
   const writing = request.method === "PUT";
 
   if (writing && config.readOnly) {
     send(response, 503, { error: "agent-read-only" });
     return;
   }
-  // Tier, allowlist, Compose directory, self-management lock AND the sweep
+  // Allowlist, Compose directory, self-management lock AND the sweep
   // over all services of the project — see checkEnvAccess.
-  const before = await checkEnvAccess(containerId, parsedTier);
+  const before = await checkEnvAccess(containerId);
   if (!before.ok) {
     audit.write({
       action: writing ? "env-write" : "env-read",
       containerId,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: before.reason
     });
@@ -278,7 +270,6 @@ export async function handleEnv(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "allowed",
       reason: `${context.projectDir}: ${entries.length} keys`
     });
@@ -325,7 +316,6 @@ export async function handleEnv(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: `externally-managed: ${managed.join(",")}`
     });
@@ -354,7 +344,6 @@ export async function handleEnv(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: result.reason
     });
@@ -369,7 +358,6 @@ export async function handleEnv(ctx: ContainerRouteContext): Promise<void> {
     containerId,
     containerName,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason:
       `${context.projectDir}: set [${Object.keys(set).sort().join(",")}] ` +
@@ -387,10 +375,10 @@ export async function handleEnv(ctx: ContainerRouteContext): Promise<void> {
 }
 
 export async function handleComposeCandidates(ctx: ContainerRouteContext): Promise<void> {
-  const { request, response, actor, tier, containerId } = ctx;
+  const { request, response, actor, containerId } = ctx;
   if (!registry.isAllowed(containerId)) {
     if (request.method !== "GET") {
-      audit.write({ action: "compose-selection", containerId, containerName: null, actor, networkTier: tier,
+      audit.write({ action: "compose-selection", containerId, containerName: null, actor,
         outcome: "denied", reason: "not-allowlisted" });
     }
     send(response, 404, { error: "not-allowlisted" });
@@ -398,7 +386,7 @@ export async function handleComposeCandidates(ctx: ContainerRouteContext): Promi
   }
   const changing = request.method !== "GET";
   if (changing && config.readOnly) {
-    audit.write({ action: "compose-selection", containerId, containerName: null, actor, networkTier: tier,
+    audit.write({ action: "compose-selection", containerId, containerName: null, actor,
       outcome: "denied", reason: "agent-read-only" });
     send(response, 503, { error: "agent-read-only" });
     return;
@@ -407,7 +395,7 @@ export async function handleComposeCandidates(ctx: ContainerRouteContext): Promi
   const containerName = (inspect.Name ?? "").replace(/^\//, "");
   if (containerName !== registry.get(containerId)?.containerName) {
     if (changing) {
-      audit.write({ action: "compose-selection", containerId, containerName, actor, networkTier: tier,
+      audit.write({ action: "compose-selection", containerId, containerName, actor,
         outcome: "denied", reason: "container-name-mismatch" });
     }
     send(response, 409, { error: "container-name-mismatch" });
@@ -437,24 +425,24 @@ export async function handleComposeCandidates(ctx: ContainerRouteContext): Promi
     }
     const { filePath } = selection.value;
     if (!labels?.["com.docker.compose.service"] || !isValidProjectName(labels["com.docker.compose.project"])) {
-      audit.write({ action: "compose-selection", containerId, containerName, actor, networkTier: tier,
+      audit.write({ action: "compose-selection", containerId, containerName, actor,
         outcome: "denied", reason: "compose-anchor-labels-missing" });
       send(response, 409, { error: "compose-anchor-labels-missing" });
       return;
     }
     if (!composeSelections.set(containerName, filePath, candidates)) {
-      audit.write({ action: "compose-selection", containerId, containerName, actor, networkTier: tier,
+      audit.write({ action: "compose-selection", containerId, containerName, actor,
         outcome: "denied", reason: "invalid-compose-candidate" });
       send(response, 400, { error: "invalid-compose-candidate" });
       return;
     }
-    audit.write({ action: "compose-selection", containerId, containerName, actor, networkTier: tier,
+    audit.write({ action: "compose-selection", containerId, containerName, actor,
       outcome: "allowed", reason: filePath });
     send(response, 200, { ok: true, selectedFilePath: filePath });
     return;
   }
   composeSelections.clear(containerName);
-  audit.write({ action: "compose-selection", containerId, containerName, actor, networkTier: tier,
+  audit.write({ action: "compose-selection", containerId, containerName, actor,
     outcome: "allowed", reason: "cleared" });
   send(response, 200, { ok: true, selectedFilePath: null });
   return;

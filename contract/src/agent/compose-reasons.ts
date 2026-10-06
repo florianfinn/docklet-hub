@@ -55,17 +55,14 @@ import * as z from "zod/mini";
 // list describes what arrives, not where it is thrown.
 //
 // `directory-taken` only exists on creation (POST /stacks/raw),
-// `too-many-streams` only on the stream, `tier-missing` on neither: the route
-// table binds all three routes intern-only, the branch only exists for the
-// type guarantee. A key that CAN occur still belongs in the list — the caller
-// translates responses, not probabilities.
+// `too-many-streams` only on the stream. A key that CAN occur still belongs in
+// the list — the caller translates responses, not probabilities.
 //
 // `externally-managed` is checked again under the lock; a manager that
 // changed in between reaches a streaming caller in the final line.
 export const COMPOSE_RAW_GATE_FAILURE_REASONS = [
   "agent-read-only",
   "not-allowlisted",
-  "tier-missing",
   "name-not-usable-as-directory",
   "invalid-compose-file-name",
   "compose-project-name-missing-or-invalid",
@@ -172,8 +169,8 @@ export const COMPOSE_RAW_STREAM_FAILURE_REASONS = ["compose-raw-failed"] as cons
 // themselves answer as a named failure.
 //
 // ⚠️ Where this list ends, and why exactly there: the shared front matter
-// before the dispatch answers the same on EVERY route — `checkTier` with
-// `internal-only-action` (agent/src/route-policy.ts), authentication, an unknown route.
+// before the dispatch answers the same on EVERY route — `checkRoute` with
+// `actor-not-allowed` (agent/src/route-policy.ts), authentication, an unknown route.
 // Those are not statements about the raw editor, and whoever translates them
 // does so once for the whole agent. `stack-busy`, on the other hand,
 // is included even though it also arises in the shared error handler: the lock
@@ -181,10 +178,9 @@ export const COMPOSE_RAW_STREAM_FAILURE_REASONS = ["compose-raw-failed"] as cons
 //
 // ⚠️ These are more than the 24 that the changelog for v0.22.0 names, and that
 // is not a contradiction: there the keys of APPLYING AT THE ANCHOR are counted.
-// They lack the five that do not exist there — `directory-taken` and
+// They lack the four that do not exist there — `directory-taken` and
 // `file-already-exists` (only on creation), `too-many-streams` and
-// `compose-raw-failed` (only on the stream) and `tier-missing` (not
-// reachable on any of the routes). The test recalculates exactly that, so that
+// `compose-raw-failed` (only on the stream). The test recalculates exactly that, so that
 // the number from the changelog stays verifiable instead of asserted.
 export const COMPOSE_RAW_FAILURE_REASONS = [
   ...COMPOSE_RAW_GATE_FAILURE_REASONS,
