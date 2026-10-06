@@ -117,6 +117,11 @@ in docs/design/ und sind dort im Index verlinkt.
   der den PR nicht umgesetzt hat und Repo-Regeln, Issues und den vollständigen
   Diff zum Zielbranch erhält. Umfang und Tiefe richten sich nach der Änderung;
   er darf Tests ausführen und prüft auch die Veröffentlichbarkeit.
+- Geprüft wird nach Bedeutung, nicht nur nach Bezeichnern: Entfällt oder
+  ändert sich ein Verhalten, gehören Sprachdateien, Dokumentation und
+  Kommentare dazu. Neue Aussagen in Dokumentation und UI-Texten werden gegen
+  den Code belegt. Die Sitzung tut beides vor dem ersten Push und gibt es dem
+  ersten Reviewer als Auftrag mit.
 - Das Ergebnis steht als PR-Kommentar unter dem Konto des Maintainers. Die
   erste Zeile lautet Independent review, direkt darunter folgen Reviewer, Head
   (volle SHA) und Result (pass oder fail), nach einer Leerzeile die Befunde.
