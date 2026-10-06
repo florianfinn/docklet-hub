@@ -180,8 +180,9 @@ export const COMPOSE_RAW_STREAM_FAILURE_REASONS = ["compose-raw-failed"] as cons
 // is not a contradiction: there the keys of APPLYING AT THE ANCHOR are counted.
 // They lack the four that do not exist there — `directory-taken` and
 // `file-already-exists` (only on creation), `too-many-streams` and
-// `compose-raw-failed` (only on the stream). The test recalculates exactly that, so that
-// the number from the changelog stays verifiable instead of asserted.
+// `compose-raw-failed` (only on the stream) — plus keys added after v0.22.0.
+// The test recalculates exactly that, so that the number from the changelog
+// stays verifiable instead of asserted.
 export const COMPOSE_RAW_FAILURE_REASONS = [
   ...COMPOSE_RAW_GATE_FAILURE_REASONS,
   ...COMPOSE_RAW_CHECK_FAILURE_REASONS,

@@ -5,5 +5,8 @@
 /** The shared secret of an arm. Missing or wrong: `401 unauthorized`. */
 export const SECRET_HEADER = "x-docker-agent-secret";
 
-/** Who acts: `user:<id>` or `system:<name>`. Only recorded, never trusted. */
+/**
+ * Who acts: `user:<id>` or `system:<name>`. Recorded in the audit log and
+ * compared only by routes bound to one caller; not an authentication.
+ */
 export const ACTOR_HEADER = "x-docker-agent-actor";

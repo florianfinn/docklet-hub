@@ -17,7 +17,8 @@ export type Route = {
   // writing therefore stand as separate rows, even where they share a path
   // (`GET`/`PUT` on `/containers/:id/env`). Information of the table, not an
   // enforcement: a mutating action is stopped in gate() (kill switch, observer
-  // class, self-management lock), where the container is known.
+  // class, external management for definition actions, self-management lock),
+  // where the container is known.
   mutating: boolean;
   // The name under which a rejection appears in the audit log.
   audit: string;

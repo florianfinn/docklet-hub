@@ -154,8 +154,9 @@ test("the 24 from the changelog for v0.22.0 can be recounted", () => {
   // worthless for that.
   //
   // What is counted there are the keys of APPLYING AT THE ANCHOR (POST
-  // /containers/:id/compose-raw). It lacks exactly five of the whole set,
-  // each for a nameable reason.
+  // /containers/:id/compose-raw). It lacks four keys of the whole set from
+  // v0.22.0 on, plus the later additions listed below, each for a nameable
+  // reason.
   const notAtTheAnchor = [
     // Only on creation (POST /stacks/raw): there is no directory and no file
     // there yet.
