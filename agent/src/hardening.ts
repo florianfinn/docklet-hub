@@ -43,8 +43,9 @@ export type InspectedContainer = {
 };
 
 // Severity levels and their rules live in contract/src/agent/hardening.ts:
-// "delegation-lock" means the container effectively is the host; the agent
-// then refuses mutating actions from every tier but internal (runtime/gate.ts).
+// "delegation-lock" means the container effectively is the host; the gate
+// reports and audits mutating actions on it but does not block them
+// (runtime/gate.ts).
 // "warning" marks a mounted host system directory, "notice" hygiene; neither
 // blocks operation. `volume-unresolved` is the fail-closed stand-in while a
 // volume's host source cannot be checked.
@@ -89,7 +90,7 @@ export function violationValue(violation: HardeningViolation): string {
 }
 
 export type HardeningReport = {
-  // The only list that stops anything, and only outside the internal tier.
+  // The gate reports and audits it on mutating actions; it does not block there.
   delegationLock: HardeningViolation[];
   warning: HardeningViolation[];
   hint: HardeningViolation[];
@@ -395,8 +396,7 @@ export function hardeningReport(
 }
 
 // Whether the container carries a delegation lock, the condition under which
-// the gate (runtime/gate.ts, via hardeningReport) refuses mutating actions
-// outside the internal tier.
+// the gate (runtime/gate.ts, via hardeningReport) audits mutating actions.
 export function hasDelegationLock(
   container: InspectedContainer,
   options: HardeningOptions = {}

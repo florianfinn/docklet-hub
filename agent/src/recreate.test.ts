@@ -296,7 +296,7 @@ test("a real engine throw carries status and rollback outcome through to the res
   await assert.rejects(
     recreateContainer(engine, inspect(), { imageRef: "x:1", expectedImageId: "sha256:neuesimage" }),
     (error: unknown) => {
-      const failure = actionFailureOf(error, { tier: "internal" });
+      const failure = actionFailureOf(error);
       assert.ok(failure);
       assert.equal(failure.status, 400);
       assert.deepEqual(failure.body, {

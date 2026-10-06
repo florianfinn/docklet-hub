@@ -33,8 +33,11 @@ import * as z from "zod/mini";
  *       and per-source confirmation of external binds (#3)
  *  10 — the storage overview reads images, volumes and networks with
  *       `GET /resources` (#10)
+ *  11 — the network tier header is gone; no request carries or needs it,
+ *       `GET /contract` reports no tiers, and a foreign actor on
+ *       `GET /monitor-events` gets `403 actor-not-allowed` (#152)
  */
-export const CONTRACT_VERSION = 10;
+export const CONTRACT_VERSION = 11;
 
 /** What a field added after the first numbered contract carries. */
 export type ContractSince = { since: number };

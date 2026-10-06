@@ -11,9 +11,8 @@ import type { ContainerStats } from "./stats.js";
 // plain text does not leave the agent at all, instead of carrying it through
 // the API and the network and only hiding it at render time.
 //
-// Env plain text is bound to docker.control.destructive and thus
-// internal-only; the agent only returns it when it is explicitly requested
-// AND the main API sends the corresponding proof along.
+// Env plain text only goes out when a caller sets `includeEnvPlaintext`; no
+// route does today.
 
 export type ContainerSummary = {
   id: string;
@@ -35,7 +34,7 @@ export type ContainerSummary = {
   // Result of the continuous check (stage 4, three levels since S9),
   // deliberately without details: the rule names tell the UI that something is
   // wrong without naming host paths. The details come from
-  // /containers/:id/hardening — internal-only.
+  // /containers/:id/hardening.
   hardening: {
     delegationLock: HardeningRule[];
     warning: HardeningRule[];
@@ -103,9 +102,8 @@ export function envPlaintextOf(env: string[] | null | undefined): Record<string,
 }
 
 export type SummaryOptions = {
-  // Only true if the main API has proven destructive rights on the internal
-  // path. The default is deliberately false: whoever specifies nothing gets no
-  // secrets.
+  // Plain-text env values in the summary. No route sets it; the default is
+  // deliberately false: whoever specifies nothing gets no secrets.
   includeEnvPlaintext?: boolean;
   // Base path of the bind mount allowlist (stage 5a). Without it this one rule
   // does not run — see HardeningOptions.

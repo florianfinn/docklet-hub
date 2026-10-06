@@ -1,13 +1,10 @@
 // Die Handler-Pfade des Agents, aus dem Quelltext von `index.ts` gewonnen.
 //
-// ⚠️ Wogegen das steht: `route-policy.ts` ist DEFAULT DENY — ein Pfad ohne
-// Zeile in `ROUTEN` wird wie `intern-only` behandelt. Wer einen Handler-Pfad
-// umbenennt (`/audit-archiv` → `/audit-archive`) und die Musterzeile stehen
-// lässt, dreht damit still die Netzstufe dieser Route zu: extern kommt 403, das
-// Audit schreibt `route-unknown`, und der Aufrufer sieht eine Ablehnung, die
-// wie eine Rechteentscheidung aussieht. Rot wird dabei nichts — die
-// Tabellenzeile ist ja weiterhin in sich vollständig, und genau das ist alles,
-// was die Prüfung „jede Tabellenzeile ist vollständig" sehen kann.
+// ⚠️ What this guards against: a handler path without a row in `ROUTES`
+// loses its audit name and any `onlyActor` binding. Renaming a handler path
+// (`/audit-archiv` → `/audit-archive`) while the pattern row stays turns
+// nothing red — the row is still complete in itself, and that is all a check
+// of the table alone can see.
 //
 // Deshalb kommen die Pfade hier aus dem Quelltext. Eine von Hand gepflegte
 // Liste im Test wäre eine zweite Tabelle und schwiege beim nächsten Umbenennen

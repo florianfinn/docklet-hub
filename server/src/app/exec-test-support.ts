@@ -61,7 +61,7 @@ export function secondArm(agent: FakeAgent): HostRecord {
 
 // One version at the mark (0.32.0 since #279) and one far below it. They stand
 // for "recent enough" and "too old".
-const CURRENT: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 10, readOnly: false, entries: null };
+const CURRENT: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 11, readOnly: false, entries: null };
 export const ANCIENT: AgentHealth = { reachable: true, version: "0.6.0", contractVersion: null, readOnly: false, entries: null };
 export const GONE: AgentHealth = { reachable: false, error: "keine Verbindung" };
 
@@ -70,7 +70,7 @@ export const GONE: AgentHealth = { reachable: false, error: "keine Verbindung" }
 type ExecReply =
   /** Der Strom: der Test füttert ihn Zeile für Zeile. */
   | { kind: "stream" }
-  /** Eine der zwölf Ablehnungen — Status plus Fehlerrumpf. */
+  /** Eine der Ablehnungen — Status plus Fehlerrumpf. */
   | { kind: "status"; status: number; body: unknown };
 
 export type FakeAgent = {

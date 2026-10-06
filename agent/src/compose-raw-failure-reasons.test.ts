@@ -154,8 +154,9 @@ test("the 24 from the changelog for v0.22.0 can be recounted", () => {
   // worthless for that.
   //
   // What is counted there are the keys of APPLYING AT THE ANCHOR (POST
-  // /containers/:id/compose-raw). It lacks exactly five of the whole set,
-  // each for a nameable reason.
+  // /containers/:id/compose-raw). It lacks four keys of the whole set from
+  // v0.22.0 on, plus the later additions listed below, each for a nameable
+  // reason.
   const notAtTheAnchor = [
     // Only on creation (POST /stacks/raw): there is no directory and no file
     // there yet.
@@ -164,9 +165,6 @@ test("the 24 from the changelog for v0.22.0 can be recounted", () => {
     // Only on the stream (POST /containers/:id/compose-raw-stream).
     "too-many-streams",
     "compose-raw-failed",
-    // Reachable on none of the routes: the route table binds them internal-only,
-    // the branch exists only for the type promise.
-    "tier-missing",
     // Only #102 passed the three anchor reasons through to this route.
     // The historical number for v0.22.0 does not count these later reasons.
     "compose-anchor-labels-missing",

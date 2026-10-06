@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { ACTOR_HEADER, HUB_TIER, LOG_TAIL_LINE_OPTIONS, MAX_TAIL, SECRET_HEADER, TIER_HEADER } from "contract";
+import { ACTOR_HEADER, LOG_TAIL_LINE_OPTIONS, MAX_TAIL, SECRET_HEADER } from "contract";
 import {
   actorHeaderValue,
   agentDownload,
@@ -35,19 +35,6 @@ test("der Aufrufer wird nach seiner Art benannt", () => {
   assert.equal(actorHeaderValue({ kind: "system", name: "monitor" }), "system:monitor");
 });
 
-test("der Hub meldet sich immer als intern", () => {
-  // Die Entscheidung steht in concept-and-plan.md §2: dieser Hub steht
-  // ausschließlich im eigenen Netz, es gibt keine zweite Herkunft, und eine
-  // Skala mit einem Wert ist eine Konstante.
-  //
-  // ⚠️ Der Fall ist keine Tautologie. Er hält fest, dass der Wert überhaupt
-  // eine Entscheidung ist und an genau EINER Stelle steht — und er fällt,
-  // sobald jemand sie ändert, statt sie stillschweigend zu verschieben.
-  // Vorher stand hier `external`; das war eine Fehllesung der Skala und hat
-  // die Routen zugehalten, auf denen die Phasen 5 bis 7 stehen.
-  assert.equal(HUB_TIER, "internal");
-});
-
 test("ein 401 nennt das gemeinsame Geheimnis", async () => {
   await assert.rejects(
     agentGet(TARGET, "/containers", { actor: ACTOR, fetchImpl: replyWith(401) }),
@@ -57,9 +44,8 @@ test("ein 401 nennt das gemeinsame Geheimnis", async () => {
 });
 
 test("ein 403 verweist auf das Audit-Log und nicht auf das Geheimnis", async () => {
-  // Mit `internal` ist die Netzstufe kein Grund mehr für eine Ablehnung. Die
-  // Meldung darf deshalb keine Ursache behaupten, die sie nicht kennt — sie
-  // nennt den Pfad und die Stelle, an der der Grund tatsächlich steht.
+  // The message claims no cause it does not know; it names the path and the
+  // place where the reason is recorded.
   await assert.rejects(
     agentGet(TARGET, "/containers/abc/exec", { actor: ACTOR, fetchImpl: replyWith(403) }),
     (error: unknown) =>
@@ -113,7 +99,7 @@ test("ein Verbindungsfehler wird nicht zu einem Protokollfehler", async () => {
   );
 });
 
-test("die schreibende Richtung trägt dieselben drei Kopfzeilen plus content-type", async () => {
+test("die schreibende Richtung trägt dieselben Kopfzeilen plus content-type", async () => {
   // ⚠️ Es gibt keinen zweiten Weg zum Agenten. `agentPut` ist dieselbe
   // Anfrage wie `agentGet`, nur mit Methode und Rumpf — eine eigene Fassung
   // wäre die Stelle, an der eine später ergänzte Kopfzeile in genau einem der
@@ -145,7 +131,7 @@ test("die schreibende Richtung trägt dieselben drei Kopfzeilen plus content-typ
   assert.equal(request.method, "PUT");
   assert.equal(request.headers[SECRET_HEADER], "s".repeat(32));
   assert.equal(request.headers[ACTOR_HEADER], "user:u-1");
-  assert.equal(request.headers[TIER_HEADER], HUB_TIER);
+  assert.equal(request.headers["x-docker-agent-tier"], undefined);
   assert.equal(request.headers["content-type"], "application/json");
   assert.equal(request.body, JSON.stringify({ entries: [{ containerId: "a1" }] }));
 });
@@ -213,7 +199,7 @@ function streamWith(status: number, body: string, headers: Record<string, string
   return (async () => new Response(body, { status, headers })) as unknown as typeof fetch;
 }
 
-test("der Strom trägt dieselben drei Kopfzeilen, aber accept ndjson", async () => {
+test("der Strom trägt dieselben Kopfzeilen, aber accept ndjson", async () => {
   let seen: { url: string; method: string | undefined; headers: Record<string, string> } | null = null;
   const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
     seen = { url: String(input), method: init?.method, headers: init?.headers as Record<string, string> };
@@ -231,7 +217,7 @@ test("der Strom trägt dieselben drei Kopfzeilen, aber accept ndjson", async () 
   assert.equal(request.method, "GET");
   assert.equal(request.headers[SECRET_HEADER], "s".repeat(32));
   assert.equal(request.headers[ACTOR_HEADER], "user:u-1");
-  assert.equal(request.headers[TIER_HEADER], HUB_TIER);
+  assert.equal(request.headers["x-docker-agent-tier"], undefined);
   assert.equal(request.headers.accept, "application/x-ndjson");
 });
 
@@ -435,7 +421,7 @@ function jsonReply(body: unknown, status = 200): () => Response {
   return () => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-test("agentPost trägt dieselben drei Kopfzeilen, POST und einen JSON-Rumpf", async () => {
+test("agentPost trägt dieselben Kopfzeilen, POST und einen JSON-Rumpf", async () => {
   const { fetchImpl, seen } = capture(jsonReply({ ok: true, name: "neu" }));
 
   const answer = await agentPost(
@@ -451,7 +437,7 @@ test("agentPost trägt dieselben drei Kopfzeilen, POST und einen JSON-Rumpf", as
   assert.equal(request.method, "POST");
   assert.equal(request.headers[SECRET_HEADER], "s".repeat(32));
   assert.equal(request.headers[ACTOR_HEADER], "user:u-1");
-  assert.equal(request.headers[TIER_HEADER], HUB_TIER);
+  assert.equal(request.headers["x-docker-agent-tier"], undefined);
   assert.equal(request.headers["content-type"], "application/json");
   assert.equal(request.headers.accept, "application/json");
   assert.equal(request.body, JSON.stringify({ action: "create-folder", path: "unterordner", name: "neu" }));
@@ -474,7 +460,7 @@ test("agentUpload schickt die rohen Bytes und NICHT deren JSON-Fassung", async (
   assert.equal(request.method, "PUT");
   assert.equal(request.headers[SECRET_HEADER], "s".repeat(32));
   assert.equal(request.headers[ACTOR_HEADER], "user:u-1");
-  assert.equal(request.headers[TIER_HEADER], HUB_TIER);
+  assert.equal(request.headers["x-docker-agent-tier"], undefined);
   assert.equal(request.headers["content-type"], "application/octet-stream");
   // Die Antwort ist JSON, der Rumpf sind Bytes — die beiden Kopfzeilen
   // beschreiben verschiedene Richtungen und dürfen nicht angeglichen werden.
@@ -524,7 +510,7 @@ test("agentDownload gibt die Antwort ungelesen zurück und sammelt nichts", asyn
   assert.equal(request.method, "GET");
   assert.equal(request.headers[SECRET_HEADER], "s".repeat(32));
   assert.equal(request.headers[ACTOR_HEADER], "user:u-1");
-  assert.equal(request.headers[TIER_HEADER], HUB_TIER);
+  assert.equal(request.headers["x-docker-agent-tier"], undefined);
   assert.equal(request.headers.accept, "application/octet-stream");
   assert.equal(request.body, undefined, "ein Download schickt keinen Rumpf");
   assert.equal(await response.text(), "Bytes-nicht-JSON");
@@ -598,7 +584,7 @@ test("agentDownload trennt die Frist des Aufbaus vom Abbruch des Aufrufers", asy
 // typed out on purpose: an agent of an older release on another host reads
 // these literals, and a typo in the contract would show up there as a `401`
 // that looks like a wrong secret. The constants alone would stay green.
-test("the three headers and the tier go out with their literal names", async () => {
+test("the two headers go out with their literal names, and no tier header", async () => {
   let headers: Record<string, string> = {};
   const fetchImpl = (async (_input: string | URL | Request, init?: RequestInit) => {
     headers = (init?.headers ?? {}) as Record<string, string>;
@@ -612,10 +598,9 @@ test("the three headers and the tier go out with their literal names", async () 
 
   assert.equal(headers["x-docker-agent-secret"], "s".repeat(32));
   assert.equal(headers["x-docker-agent-actor"], "system:hub");
-  assert.equal(headers["x-docker-agent-tier"], "internal");
   assert.equal(headers[SECRET_HEADER], "s".repeat(32));
   assert.equal(headers[ACTOR_HEADER], "system:hub");
-  assert.equal(headers[TIER_HEADER], HUB_TIER);
+  assert.equal("x-docker-agent-tier" in headers, false);
 });
 
 // `LOG_TAIL_LINE_OPTIONS` is deliberately not derived from `MAX_TAIL` (reason

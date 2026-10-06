@@ -12,6 +12,8 @@ Browser-Anfragen und Agentenkommunikation sind unterschiedliche Vertrauensgrenze
 
 Hub und Agent importieren englische Schemas und technische Werte aus contract/. Vertragsversion und Mindest-Agent-Version begrenzen Fähigkeiten ausdrücklich. Unbekannte Gründe eines neueren Agenten werden nachvollziehbar durchgereicht, soweit das Schema dafür einen offenen Text vorsieht. Ältere Agenten brauchen einen erreichbaren Update-Weg, auch wenn normale Schreibaktionen gesperrt sind.
 
+Der Hub-Agent-Vertrag kennt keine Netzstufe. Der Hub steht nur im eigenen Netz (LAN oder VPN); eine vom Aufrufer selbst gemeldete Stufe schützt nichts, weil jeder Inhaber des Geheimnisses sie frei setzen könnte. Die wirksamen Grenzen des Agenten sind Geheimnis, Allowlist, Pfadgrenzen der Freigaben, hinterlegte Compose-Anker, Fremdverwaltung, Kill-Switch, Selbstschutz und die Härtungsprüfung beim Anlegen und Anwenden: Neue Verstöße werden dort abgelehnt oder verlangen eine Bestätigung. Bei Aktionen an bestehenden Containern wird die Delegationssperre gemeldet und protokolliert, blockiert aber nicht. Entscheidung: #152.
+
 ## 4. Prüfungen
 
 Schemas, Statuscodes und fehlerhafte Antwortformen sind ohne echte Dienste prüfbar. Anmeldung, Proxy-Vertrauen und Wiederherstellung werden zusätzlich am konkreten Release-Paket praktisch abgenommen. Öffentliche Fehlerbelege verwenden synthetische Identitäten.

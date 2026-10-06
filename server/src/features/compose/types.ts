@@ -327,7 +327,7 @@ export type ComposeDryRun = {
   uncertainties: readonly ComposeUncertainty[];
 };
 
-// The project `.env`, as the arm's internal route answers it. The arm checks
+// The project `.env`, as the arm's env route answers it. The arm checks
 // the compose anchor, every service and the self-management lock.
 export type ProjectEnv = {
   projectDir: string;

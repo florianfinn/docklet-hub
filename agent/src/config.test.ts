@@ -82,9 +82,8 @@ test("DOCKER_AGENT_SELF_PATHS is added on top", () => {
 test("a self path that covers the whole working tree is rejected", () => {
   // ⚠️ The most important of these tests. The base path IS the working tree of
   // all managed containers — if it counted as an "own path", EVERY container
-  // with a bind below it would carry a delegation lock and would therefore be
-  // externally invisible and no longer delegable. That is practically the
-  // entire existing setup.
+  // with a bind below it would carry a delegation lock. That is practically
+  // the entire existing setup.
   for (const pathname of ["/", "/mnt/user/docker", "/mnt/user", "/mnt"]) {
     assert.throws(
       () => loadConfig({

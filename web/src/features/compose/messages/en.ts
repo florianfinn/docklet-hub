@@ -217,7 +217,7 @@ export const enCompose = {
   hardeningService: "service {service}",
   hardeningConfirmFinding: "Confirm finding on service {service}",
   hardeningDelegationLockNote:
-    "A critical finding means the container can take over the host, or that this cannot be ruled out. The agent allows mutating actions on it only through internal access and logs them separately; externally they stay locked.",
+    "A critical finding means the container can take over the host, or that this cannot be ruled out. The agent allows mutating actions on it and logs them separately.",
   hardeningRuleDockerSocket: "Docker socket mounted",
   hardeningRuleDockerSocketText:
     "Through the Docker socket the container can start further containers, including privileged ones with the host file system. That amounts to root access to the host.",

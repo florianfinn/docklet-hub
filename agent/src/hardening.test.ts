@@ -66,9 +66,8 @@ test("an ANCESTOR of the socket is the same finding — not just a warning", () 
   // ⚠️ Finding from R3 (§27.4). Until then isDockerSocket only compared for
   // equality: `/var/run:/var/run` contains the socket but was classified as
   // `sensitive-host-path` (warning), and `/var:/var` even only as
-  // `bind-outside-base` (hint). Both containers were therefore DELEGABLE —
-  // they could receive a grant and were externally controllable, although
-  // they are host root via the contained socket.
+  // `bind-outside-base` (hint). Both containers would then carry no
+  // delegation lock, although they are host root via the contained socket.
   //
   // That is word for word the lesson S9 had already drawn for
   // `dashboard-self-mount`: a prefix list is blind to ancestors. It did not
@@ -162,10 +161,11 @@ test("the own operational directories are a delegation lock, not a warning", () 
   }
 });
 
-test("a mount ABOVE the operational directories locks just the same", () => {
+test("a mount ABOVE the operational directories is a delegation lock just the same", () => {
   // The branch that a plain prefix list is blind to: "/" contains
   // dashboard-state and is therefore not one bit more harmless than the direct
-  // mount. Without it "/" would only be a warning — and the container delegable.
+  // mount. Without it "/" would only be a warning — and the container would carry no
+  // delegation lock.
   for (const bind of ["/:/host", "/home:/h", "/home/docker:/hd", "/home/docker/../docker:/hd"]) {
     assert.deepEqual(rules(container({ binds: [bind] })), ["dashboard-self-mount"], bind);
   }
@@ -176,8 +176,7 @@ test("a mount ABOVE the operational directories locks just the same", () => {
 // Until S23 the list of own operational directories was a constant with LOCAL
 // paths. On a remote host it never matched — one of the five
 // delegation locks was effectively switched off there, and a container that
-// mounts the agent directory would have been shareable via grant and
-// externally controllable.
+// mounts the agent directory would have carried no delegation lock.
 
 test("a remote host protects ITS own directories", () => {
   const selfPaths = ["/mnt/user/appdata/dashboard-agent-bootstrap"];
@@ -216,7 +215,7 @@ test("an EMPTY list is not an off switch", () => {
   );
 });
 
-test("one host's own paths do not lock those of another", () => {
+test("one host's own paths are no delegation lock on another host", () => {
   // The unraid agent must not fire because of a path that only exists on the
   // local server — and vice versa.
   const c = container({ binds: ["/home/docker/dashboard-state:/s"] });
@@ -280,7 +279,7 @@ test("several violations are all reported, not just the first", () => {
 
 // --- Stage 4 / S9: hints and the separation of the three levels ------------
 
-test("missing no-new-privileges is reported but does not lock", () => {
+test("missing no-new-privileges is reported but is no delegation lock", () => {
   const c = container({ securityOpt: [] });
   assert.deepEqual(rules(c), ["no-new-privileges-missing"]);
   assert.equal(hasDelegationLock(c), false);
@@ -292,7 +291,7 @@ test("no-new-privileges is detected in both spellings", () => {
   }
 });
 
-test("missing cap_drop ALL is reported but does not lock", () => {
+test("missing cap_drop ALL is reported but is no delegation lock", () => {
   const c = container({ capDrop: [] });
   assert.deepEqual(rules(c), ["capabilities-not-dropped"]);
   assert.equal(hasDelegationLock(c), false);
@@ -314,7 +313,7 @@ test("a single missing limit is enough for the finding", () => {
   assert.deepEqual(rules(container({ memoryLimitBytes: 0 })), ["resource-limit-missing"]);
 });
 
-test("hints lock nothing, the delegation lock does", () => {
+test("hints carry no delegation lock, a socket mount does", () => {
   // The realistic existing case: nothing hardened, but no escape path either.
   const inventory = container({
     capDrop: [],
@@ -329,7 +328,7 @@ test("hints lock nothing, the delegation lock does", () => {
   assert.equal(report.hint.length, 3);
   assert.equal(hasDelegationLock(inventory), false);
 
-  // The same container with a socket mount: from here on it is no longer delegable.
+  // The same container with a socket mount: from here on it carries a delegation lock.
   const dangerous = container({ ...inventory, binds: ["/var/run/docker.sock:/var/run/docker.sock"] });
   assert.deepEqual(
     hardeningReport(dangerous).delegationLock.map((v) => v.rule),
@@ -338,7 +337,7 @@ test("hints lock nothing, the delegation lock does", () => {
   assert.equal(hasDelegationLock(dangerous), true);
 });
 
-test("an unresolvable volume is fail-closed and not delegable", () => {
+test("an unresolvable volume is fail-closed and carries a delegation lock", () => {
   const unknown = container({ unresolvedVolumes: ["proj_hostroot", "proj_hostroot"] });
   const report = hardeningReport(unknown);
 
@@ -350,7 +349,7 @@ test("an unresolvable volume is fail-closed and not delegable", () => {
 
 // --- S9: what the relaxation means in concrete terms ----------------------
 
-test("the three cases from §4 are no longer a lock", () => {
+test("the three cases from §4 are no delegation lock", () => {
   // Named explicitly in the stage plan: tailscale (NET_ADMIN), hardware
   // transcoding (/dev/dri), upsnap (network_mode: host — that one stays
   // locked because it shares the host namespace).

@@ -26,7 +26,6 @@ import {
 } from "../stack-control.js";
 import { config, engine, registry } from "./state.js";
 import { composeBasePath } from "./containers.js";
-import { AgentTier } from "./http.js";
 import { gate } from "./gate.js";
 import { createScopeContainerIds, externallyManagedServices } from "../raw-ownership.js";
 
@@ -54,11 +53,8 @@ export type StackContextResponse = {
   projectName: string;
   state: "running" | "stopped" | "partial" | "down";
   readOnly: boolean;
-  // Host paths do not leave the agent on the external tier. The server does
-  // not need them for the stack UI either; internally they stay available for
-  // diagnosis/administration.
-  projectDir: string | null;
-  composeFileName: string | null;
+  projectDir: string;
+  composeFileName: string;
   anchorServiceName: string;
   services: StackServiceSnapshot[];
   couplings: Array<StackCoupling & { fingerprint: string }>;
@@ -213,7 +209,6 @@ export function stackState(services: readonly StackServiceSnapshot[]): StackCont
 
 export async function prepareStack(
   project: StackResolvedProject,
-  tier: AgentTier,
   options: { mutating: boolean; action: string; actor: string | null }
 ): Promise<PreparedStack> {
   if (options.mutating) {
@@ -247,7 +242,6 @@ export async function prepareStack(
     const result = await gate(container.containerId, {
       mutating: options.mutating,
       action: options.action,
-      tier,
       actor: options.actor
     });
     if (!result.ok) {
@@ -305,8 +299,8 @@ export async function prepareStack(
     projectName: project.projectName,
     state: stackState(services),
     readOnly: config.readOnly || forcedManagement(project.projectDir) === "read-only",
-    projectDir: tier === "internal" ? project.projectDir : null,
-    composeFileName: tier === "internal" ? project.composeFileName : null,
+    projectDir: project.projectDir,
+    composeFileName: project.composeFileName,
     anchorServiceName: project.anchorServiceName,
     services,
     couplings,

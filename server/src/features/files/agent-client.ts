@@ -230,12 +230,7 @@ function readDiagnostics(raw: unknown): ShareDiagnostics | null {
 /**
  * Welche Bind-Mounts als Freigabe taugen (`GET /containers/:id/share-candidates`).
  *
- * ⚠️ DIE EINZIGE INTERN-ONLY-ROUTE DIESER FLÄCHE, und der Grund steht in der
- * Antwort: sie nennt die Bind-Mounts des Containers, also die Struktur des
- * Hosts. Beim Agenten steht sie deshalb nicht bei den sechs anderen, sondern
- * unter den intern-only-Routen (`src/route-policy.ts:110`). Nicht der
- * Schreibzugriff entscheidet dort über die Stufe, sondern ob die Antwort den
- * Host verrät.
+ * ⚠️ The answer names the container's bind mounts, i.e. the host's layout.
  */
 export async function listShareCandidates(
   target: AgentTarget,

@@ -52,7 +52,6 @@ export const COMPOSE_REASONS: Readonly<Record<ComposeRawFailureReason, ReasonEnt
     message: "Dieser Arm steht auf „nur lesen“. Solange der Kill-Switch liegt, schreibt er keine Compose-Datei."
   },
   "not-allowlisted": { message: "Diesen Container führt der Arm nicht in seiner Allowlist." },
-  "tier-missing": { message: "Der Arm konnte die Netzstufe dieser Anfrage nicht bestimmen. Das ist ein Fehler des Hubs." },
   "name-not-usable-as-directory": {
     message: "Der Name dieses Containers taugt nicht als Verzeichnisname; der Arm findet so kein Projektverzeichnis."
   },

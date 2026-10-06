@@ -5,7 +5,7 @@ import { send, RouteContext } from "../runtime/http.js";
 
 // --- Host resources (#10) ----------------------------------------------------
 //
-// Intern-only like `/host-containers`: the answer names every image, volume
+// Like `/host-containers`, the answer names every image, volume
 // and network of the host, including containers outside the allowlist. It
 // reads and changes nothing.
 //
@@ -27,14 +27,13 @@ function countOf(section: { ok: true; items: unknown[] } | { ok: false }): strin
 }
 
 export async function handleResources(ctx: RouteContext): Promise<void> {
-  const { response, actor, tier } = ctx;
+  const { response, actor } = ctx;
   const resources = await sharedRead();
   audit.write({
     action: "resources",
     containerId: null,
     containerName: null,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `images=${countOf(resources.images)} volumes=${countOf(resources.volumes)} networks=${countOf(resources.networks)}`
   });

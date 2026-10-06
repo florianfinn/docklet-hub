@@ -33,14 +33,14 @@ import { gate } from "../runtime/gate.js";
 // the old one is not deleted but renamed, and only removed once the new one
 // is running. Every failure rolls back.
 export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> {
-  const { request, response, actor, tier, parsedTier, containerId, action } = ctx;
+  const { request, response, actor, containerId, action } = ctx;
   const parsedBody = parseRequest(recreateRequestSchema, await readJsonBody(request));
   if (!parsedBody.ok) {
     rejectRequest(ctx, { action: "recreate", containerId, containerName: null }, parsedBody.rejection);
     return;
   }
   const body = parsedBody.value;
-  const result = await gate(containerId, { mutating: true, action, tier: parsedTier, actor });
+  const result = await gate(containerId, { mutating: true, action, actor });
   const containerName = result.ok ? (result.inspect.Name ?? "").replace(/^\//, "") : null;
   if (!result.ok) {
     audit.write({
@@ -48,7 +48,6 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: result.reason
     });
@@ -72,7 +71,6 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: "image-not-local"
     });
@@ -90,7 +88,6 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: "image-confirmation-mismatch"
     });
@@ -142,7 +139,6 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
         containerId,
         containerName,
         actor,
-        networkTier: tier,
         outcome: "denied",
         reason: drift.reason
       });
@@ -183,7 +179,6 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: reason
     });
@@ -203,7 +198,6 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
     containerId,
     containerName,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `${expected} -> ${targetImageId.slice(0, 19)}${composeDir ? ` (compose up in ${composeDir})` : ""}`
   });
@@ -216,7 +210,7 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
   // process). The safe actions have had the same handler since v0.13.0; the
   // recreate path was not brought along at the time.
   const recreateFailed = (error: unknown): void => {
-    const failure = actionFailureOf(error, { tier: parsedTier });
+    const failure = actionFailureOf(error);
     // Not a known failure but a programming error: that belongs further
     // up and stays a 500.
     if (!failure) throw error;
@@ -225,7 +219,6 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "error",
       reason: failure.auditReason
     });
@@ -240,7 +233,6 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
         containerId,
         containerName,
         actor,
-        networkTier: tier,
         outcome: "denied",
         reason: "stack-anchor-stale"
       });
@@ -258,7 +250,6 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
         containerId,
         containerName,
         actor,
-        networkTier: tier,
         outcome: "denied",
         reason: lockedDrift.reason
       });
@@ -336,7 +327,6 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
           containerId: newId,
           containerName,
           actor,
-          networkTier: tier,
           outcome: "error",
           reason: `${updateOutcome.reason ?? "compose-update-failed"} (rolledBack: ${updateOutcome.rolledBack})`
         });
@@ -427,7 +417,6 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
         containerId: newId,
         containerName,
         actor,
-        networkTier: tier,
         outcome: "error",
         reason: `hardening-newly-violated: ${newlyAdded.join(",")} (cleaned up: ${cleanedUp})`
       });
@@ -457,7 +446,6 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
       containerId: newId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "allowed",
       reason: `alt ${containerId.slice(0, 12)} -> neu ${newId.slice(0, 12)} (compose)`
     });
@@ -495,7 +483,6 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
       containerId: recreated.newContainerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "allowed",
       reason: `alt ${containerId.slice(0, 12)} -> neu ${recreated.newContainerId.slice(0, 12)}`
     });

@@ -30,9 +30,8 @@ export const SHARED_HTTP_ERRORS = [
   // of `REQUEST_REJECTION_REASONS` instead.
   { status: 400, code: "invalid-request" },
   { status: 400, code: "invalid-json" },
-  { status: 400, code: "tier-missing" },
   { status: 401, code: "unauthorized" },
-  { status: 403, code: "internal-only-action" },
+  { status: 403, code: "actor-not-allowed" },
   { status: 403, code: "observe-only" },
   { status: 403, code: "externally-managed" },
   { status: 429, code: "too-many-streams" },
@@ -167,20 +166,17 @@ export type LogFileFailureReason = z.infer<typeof logFileFailureReasonSchema>;
  * Why `POST /containers/:id/exec` refuses to open a session. All of them come
  * before the first stream line, as a status with this key in `error`.
  *
- * ⚠️ TWO KEYS CARRY A TEXT AFTER A COLON: `self-management-locked: <dir>`
- * and `hardening-violated: <rule>`. Whoever compares them with `===` never
- * hits them; `execRejectionKey` in `server/src/features/shell/rejections.ts` cuts the text.
+ * ⚠️ ONE KEY CARRIES A TEXT AFTER A COLON: `self-management-locked: <dir>`.
+ * Whoever compares it with `===` never hits it; `execRejectionKey` in
+ * `server/src/features/shell/rejections.ts` cuts the text.
  */
 export const EXEC_REJECTION_KEYS = [
   "unauthorized",
-  "tier-missing",
-  "internal-only-action",
   "observe-only",
   "agent-read-only",
   "not-allowlisted",
   "container-gone",
   "self-management-locked",
-  "hardening-violated",
   "container-not-started",
   "too-many-sessions",
   "no-shell",

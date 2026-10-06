@@ -42,7 +42,7 @@ import { gate } from "../runtime/gate.js";
 // 3.6) — otherwise "change ports" would be a way to swap the image on the
 // side.
 export async function handleApplySpec(ctx: ContainerRouteContext): Promise<void> {
-  const { request, response, actor, tier, parsedTier, containerId, action } = ctx;
+  const { request, response, actor, containerId, action } = ctx;
   // A missing hash is refused here already (`compose-hash-missing`): there is
   // no "don't care" value, see the drift check further down.
   const parsedBody = parseRequest(applySpecRequestSchema, await readJsonBody(request));
@@ -51,7 +51,7 @@ export async function handleApplySpec(ctx: ContainerRouteContext): Promise<void>
     return;
   }
   const body = parsedBody.value;
-  const result = await gate(containerId, { mutating: true, action, tier: parsedTier, actor });
+  const result = await gate(containerId, { mutating: true, action, actor });
   const containerName = result.ok ? (result.inspect.Name ?? "").replace(/^\//, "") : null;
   if (!result.ok) {
     audit.write({
@@ -59,7 +59,6 @@ export async function handleApplySpec(ctx: ContainerRouteContext): Promise<void>
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: result.reason
     });
@@ -83,7 +82,6 @@ export async function handleApplySpec(ctx: ContainerRouteContext): Promise<void>
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: "adopted-not-writable"
     });
@@ -147,7 +145,6 @@ export async function handleApplySpec(ctx: ContainerRouteContext): Promise<void>
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: drift.reason
     });
@@ -178,7 +175,6 @@ export async function handleApplySpec(ctx: ContainerRouteContext): Promise<void>
     containerId,
     containerName,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `${parsed.fullRef} (${targetImageId.slice(0, 19)}) in ${context.projectDir}`
   });
@@ -204,7 +200,6 @@ export async function handleApplySpec(ctx: ContainerRouteContext): Promise<void>
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: "stack-anchor-stale"
     });
@@ -219,7 +214,6 @@ export async function handleApplySpec(ctx: ContainerRouteContext): Promise<void>
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "error",
       reason: `${outcome.reason} (rolled back: ${outcome.rolledBack})`
     });
@@ -236,7 +230,6 @@ export async function handleApplySpec(ctx: ContainerRouteContext): Promise<void>
     containerId: outcome.containerId,
     containerName,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `alt ${containerId.slice(0, 12)} -> neu ${outcome.containerId.slice(0, 12)}`
   });
@@ -258,8 +251,8 @@ export async function handleApplySpec(ctx: ContainerRouteContext): Promise<void>
 
 // --- Remove (destructive) ---------------------------------------------
 export async function handleRemove(ctx: ContainerRouteContext): Promise<void> {
-  const { response, actor, tier, parsedTier, containerId, action } = ctx;
-  const result = await gate(containerId, { mutating: true, action, tier: parsedTier, actor });
+  const { response, actor, containerId, action } = ctx;
+  const result = await gate(containerId, { mutating: true, action, actor });
   const containerName = result.ok ? (result.inspect.Name ?? "").replace(/^\//, "") : null;
   if (!result.ok) {
     audit.write({
@@ -267,7 +260,6 @@ export async function handleRemove(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: result.reason
     });
@@ -304,7 +296,6 @@ export async function handleRemove(ctx: ContainerRouteContext): Promise<void> {
     containerId,
     containerName,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `${result.inspect.Config?.Image ?? ""}${viaCompose ? ` (compose down in ${context!.projectDir})` : ""}`
   });
@@ -352,7 +343,6 @@ export async function handleRemove(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: "stack-anchor-stale"
     });
@@ -373,8 +363,8 @@ export async function handleRemove(ctx: ContainerRouteContext): Promise<void> {
 
 // --- Safe actions ----------------------------------------------------
 export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void> {
-  const { response, actor, tier, parsedTier, containerId, action } = ctx;
-  const result = await gate(containerId, { mutating: true, action, tier: parsedTier, actor });
+  const { response, actor, containerId, action } = ctx;
+  const result = await gate(containerId, { mutating: true, action, actor });
   const containerName = result.ok ? (result.inspect.Name ?? "").replace(/^\//, "") : null;
   if (!result.ok) {
     audit.write({
@@ -382,7 +372,6 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: result.reason
     });
@@ -415,18 +404,16 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
     // replaced gluetun container. The only place this sentence appeared was
     // this container's stderr.
     //
-    // The mapping itself (which status, what goes into the audit, what stays
-    // internal) has lived in `action-failure.ts` since #48 — it is tested
-    // there, while this file has no test, and the recreate path uses exactly
-    // the same one.
-    const failure = actionFailureOf(error, { tier: parsedTier });
+    // The mapping itself (which status, what goes into the audit) lives in
+    // `action-failure.ts`: it is tested there, while this file has no test, and
+    // the recreate path uses exactly the same one.
+    const failure = actionFailureOf(error);
     if (!failure) throw error;
     audit.write({
       action,
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "error",
       reason: failure.auditReason
     });
@@ -439,7 +426,6 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: "stack-anchor-stale"
     });
@@ -452,7 +438,6 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
     containerId,
     containerName,
     actor,
-    networkTier: tier,
     outcome: "allowed"
   });
   send(response, 200, { ok: true });

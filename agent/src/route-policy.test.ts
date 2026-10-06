@@ -8,8 +8,7 @@ import {
   containerIdFromPath,
   DEFINITION_ACTIONS,
   findRoute,
-  INTERNAL_ONLY_ACTIONS,
-  checkTier,
+  checkRoute,
   ROUTES
 } from "./route-policy.js";
 import {
@@ -38,10 +37,7 @@ test("every route is fully declared", () => {
     assert.ok(route.methods.length > 0, `${route.pattern} without a method`);
     assert.ok(route.pattern.startsWith("/"), `${route.pattern} is not a path`);
     assert.ok(route.audit.length > 0, `${route.pattern} without an audit name`);
-    assert.ok(
-      ["intern-only", "extern-ok", "public"].includes(route.tier),
-      `${route.pattern} with an unknown tier`
-    );
+    assert.ok(route.public === undefined || route.public === true, `${route.pattern} with an invalid public flag`);
   }
 });
 
@@ -49,8 +45,10 @@ test("there is exactly one \"public\" route", () => {
   // /health sits before the secret check. If a second one is added, that is a
   // decision someone should make explicitly — not one that gets lost in a
   // table.
-  const publicRoutes = ROUTES.filter((route) => route.tier === "public");
+  const publicRoutes = ROUTES.filter((route) => route.public === true);
   assert.deepEqual(publicRoutes.map((route) => route.pattern), ["/health"]);
+  // Every other row stays behind the secret.
+  assert.ok(ROUTES.filter((route) => route.pattern !== "/health").every((route) => route.public === undefined));
 });
 
 test("findRoute matches placeholders, but not across segment boundaries", () => {
@@ -59,7 +57,7 @@ test("findRoute matches placeholders, but not across segment boundaries", () => 
   assert.equal(findRoute("GET", "/containers//logs"), null);
   assert.equal(findRoute("GET", "/containers"), ROUTES.find((r) => r.pattern === "/containers"));
   // The method counts too: PUT /registry exists, GET /registry does not.
-  assert.equal(findRoute("PUT", "/registry")?.tier, "intern-only");
+  assert.equal(findRoute("PUT", "/registry")?.audit, "registry-sync");
   assert.equal(findRoute("GET", "/registry"), null);
 });
 
@@ -77,28 +75,24 @@ test("the dry run stands as its own, non-mutating row", () => {
   // worthless as information.
   const preview = findRoute("POST", "/containers/abc123/compose-raw-preview");
   assert.equal(preview?.pattern, "/containers/:id/compose-raw-preview");
-  assert.equal(preview?.tier, "intern-only");
   assert.equal(preview?.mutating, false);
   assert.equal(preview?.audit, "compose-raw-preview");
   // It reveals the host's image inventory (which images are missing) — that is
   // not in the read response. Hence the editor's gate action, not the reading
   // one.
   assert.equal(preview?.gate, "compose-raw");
-  assert.ok(INTERNAL_ONLY_ACTIONS.has("compose-raw"));
   // No GET: the draft is up to 256 KiB large and belongs in a body.
   assert.equal(findRoute("GET", "/containers/abc123/compose-raw-preview"), null);
   // And it stays a row of its own: the apply next to it still mutates.
   assert.equal(findRoute("POST", "/containers/abc123/compose-raw")?.mutating, true);
 });
 
-test("Compose candidates are read-only, the persistent selection is internal and mutating", () => {
+test("Compose candidates are read-only, the persistent selection is mutating", () => {
   const candidates = findRoute("GET", "/containers/abc123/compose-candidates");
-  assert.equal(candidates?.tier, "intern-only");
   assert.equal(candidates?.mutating, false);
   assert.equal(candidates?.gate, "compose-raw-read");
   for (const method of ["PUT", "DELETE"] as const) {
     const selection = findRoute(method, "/containers/abc123/compose-selection");
-    assert.equal(selection?.tier, "intern-only");
     assert.equal(selection?.mutating, true);
     assert.equal(selection?.gate, "compose-raw");
   }
@@ -111,7 +105,6 @@ test("the observable path stands next to the synchronous one, not in its place",
   // keys of this route as an HTTP response.
   const stream = findRoute("POST", "/containers/abc123/compose-raw-stream");
   assert.equal(stream?.pattern, "/containers/:id/compose-raw-stream");
-  assert.equal(stream?.tier, "intern-only");
   // It does the same as the apply — a row claiming "not mutating" here would
   // simply be wrong as information.
   assert.equal(stream?.mutating, true);
@@ -125,119 +118,54 @@ test("the observable path stands next to the synchronous one, not in its place",
 
 // --- The decision ----------------------------------------------------------
 
-test("an intern-only route rejects the external path", () => {
-  assert.deepEqual(checkTier("PUT", "/registry", "external", "wer"), {
+test("monitor-events is bound to its one caller", () => {
+  assert.deepEqual(checkRoute("GET", "/monitor-events", "system:monitor"), { ok: true });
+  assert.deepEqual(checkRoute("GET", "/monitor-events", "jemand-anders"), {
     ok: false,
     status: 403,
-    reason: "internal-only-action",
-    audit: "registry-sync"
+    reason: "actor-not-allowed",
+    audit: "monitor-events"
   });
-  assert.deepEqual(checkTier("PUT", "/registry", null, "wer"), {
-    ok: false,
-    status: 400,
-    reason: "tier-missing",
-    audit: "registry-sync"
-  });
-  assert.deepEqual(checkTier("PUT", "/registry", "internal", "wer"), { ok: true });
-});
-
-test("an unknown route counts as intern-only (default deny)", () => {
-  // This is the property that would have prevented S1: whoever adds a route
-  // and forgets the row in the table gets the STRICTEST tier.
-  const decision = checkTier("POST", "/neue-route-von-morgen", "external", "wer");
-  assert.deepEqual(decision, {
+  assert.deepEqual(checkRoute("GET", "/monitor-events", null), {
     ok: false,
     status: 403,
-    reason: "internal-only-action",
-    audit: "route-unknown"
-  });
-  assert.deepEqual(checkTier("POST", "/neue-route-von-morgen", "internal", "wer"), { ok: true });
-});
-
-test("externally allowed routes still need a usable tier", () => {
-  // Without a tier gate() can apply neither the delegation lock nor hardening.
-  assert.deepEqual(checkTier("GET", "/containers", null, "wer"), {
-    ok: false,
-    status: 400,
-    reason: "tier-missing",
-    audit: "list"
-  });
-  assert.deepEqual(checkTier("GET", "/containers", "external", "wer"), { ok: true });
-});
-
-test("/health decides without a tier", () => {
-  assert.deepEqual(checkTier("GET", "/health", null, null), { ok: true });
-});
-
-test("/contract is externally readable and requires a usable tier", () => {
-  assert.equal(findRoute("GET", "/contract")?.tier, "extern-ok");
-  assert.equal(findRoute("POST", "/contract"), null);
-  assert.deepEqual(checkTier("GET", "/contract", null, null), {
-    ok: false, status: 400, reason: "tier-missing", audit: "contract"
-  });
-  assert.deepEqual(checkTier("GET", "/contract", "external", null), { ok: true });
-});
-
-test("the counter-check: external gets stuck on every truly internal action", () => {
-  // Otherwise the boundary would have been opened instead of moved. First the
-  // spot checks — the three most powerful actions —, then the whole table.
-  for (const [method, pathname, audit] of [
-    ["POST", "/containers/abc/recreate", "recreate"],
-    ["POST", "/containers/abc/exec", "exec"],
-    ["PUT", "/registry", "registry-sync"]
-  ] as const) {
-    assert.deepEqual(checkTier(method, pathname, "external", "wer"), {
-      ok: false, status: 403, reason: "internal-only-action", audit
-    }, `${method} ${pathname} lets the external path in`);
-  }
-
-  // The whole table: every intern-only row rejects the external path.
-  // `selbstpruefend` stays out — there the route answers itself, and today
-  // none of these rows carries `intern-only` any more.
-  for (const route of ROUTES) {
-    if (route.tier !== "intern-only") continue;
-    for (const method of route.methods) {
-      const pathname = examplePath(route.pattern);
-      const decision = checkTier(method, pathname, "external", route.onlyActor ?? "wer");
-      assert.equal(decision.ok, false, `${method} ${pathname} lets the external path in`);
-    }
-  }
-});
-
-test("monitor-events is additionally bound to its one caller", () => {
-  assert.deepEqual(checkTier("GET", "/monitor-events", "internal", "system:monitor"), { ok: true });
-  assert.deepEqual(checkTier("GET", "/monitor-events", "internal", "jemand-anders"), {
-    ok: false,
-    status: 403,
-    reason: "internal-only-action",
+    reason: "actor-not-allowed",
     audit: "monitor-events"
   });
 });
 
-test("both audit archive routes are intern-only", () => {
-  // One hands out the complete log of the component with root-equivalent
-  // access, the other discards it on the host. Externally the first would be
-  // an information channel about half the operation and the second the way to
-  // get rid of traces.
-  assert.deepEqual(checkTier("GET", "/audit-archive", "external", "wer"), {
-    ok: false,
-    status: 403,
-    reason: "internal-only-action",
-    audit: "audit-archive-fetched"
-  });
-  assert.deepEqual(checkTier("POST", "/audit-archive/discard", "external", "wer"), {
-    ok: false,
-    status: 403,
-    reason: "internal-only-action",
-    audit: "audit-archive-discarded"
-  });
-  assert.deepEqual(checkTier("GET", "/audit-archive", "internal", "wer"), { ok: true });
-  assert.deepEqual(checkTier("POST", "/audit-archive/discard", "internal", "wer"), { ok: true });
-  // The methods are not interchangeable: fetching reads, discarding writes.
+test("only rows with onlyActor reject a caller at the route level", () => {
+  const bound = ROUTES.filter((route) => route.onlyActor !== undefined).map((route) => route.pattern);
+  assert.deepEqual(bound, ["/monitor-events"]);
+  for (const route of ROUTES) {
+    if (route.onlyActor !== undefined) continue;
+    for (const method of route.methods) {
+      const pathname = examplePath(route.pattern);
+      assert.deepEqual(checkRoute(method, pathname, "wer"), { ok: true }, `${method} ${pathname}`);
+      assert.deepEqual(checkRoute(method, pathname, null), { ok: true }, `${method} ${pathname}`);
+    }
+  }
+});
+
+test("an unknown route passes checkRoute and ends in the dispatcher's 404", () => {
+  assert.deepEqual(checkRoute("POST", "/neue-route-von-morgen", "wer"), { ok: true });
+  assert.deepEqual(checkRoute("GET", "/registry", null), { ok: true });
+});
+
+test("/health and /contract are rows of their own", () => {
+  assert.equal(findRoute("GET", "/health")?.public, true);
+  assert.equal(findRoute("GET", "/contract")?.public, undefined);
+  assert.equal(findRoute("POST", "/contract"), null);
+});
+
+test("both audit archive routes keep their methods apart", () => {
+  // Fetching reads, discarding writes.
   assert.equal(findRoute("POST", "/audit-archive"), null);
   assert.equal(findRoute("GET", "/audit-archive/discard"), null);
   assert.equal(findRoute("POST", "/audit-archive/discard")?.mutating, true);
   assert.equal(findRoute("GET", "/audit-archive")?.mutating, false);
+  assert.equal(findRoute("GET", "/audit-archive")?.audit, "audit-archive-fetched");
+  assert.equal(findRoute("POST", "/audit-archive/discard")?.audit, "audit-archive-discarded");
 });
 
 test("containerIdFromPath reads the id from the path", () => {
@@ -248,56 +176,12 @@ test("containerIdFromPath reads the id from the path", () => {
   assert.equal(containerIdFromPath("/containers"), null);
 });
 
-// --- The set that gate() checks -------------------------------------------
-
-test("INTERNAL_ONLY_ACTIONS still contains every action from before the refactor", () => {
-  // The list verbatim as it stood in index.ts until the refactor. It stands here
-  // as an anchor: the refactor may extend the set but must not lose an action
-  // — every lost one would be an action silently opened to the outside.
-  const beforeRefactor = [
-    "recreate",
-    "share-candidates",
-    "remove",
-    "exec",
-    "update",
-    "compose",
-    "env",
-    "stack-services",
-    "create",
-    "apply-spec",
-    "compose-raw",
-    "pull-stream",
-    "compose-raw-read",
-    "resolve",
-    "stack-apply",
-    "stack-down"
-  ];
-  for (const action of beforeRefactor) {
-    assert.ok(INTERNAL_ONLY_ACTIONS.has(action), `${action} is missing from INTERNAL_ONLY_ACTIONS`);
-  }
-});
-
-test("no externally allowed route carries an internally bound gate action", () => {
-  // Otherwise the table would contradict itself: the route would let the
-  // external path in, and gate() would reject it two steps later.
-  for (const route of ROUTES) {
-    if (route.tier === "extern-ok" && route.gate) {
-      assert.ok(
-        !INTERNAL_ONLY_ACTIONS.has(route.gate),
-        `${route.pattern} is allowed externally, but ${route.gate} is bound to internal`
-      );
-    }
-  }
-});
-
 // --- Completeness against the actual handlers -------------------------------
 //
 // The other direction. Everything above reads the TABLE; no test there can see
-// a handler for which no row exists at all. Yet that is exactly the failure
-// that hurts in operation: `route-policy.ts` is default deny, a path without a
-// row falls to `intern-only`. Whoever renames a handler path and leaves the
-// pattern row in place silently shuts the network tier — external 403, audit
-// `route-unknown`, and nothing turns red.
+// a handler for which no row exists at all. Whoever renames a handler path and
+// leaves the pattern row in place silently drops its audit name and any
+// `onlyActor` binding, and nothing turns red.
 
 const METHODS = ["GET", "PUT", "POST", "DELETE"] as const;
 const knows = (pathname: string): boolean => METHODS.some((method) => findRoute(method, pathname) !== null);
@@ -328,7 +212,7 @@ test("every handler path in the handler sources has a row in ROUTES", () => {
   const withoutLine = paths
     .filter(({ pathname }) => !knows(pathname))
     .map(({ pathname, row: line, origin }) => `${pathname} (${handlerLocation(line)}, ${origin})`);
-  assert.deepEqual(withoutLine, [], "handlers without a pattern row — they would silently run as intern-only");
+  assert.deepEqual(withoutLine, [], "handlers without a pattern row");
 
   for (const [pathname, reason] of NO_ROUTES) {
     assert.ok(!paths.some((entry) => entry.pathname === pathname), `${pathname} is not a route: ${reason}`);

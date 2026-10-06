@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { fetchStackDiscovery, parseStackDiscovery } from "./stack-discovery.js";
-import { ACTOR_HEADER, HUB_TIER, SECRET_HEADER, TIER_HEADER } from "contract";
+import { ACTOR_HEADER, SECRET_HEADER } from "contract";
 import { AgentError } from "../../platform/agent-transport/protocol.js";
 
 // Geprüft gegen die Form, die der Agent unter GET /stacks liefert — gemessen
@@ -117,7 +117,7 @@ test("eine Antwort ohne stacks-Feld hält an", () => {
   }
 });
 
-test("die Anfrage trägt Geheimnis, Aufrufer und Netzstufe", async () => {
+test("die Anfrage trägt Geheimnis und Aufrufer, aber keine Netzstufe", async () => {
   let seen: { url: string; headers: Record<string, string> } | null = null;
   const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
     seen = { url: String(input), headers: init?.headers as Record<string, string> };
@@ -134,7 +134,7 @@ test("die Anfrage trägt Geheimnis, Aufrufer und Netzstufe", async () => {
   assert.equal(request.url, "http://docker-agent:8099/stacks");
   assert.equal(request.headers[SECRET_HEADER], "s".repeat(32));
   assert.equal(request.headers[ACTOR_HEADER], "system:hub");
-  assert.equal(request.headers[TIER_HEADER], HUB_TIER);
+  assert.equal(request.headers["x-docker-agent-tier"], undefined);
 });
 
 test("ein 403 und ein 401 werden auseinandergehalten", async () => {

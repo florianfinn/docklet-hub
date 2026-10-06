@@ -4,7 +4,6 @@ import {
   expectedStackMatches,
   isStackAction,
   stackActionDeny,
-  stackActionNeedsInternal,
   stackDefinitionFromConfig,
   stackNeedsDependencySafeRestart,
   stackMutationBaseDeny
@@ -139,15 +138,6 @@ test("only the five explicit stack actions are valid", () => {
   assert.equal(isStackAction("rm"), false);
 });
 
-test("apply, down and the start fallback are internal-only", () => {
-  assert.equal(stackActionNeedsInternal("start", []), false);
-  assert.equal(stackActionNeedsInternal("start", ["db"]), true);
-  assert.equal(stackActionNeedsInternal("stop", ["db"]), false);
-  assert.equal(stackActionNeedsInternal("restart", ["db"]), false);
-  assert.equal(stackActionNeedsInternal("apply", []), true);
-  assert.equal(stackActionNeedsInternal("down", []), true);
-});
-
 test("kill switch and self-management block every stack mutation", () => {
   assert.deepEqual(
     stackMutationBaseDeny({ readOnly: true, selfManaged: false }),
@@ -160,22 +150,26 @@ test("kill switch and self-management block every stack mutation", () => {
   assert.equal(stackMutationBaseDeny({ readOnly: false, selfManaged: false }), null);
 });
 
-test("stack action policy enforces tier and exact down confirmation", () => {
+test("stack action policy enforces the start fallback and exact down confirmation", () => {
   assert.deepEqual(
     stackActionDeny({
       action: "start",
-      tier: "external",
       missingServices: ["db"],
       projectName: "homepage",
       confirmation: undefined,
       allowFallbackUp: false
     }),
-    { status: 403, code: "internal-only-action" }
+    { status: 409, code: "stack-start-requires-apply" }
   );
+  for (const action of ["apply", "stop", "restart"] as const) {
+    assert.equal(
+      stackActionDeny({ action, missingServices: ["db"], projectName: "homepage", confirmation: undefined, allowFallbackUp: false }),
+      null
+    );
+  }
   assert.deepEqual(
     stackActionDeny({
       action: "down",
-      tier: "internal",
       missingServices: [],
       projectName: "homepage",
       confirmation: "Homepage",
@@ -186,7 +180,6 @@ test("stack action policy enforces tier and exact down confirmation", () => {
   assert.equal(
     stackActionDeny({
       action: "down",
-      tier: "internal",
       missingServices: [],
       projectName: "homepage",
       confirmation: "homepage",
@@ -196,10 +189,9 @@ test("stack action policy enforces tier and exact down confirmation", () => {
   );
 });
 
-test("internal start fallback needs the explicit server approval", () => {
+test("start fallback needs the explicit server approval", () => {
   const base = {
     action: "start" as const,
-    tier: "internal" as const,
     missingServices: ["db"],
     projectName: "homepage",
     confirmation: undefined

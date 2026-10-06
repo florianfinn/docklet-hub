@@ -216,8 +216,7 @@ export type {
 } from "./agent/resources.js";
 export { CONTRACT_VERSION, contractSince, since } from "./agent/version.js";
 export type { ContractSince } from "./agent/version.js";
-export { ACTOR_HEADER, agentTierSchema, HUB_TIER, SECRET_HEADER, TIER_HEADER } from "./agent/headers.js";
-export type { AgentTier } from "./agent/headers.js";
+export { ACTOR_HEADER, SECRET_HEADER } from "./agent/headers.js";
 export {
   DEFAULT_TAIL,
   EXEC_DEFAULT_COLS,

@@ -10,7 +10,6 @@ import { externalSourcesOf } from "../mount-sources.js";
 import { inspectRawApply, planFromInspection, type RawLocation } from "../raw-apply.js";
 import { forcedManagement } from "../stacks.js";
 import { composeBasePath } from "./containers.js";
-import type { AgentTier } from "./http.js";
 import { executeRawLocked, rawLockKey, rawOps, rawReason } from "./raw-ops.js";
 import { audit, stackLocks } from "./state.js";
 
@@ -43,7 +42,6 @@ export type ProjectCreation = {
   confirmations: ComposeConfirmations;
   confirmExternalSources: readonly string[];
   actor: string | null;
-  tier: AgentTier;
 };
 
 export async function createProject(operation: ProjectCreation): Promise<Outcome> {
@@ -56,7 +54,6 @@ export async function createProject(operation: ProjectCreation): Promise<Outcome
       containerId: null,
       containerName: operation.name,
       actor: operation.actor,
-      networkTier: operation.tier,
       outcome: "denied",
       reason
     });
@@ -78,7 +75,6 @@ export async function createProject(operation: ProjectCreation): Promise<Outcome
       confirmations: operation.confirmations,
       confirmExternalSources: operation.confirmExternalSources,
       actor: operation.actor,
-      tier: operation.tier,
       containerId: null,
       stackName: operation.name
     });
@@ -94,7 +90,6 @@ export async function createProject(operation: ProjectCreation): Promise<Outcome
         containerId: null,
         containerName: operation.name,
         actor: operation.actor,
-        networkTier: operation.tier,
         outcome: "error",
         reason: `${location.projectDir}: data left`
       });
@@ -110,7 +105,6 @@ export type ProjectPreview = {
   name: string;
   content: string;
   actor: string | null;
-  tier: AgentTier;
 };
 
 // The dry run of a create. It needs the directory for `docker compose config`
@@ -128,7 +122,6 @@ export async function previewProject(operation: ProjectPreview): Promise<Outcome
         containerId: null,
         containerName: operation.name,
         actor: operation.actor,
-        networkTier: operation.tier,
         outcome,
         reason
       });

@@ -353,7 +353,7 @@ test("die Frist deckt den schlechtesten gemessenen Fall des Agenten", () => {
 
 // ── Lesen ───────────────────────────────────────────────────────────────────
 
-test("der Leseaufruf trägt die drei Kopfzeilen und liest jedes Feld", async () => {
+test("der Leseaufruf trägt die Kopfzeilen und liest jedes Feld", async () => {
   const call = stub({
     projectDir: "/opt/stacks/medien",
     composeFileName: "compose.yaml",

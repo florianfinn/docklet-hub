@@ -161,8 +161,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AgentConfig {
     const pathname = trimmed === "/" ? "/" : trimmed.replace(/\/+$/, "");
     // ⚠️ Neither "/" nor the base path nor an ancestor of it. All three would
     // turn EVERY container with a bind below the working tree into a
-    // delegation lock — i.e. practically the entire existing setup, which
-    // would then be externally invisible and no longer delegable. That is a
+    // delegation lock — i.e. practically the entire existing setup. That is a
     // misconfiguration, not a particularly strict protection, and it shows up
     // loudly here instead of silently in operation.
     if (pathname === "/" || pathname === bindBasePath || bindBasePath.startsWith(pathname + "/")) {

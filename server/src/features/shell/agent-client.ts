@@ -205,7 +205,7 @@ export type ExecStreamOptions = ExecRequestOptions & {
  * Browser hat die Seite verlassen. Er endet still (das erledigt `readNdjson`)
  * und ergibt `unterminated`.
  *
- * ⚠️ Die zwölf Ablehnungen des Agenten kommen ALLE vor der ersten Stromzeile
+ * ⚠️ Die Ablehnungen des Agenten kommen ALLE vor der ersten Stromzeile
  * und damit als `AgentError` aus diesem Aufruf — mit Status UND, anders als
  * bei jedem anderen Strom dieses Hubs, mit ausgewertetem Fehlerrumpf in
  * `detail`. Warum das hier eine eigene Vorrichtung braucht, steht bei

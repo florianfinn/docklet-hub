@@ -137,7 +137,6 @@ server.listen(config.listenPort, config.listenHost, async () => {
           containerId: null,
           containerName: null,
           actor: null,
-          networkTier: null,
           outcome: reason === "registered" ? "allowed" : "error",
           reason: `${reason} attempts=${state.attempts}`
         });

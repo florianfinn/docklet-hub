@@ -62,11 +62,10 @@ import {
 // --- Stack discovery (stage 5d) -----------------------------------------
 //
 // Shows what actually lies on the host: Compose projects with their services,
-// PLUS the cases that cannot be assigned cleanly. Like /host-containers, bound
-// hard to the internal path — whoever sees the inventory also sees containers
-// nobody has a permission for.
+// PLUS the cases that cannot be assigned cleanly. Like /host-containers,
+// whoever sees the inventory also sees containers nobody has a permission for.
 export async function handleStackList(ctx: RouteContext): Promise<void> {
-  const { response, actor, tier } = ctx;
+  const { response, actor } = ctx;
 
   const result = discoverStacks({
     containers: await engine.listWithComposeLabels(),
@@ -80,7 +79,6 @@ export async function handleStackList(ctx: RouteContext): Promise<void> {
     containerId: null,
     containerName: null,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `${result.stacks.length} Stacks, ${result.findings.length} Befunde`
   });
@@ -100,7 +98,7 @@ export async function handleStackList(ctx: RouteContext): Promise<void> {
 // hashed, never written. The survey for 5d showed that none of the inventory
 // files would have survived a regeneration.
 export async function handleStackAdopt(ctx: RouteContext): Promise<void> {
-  const { request, response, actor, tier } = ctx;
+  const { request, response, actor } = ctx;
 
   const adopt = parseRequest(stackAdoptRequestSchema, await readJsonBody(request));
   if (!adopt.ok) {
@@ -193,7 +191,6 @@ export async function handleStackAdopt(ctx: RouteContext): Promise<void> {
     containerId,
     containerName: (inspect.Name ?? "").replace(/^\//, ""),
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `${context.projectDir} (${management})`
   });
@@ -228,7 +225,7 @@ export async function handleStackAdopt(ctx: RouteContext): Promise<void> {
 // The location follows from the NAME (locationFor), never from anything the
 // caller states — the same traversal guard as when creating from a spec.
 export async function handleStackRaw(ctx: RouteContext): Promise<void> {
-  const { request, response, actor, parsedTier } = ctx;
+  const { request, response, actor } = ctx;
   if (config.readOnly) {
     send(response, 503, { error: rawReason("agent-read-only") });
     return;
@@ -239,28 +236,21 @@ export async function handleStackRaw(ctx: RouteContext): Promise<void> {
     rejectRequest(ctx, { action: "compose-raw", containerId: null, containerName: null }, parsedBody.rejection);
     return;
   }
-  // The route table binds this route intern-only; the branch keeps the type.
-  if (!parsedTier) {
-    send(response, 400, { error: rawReason("tier-missing") });
-    return;
-  }
   const { name, content, confirmExternalSources, ...confirmations } = parsedBody.value;
   const result = await createProject({
     name,
     content,
     confirmations,
     confirmExternalSources,
-    actor,
-    tier: parsedTier
+    actor
   });
   send(response, result.status, result.body);
   return;
 }
 
-// The dry run of a new project (#128). Intern-only like the create itself,
-// because the answer names host paths.
+// The dry run of a new project (#128). The answer names host paths.
 export async function handleStackRawPreview(ctx: RouteContext): Promise<void> {
-  const { request, response, actor, parsedTier } = ctx;
+  const { request, response, actor } = ctx;
   // The dry run creates and removes a directory under the base path.
   if (config.readOnly) {
     send(response, 503, { error: rawReason("agent-read-only") });
@@ -271,11 +261,7 @@ export async function handleStackRawPreview(ctx: RouteContext): Promise<void> {
     rejectRequest(ctx, { action: "compose-raw-preview", containerId: null, containerName: null }, parsedBody.rejection);
     return;
   }
-  if (!parsedTier) {
-    send(response, 400, { error: rawReason("tier-missing") });
-    return;
-  }
-  const result = await previewProject({ ...parsedBody.value, actor, tier: parsedTier });
+  const result = await previewProject({ ...parsedBody.value, actor });
   send(response, result.status, result.body);
   return;
 }
@@ -285,7 +271,7 @@ export async function handleStackRawPreview(ctx: RouteContext): Promise<void> {
 // Honest limit: on CREATE the agent has nothing of its own to check against —
 // there is no allowlist entry yet, creating IS the introduction. Its promise
 // here is therefore not "the API was allowed to ask that" (the API decides
-// that via the intern-only scope), but: **what comes into being here obeys
+// that via its scope), but: **what comes into being here obeys
 // the hardening rules.** The spec has no field for privileged, capabilities or
 // devices, and the self-check checks the result once more against the same
 // rules that apply to the inventory.
@@ -297,7 +283,7 @@ export async function handleStackRawPreview(ctx: RouteContext): Promise<void> {
 // backup of this directory contains definition AND data, and a
 // `docker compose up` via SSH does exactly the same as the dashboard.
 export async function handleContainerCreate(ctx: RouteContext): Promise<void> {
-  const { request, response, actor, tier } = ctx;
+  const { request, response, actor } = ctx;
   if (config.readOnly) {
     send(response, 503, { error: "agent-read-only" });
     return;
@@ -337,7 +323,6 @@ export async function handleContainerCreate(ctx: RouteContext): Promise<void> {
       containerId: null,
       containerName: spec.name,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: `hardening-violated: ${blocking.join(",")}`
     });
@@ -364,7 +349,6 @@ export async function handleContainerCreate(ctx: RouteContext): Promise<void> {
       containerId: null,
       containerName: spec.name,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: "directory-taken"
     });
@@ -386,7 +370,6 @@ export async function handleContainerCreate(ctx: RouteContext): Promise<void> {
       containerId: null,
       containerName: spec.name,
       actor,
-      networkTier: tier,
       outcome: "allowed",
       reason: parsed.fullRef
     });
@@ -403,7 +386,6 @@ export async function handleContainerCreate(ctx: RouteContext): Promise<void> {
     containerId: null,
     containerName: spec.name,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `${parsed.fullRef} (${imageId.slice(0, 19)}) -> ${location.projectDir}`
   });
@@ -425,7 +407,6 @@ export async function handleContainerCreate(ctx: RouteContext): Promise<void> {
       containerId: null,
       containerName: spec.name,
       actor,
-      networkTier: tier,
       outcome: "error",
       reason: `${outcome.reason} (rolled back: ${outcome.rolledBack})`
     });
@@ -442,7 +423,6 @@ export async function handleContainerCreate(ctx: RouteContext): Promise<void> {
     containerId: outcome.containerId,
     containerName: spec.name,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: location.projectDir
   });
@@ -465,29 +445,15 @@ export async function handleContainerCreate(ctx: RouteContext): Promise<void> {
 }
 
 export async function handleStackContext(ctx: RouteContext, stackContextMatch: RegExpMatchArray): Promise<void> {
-  const { response, actor, tier, parsedTier } = ctx;
+  const { response, actor } = ctx;
   const anchorContainerId = decodeURIComponent(stackContextMatch[1]);
-  if (!parsedTier) {
-    audit.write({
-      action: "stack-context",
-      containerId: anchorContainerId,
-      containerName: null,
-      actor,
-      networkTier: tier,
-      outcome: "denied",
-      reason: "tier-missing"
-    });
-    send(response, 400, { error: "tier-missing" });
-    return;
-  }
-
   try {
     const project = stackProjectFromRegistry(anchorContainerId);
     const prepared = await stackLocks.runExclusive(project.projectName, () => {
       if (!registry.isAllowed(anchorContainerId)) {
         throw new StackEndpointError(409, "stack-anchor-stale");
       }
-      return prepareStack(project, parsedTier, {
+      return prepareStack(project, {
         mutating: false,
         action: "stack-context",
         actor
@@ -498,7 +464,6 @@ export async function handleStackContext(ctx: RouteContext, stackContextMatch: R
       containerId: anchorContainerId,
       containerName: project.anchorEntry.containerName,
       actor,
-      networkTier: tier,
       outcome: "allowed",
       reason: project.projectName
     });
@@ -510,7 +475,6 @@ export async function handleStackContext(ctx: RouteContext, stackContextMatch: R
       containerId: anchorContainerId,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: error.code
     });
@@ -520,7 +484,7 @@ export async function handleStackContext(ctx: RouteContext, stackContextMatch: R
 }
 
 export async function handleStackAction(ctx: RouteContext, stackActionMatch: RegExpMatchArray): Promise<void> {
-  const { request, response, actor, tier, parsedTier } = ctx;
+  const { request, response, actor } = ctx;
   const anchorContainerId = decodeURIComponent(stackActionMatch[1]);
   const requestedAction = decodeURIComponent(stackActionMatch[2]);
   if (!isStackAction(requestedAction)) {
@@ -528,20 +492,6 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
     return;
   }
   const action: StackAction = requestedAction;
-  if (!parsedTier) {
-    audit.write({
-      action: `stack-${action}`,
-      containerId: anchorContainerId,
-      containerName: null,
-      actor,
-      networkTier: tier,
-      outcome: "denied",
-      reason: "tier-missing"
-    });
-    send(response, 400, { error: "tier-missing" });
-    return;
-  }
-
   // Invalid JSON is answered centrally (`400 invalid-json`), as everywhere.
   const parsedBody = parseRequest(stackActionRequestSchema, await readJsonBody(request));
   if (!parsedBody.ok) {
@@ -557,7 +507,7 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
         throw new StackEndpointError(409, "stack-anchor-stale");
       }
       const gateAction = action === "apply" || action === "down" ? `stack-${action}` : action;
-      const prepared = await prepareStack(project, parsedTier, {
+      const prepared = await prepareStack(project, {
         mutating: true,
         action: gateAction,
         actor
@@ -588,7 +538,6 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
 
       const denied = stackActionDeny({
         action,
-        tier: parsedTier,
         missingServices: prepared.context.missingServices,
         projectName: project.projectName,
         confirmation: body.confirmation,
@@ -619,7 +568,7 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
           // a manual `down`+`up` brought them back.
           //
           // The reach does NOT grow because of this: `apply` touches the
-          // whole stack anyway and is intern-only with `compose.raw`. The
+          // whole stack anyway and requires `compose.raw`. The
           // flag only changes whether Compose leaves unchanged containers
           // alone — and exactly that is the bug here, not the protection.
           await composeUp(project, {
@@ -650,7 +599,7 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
       // Even a failed `up --wait` may already have recreated containers. That
       // is why ids are always updated before the error goes to the server.
       await reanchorStackRegistry(prepared);
-      const after = await prepareStack(project, parsedTier, {
+      const after = await prepareStack(project, {
         mutating: false,
         action: "stack-context",
         actor
@@ -671,7 +620,6 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
       containerId: anchorContainerId,
       containerName: project.anchorEntry.containerName,
       actor,
-      networkTier: tier,
       outcome: "allowed",
       reason: `${project.projectName}${outcome.usedFallbackUp ? " (start->up)" : ""}`
     });
@@ -689,7 +637,6 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
       containerId: anchorContainerId,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: error.code === "compose-stack-action-failed" ? "error" : "denied",
       reason: error.code
     });

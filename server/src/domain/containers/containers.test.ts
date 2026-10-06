@@ -8,7 +8,7 @@ import {
   parseContainerStats,
   withoutHistory
 } from "./containers.js";
-import { ACTOR_HEADER, HUB_TIER, SECRET_HEADER, TIER_HEADER } from "contract";
+import { ACTOR_HEADER, SECRET_HEADER } from "contract";
 import { AgentError } from "../../platform/agent-transport/protocol.js";
 
 // Der Nachweis dieser Phase steht und fällt mit dieser Auswertung: was der
@@ -214,10 +214,8 @@ test("eine Antwort ohne containers-Feld hält an", () => {
   }
 });
 
-test("die Anfrage trägt Geheimnis, Aufrufer und Netzstufe", () => {
-  // Alle drei Kopfzeilen liest der Agent. Fehlt der Aufrufer, steht im
-  // Audit-Log des Agenten keine Spur zurück auf einen Menschen; fehlt die
-  // Netzstufe, lehnt er ab (default deny).
+test("die Anfrage trägt Geheimnis und Aufrufer, aber keine Netzstufe", () => {
+  // Without the actor the agent's audit log has no trace back to a person.
   let seen: { url: string; headers: Record<string, string> } | null = null;
   const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
     seen = { url: String(input), headers: init?.headers as Record<string, string> };
@@ -237,7 +235,7 @@ test("die Anfrage trägt Geheimnis, Aufrufer und Netzstufe", () => {
     assert.equal(request.url, "http://docker-agent:8099/containers");
     assert.equal(request.headers[SECRET_HEADER], "s".repeat(32));
     assert.equal(request.headers[ACTOR_HEADER], "user:u-1");
-    assert.equal(request.headers[TIER_HEADER], HUB_TIER);
+    assert.equal(request.headers["x-docker-agent-tier"], undefined);
   });
 });
 

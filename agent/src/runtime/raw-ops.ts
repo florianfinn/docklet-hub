@@ -44,7 +44,6 @@ import {
   inspectedContainer,
   resolveFullContainerId
 } from "./containers.js";
-import { AgentTier } from "./http.js";
 
 // applyCompose runs exclusively for stacks whose file the dashboard writes
 // itself — hence ownProject() and removeOrphans: true throughout.
@@ -228,7 +227,6 @@ export type RawExecution = {
   // `composeRawWriteRequestSchema` (contract).
   confirmations: ComposeConfirmations;
   actor: string | null;
-  tier: AgentTier;
   // For the audit log: when creating there is no container yet.
   containerId: string | null;
   stackName: string;
@@ -243,7 +241,7 @@ export type RawExecution = {
 export async function executeRawWithoutLock(
   operation: RawExecution
 ): Promise<{ status: number; body: Record<string, unknown> }> {
-  const { location, confirmations, actor, tier } = operation;
+  const { location, confirmations, actor } = operation;
   const report = reportedTo(operation.onStep);
 
   const auditEntry = (outcome: "allowed" | "denied" | "error", reason: string): void => {
@@ -252,7 +250,6 @@ export async function executeRawWithoutLock(
       containerId: operation.containerId,
       containerName: operation.stackName,
       actor,
-      networkTier: tier,
       outcome,
       reason
     });
@@ -360,7 +357,6 @@ export async function executeRawWithoutLock(
         containerId: operation.containerId,
         containerName: operation.stackName,
         actor,
-        networkTier: tier,
         outcome: "allowed",
         reason: parsed.fullRef
       });
@@ -395,7 +391,6 @@ export async function executeRawWithoutLock(
       containerId: operation.containerId,
       containerName: operation.stackName,
       actor,
-      networkTier: tier,
       outcome: "error",
       reason: `${result.reason} (rolled back: ${result.rolledBack})${
         result.newViolations ? `: ${result.newViolations.join(",")}` : ""
@@ -436,7 +431,6 @@ export async function executeRawWithoutLock(
     containerId: operation.containerId,
     containerName: operation.stackName,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `${location.projectDir}: ${Object.keys(result.containerIds).join(",")}`
   });
@@ -522,7 +516,6 @@ export async function executeRawLocked(
       containerId: operation.containerId,
       containerName: operation.stackName,
       actor: operation.actor,
-      networkTier: operation.tier,
       outcome: "denied",
       reason: "stack-anchor-stale"
     });
@@ -539,7 +532,6 @@ export async function executeRawLocked(
       containerId: operation.containerId,
       containerName: operation.stackName,
       actor: operation.actor,
-      networkTier: operation.tier,
       outcome: "denied",
       reason: `externally-managed: ${managed.body.services.join(",")}`
     });
@@ -594,7 +586,6 @@ export type RawPreviewOperation = {
   location: RawLocation;
   content: string;
   actor: string | null;
-  tier: AgentTier;
   containerId: string;
   stackName: string;
 };
@@ -602,7 +593,7 @@ export type RawPreviewOperation = {
 export async function previewRaw(
   operation: RawPreviewOperation
 ): Promise<{ status: number; body: Record<string, unknown> }> {
-  const { location, actor, tier } = operation;
+  const { location, actor } = operation;
 
   // ⚠️ Under THE SAME project lock as the apply, and not for tidiness: the
   // check stores the draft under a fixed name per project directory. If a
@@ -624,7 +615,6 @@ export async function previewRaw(
         containerId: operation.containerId,
         containerName: operation.stackName,
         actor,
-        networkTier: tier,
         outcome: "denied",
         reason: `externally-managed: ${managed.body.services.join(",")}`
       });
@@ -639,7 +629,6 @@ export async function previewRaw(
         containerId: operation.containerId,
         containerName: operation.stackName,
         actor,
-        networkTier: tier,
         outcome: "allowed",
         reason
       });

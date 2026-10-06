@@ -64,7 +64,8 @@ const BLOCKED_COMPOSE_FILES = new Set([
 // copies that contain the same values.
 //
 // This is a backstop, not a boundary: the boundary is the self-management lock
-// and the fact that only an internal manager sets up paths.
+// and `checkLogPath` against the container's own project directory, including
+// the realpath check in `openLogFile`.
 function isBlockedName(name: string): boolean {
   return (
     name === ENV_FILE_NAME ||

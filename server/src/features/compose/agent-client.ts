@@ -357,8 +357,8 @@ export async function previewComposeOnAgent(
 // Die Projekt-.env
 // ---------------------------------------------------------------------------
 
-// The project `.env` comes over the arm's internal route made for it (moved
-// here from `agent/env.ts`, #264). The arm checks the compose anchor, every
+// The project `.env` comes over the arm's env route (moved here from
+// `agent/env.ts`, #264). The arm checks the compose anchor, every
 // service and the self-management lock.
 export async function readProjectEnv(
   target: AgentTarget,

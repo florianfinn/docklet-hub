@@ -89,7 +89,7 @@ test("Compose: start, schritt und ergebnis des echten Agenten; die Vorschau und 
   // The same request without the stream, the way older arms are written to.
   assert.equal((await applyCompose(agent.target, CONTAINER_ID, input, options)).ok, false);
 
-  // The project environment, over the arm's internal route.
+  // The project environment, over the arm's env route.
   const env = await readProjectEnv(agent.target, CONTAINER_ID, true, options);
   assert.equal(env.filePresent, true);
 

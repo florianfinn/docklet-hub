@@ -12,7 +12,7 @@
 // The translation sits in its own module and not in the handler code
 // (`src/index.ts`, `src/routes/*.ts`), because that code has no test and this
 // mapping is exactly the kind of rule you want to check: which status goes out,
-// what lands in the audit log, and what a caller who is NOT internal gets to see.
+// what lands in the audit log, and what the caller gets to see.
 
 import { ComposeError } from "./compose-cli.js";
 import { EngineError, engineMessage } from "./engine.js";
@@ -32,12 +32,9 @@ export type ActionFailure = {
 // `null` means: this error is none of the known failures but a programming
 // error. On recreate it also carries the rollback outcome, but stays a 500
 // with the generic error key.
-export function actionFailureOf(
-  error: unknown,
-  options: { tier: "internal" | "external" | null }
-): ActionFailure | null {
+export function actionFailureOf(error: unknown): ActionFailure | null {
   if (error instanceof RecreateFailure) {
-    const original = actionFailureOf(error.original, options);
+    const original = actionFailureOf(error.original);
     const rollback = { rollbackAttempted: error.rollbackAttempted, rolledBack: error.rolledBack };
     // An unknown programming error stays a 500. The outcome of the rollback
     // steps that already ran must still not disappear.
@@ -58,11 +55,7 @@ export function actionFailureOf(
       body: {
         error: "engine-action-failed",
         engineStatus: error.status,
-        // ⚠️ The message itself goes out ONLY internally. It can carry container
-        // names and ids; the agent draws the same line for the field errors of
-        // spec validation, and the main API only passes structured details on
-        // for `tier: internal` anyway.
-        ...(options.tier === "internal" ? { engineMessage: message } : {})
+        engineMessage: message
       }
     };
   }

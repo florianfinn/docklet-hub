@@ -48,13 +48,9 @@ import { createFilesService, type ContainerRef } from "./service.js";
 // Wirkung, auch wenn sich nichts ändert. Das gilt für `share-candidates` und
 // `share` ebenso: beide fragen den Arm nach seiner Container-Liste.
 //
-// ⚠️ WARUM `share-candidates` BEIM AGENTEN `intern-only` IST und die
-// Zugriffsrouten `extern-ok`: die Antwort nennt die Bind-Mounts des
-// Containers, also die Struktur des Hosts (`src/route-policy.ts:110` am Agenten).
-// Nicht der Schreibzugriff entscheidet dort über die Stufe, sondern ob die
-// Antwort den Host verrät. Für den Hub folgt daraus nichts anderes als für die
-// übrigen — dieselbe Rolle, dieselbe Kette —, aber wer diese Route für die
-// harmlosere hält, hat es verkehrt herum.
+// ⚠️ `share-candidates` names the container's bind mounts, i.e. the host's
+// layout. Same role and chain as the other file routes, but it is not the
+// more harmless one.
 //
 // ⚠️ DER DOWNLOAD IST EINE DURCHREICHUNG, KEIN SAMMELN. Der Agent deckelt
 // diese Richtung nicht; wer den Strom vollständig liest und dann ausliefert,

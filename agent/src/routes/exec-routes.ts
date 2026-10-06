@@ -31,7 +31,7 @@ import {
 import { gate } from "../runtime/gate.js";
 
 export async function handleExecInput(ctx: RouteContext, execMatch: RegExpMatchArray): Promise<void> {
-  const { request, response, actor, tier } = ctx;
+  const { request, response, actor } = ctx;
   const sessionId = decodeURIComponent(execMatch[1]);
   const subAction = execMatch[2];
 
@@ -60,7 +60,6 @@ export async function handleExecInput(ctx: RouteContext, execMatch: RegExpMatchA
       containerId: null,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: "session-unknown"
     });
@@ -85,7 +84,6 @@ export async function handleExecInput(ctx: RouteContext, execMatch: RegExpMatchA
       containerId: session.containerId,
       containerName: session.containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: sessionAccess
     });
@@ -135,21 +133,19 @@ export async function handleExecInput(ctx: RouteContext, execMatch: RegExpMatchA
 // and is proven.
 //
 // ⚠️ `mutating: true` is not a formality. It activates three barriers, all
-// three of which are right for code execution in the container: the kill
-// switch (`agent-read-only`), the self-management lock (no shell in the
-// containers that carry the dashboard itself) and, externally, the
-// delegation lock. That `exec` is bound to internal in the route table
-// anyway replaces none of them.
+// right for code execution in the container: the kill switch
+// (`agent-read-only`), the observer class (`observe-only`) and the
+// self-management lock (no shell in the containers that carry the dashboard
+// itself).
 export async function handleExec(ctx: ContainerRouteContext): Promise<void> {
-  const { request, response, actor, tier, parsedTier, containerId } = ctx;
-  const result = await gate(containerId, { mutating: true, action: "exec", tier: parsedTier, actor });
+  const { request, response, actor, containerId } = ctx;
+  const result = await gate(containerId, { mutating: true, action: "exec", actor });
   if (!result.ok) {
     audit.write({
       action: "exec-start",
       containerId,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: result.reason
     });
@@ -164,7 +160,6 @@ export async function handleExec(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: reason
     });
@@ -263,7 +258,6 @@ export async function handleExec(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "allowed",
       // Volume instead of content (condition 1 from §20.1): duration and byte
       // count, NEVER the input or output. A complete recording would be a
@@ -305,7 +299,6 @@ export async function handleExec(ctx: ContainerRouteContext): Promise<void> {
     containerId,
     containerName,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     // As with the log stream: `envFile` says how far the redaction of the
     // output reached (log-compose-context.ts).

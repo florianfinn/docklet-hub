@@ -55,15 +55,14 @@ import { gate } from "../runtime/gate.js";
 
 // --- Detail view ------------------------------------------------------
 export async function handleContainerDetail(ctx: ContainerContext): Promise<void> {
-  const { response, actor, tier, parsedTier, containerId } = ctx;
-  const result = await gate(containerId, { mutating: false, action: "view", tier: parsedTier });
+  const { response, actor, containerId } = ctx;
+  const result = await gate(containerId, { mutating: false, action: "view" });
   if (!result.ok) {
     audit.write({
       action: "view",
       containerId,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: result.reason
     });
@@ -91,13 +90,12 @@ export async function handleContainerDetail(ctx: ContainerContext): Promise<void
 // the local manifest digest (from the RepoDigests of the running image) and
 // the REMOTE digest that the daemon fetches via the distribution API —
 // without pulling layers. The ref is the pinned one from the allowlist, never
-// one from the request. Read-only; goes through gate() (allowlist + tier).
+// one from the request. Read-only; goes through gate() (allowlist).
 export async function handleUpdateCheck(ctx: ContainerRouteContext): Promise<void> {
-  const { response, actor, tier, parsedTier, containerId } = ctx;
+  const { response, actor, containerId } = ctx;
   const result = await gate(containerId, {
     mutating: false,
-    action: "update-check",
-    tier: parsedTier
+    action: "update-check"
   });
   if (!result.ok) {
     audit.write({
@@ -105,7 +103,6 @@ export async function handleUpdateCheck(ctx: ContainerRouteContext): Promise<voi
       containerId,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: result.reason
     });
@@ -138,12 +135,10 @@ export async function handleUpdateCheck(ctx: ContainerRouteContext): Promise<voi
 
 // --- Hardening report with details (stage 4) ---------------------------
 // The details name host paths, capabilities and mount targets — that is a
-// map of the host and therefore belongs on the same level as allowlist
-// maintenance: internal-only.
+// map of the host.
 //
-// Deliberately does NOT go through gate(): a container with blocking
-// violations is exactly the one whose report you need to see. Allowlist and
-// tier are checked anyway; only the hardening does not block itself here.
+// Does not go through gate(): the report is read whatever the container
+// carries. The allowlist is checked anyway.
 export async function handleHardening(ctx: ContainerRouteContext): Promise<void> {
   const { response, containerId } = ctx;
   if (!registry.isAllowed(containerId)) {
@@ -166,10 +161,9 @@ export async function handleHardening(ctx: ContainerRouteContext): Promise<void>
   send(response, 200, {
     containerId,
     containerName: (inspect.Name ?? "").replace(/^\//, ""),
-    // Honestly named (S9): "locked" here does NOT mean "the operator can do
-    // nothing" — internally they can do everything. It means: this container
-    // cannot be passed on (no grant, no external control, no Web-FTP for
-    // third parties).
+    // "locked" here does NOT mean "the operator can do nothing". It means:
+    // this container should not be passed on to third parties; the agent
+    // reports and audits it but does not block.
     delegationLocked: report.delegationLock.length > 0,
     delegationLock: report.delegationLock,
     warning: report.warning,
@@ -181,8 +175,8 @@ export async function handleHardening(ctx: ContainerRouteContext): Promise<void>
 
 // --- Logs -------------------------------------------------------------
 export async function handleLogs(ctx: ContainerRouteContext): Promise<void> {
-  const { response, url, actor, tier, parsedTier, containerId } = ctx;
-  const result = await gate(containerId, { mutating: false, action: "logs", tier: parsedTier });
+  const { response, url, actor, containerId } = ctx;
+  const result = await gate(containerId, { mutating: false, action: "logs" });
   if (!result.ok) {
     // The rejection is logged too: repeatedly rejected log access is exactly
     // the signal the log exists for.
@@ -191,7 +185,6 @@ export async function handleLogs(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: result.reason
     });
@@ -209,7 +202,7 @@ export async function handleLogs(ctx: ContainerRouteContext): Promise<void> {
   // ⚠️ Redaction as for the live stream (§16.4 point 1). Up to R2 it was
   // missing precisely HERE: the one-off snapshot is older than S6 and went
   // out raw, while the same content was masked in the stream. It is also
-  // reachable externally via the same grant-required scope and is
+  // reachable via the same grant-required scope and is
   // additionally used by the guided update as a 25-line attachment — masking
   // that depends on the chosen endpoint is no masking.
   const composeContext = verifiedComposeContextForLogs(
@@ -227,7 +220,6 @@ export async function handleLogs(ctx: ContainerRouteContext): Promise<void> {
     containerId,
     containerName: (result.inspect.Name ?? "").replace(/^\//, ""),
     actor,
-    networkTier: tier,
     outcome: "allowed",
     // ⚠️ How far the redaction actually reached. Without a confirmed Compose
     // anchor there is no project `.env` as an additional source
@@ -244,7 +236,7 @@ export async function handleLogs(ctx: ContainerRouteContext): Promise<void> {
 //
 // The same scope as "logs" (docker.logs.view, grant-required) — the stream
 // says nothing more than the snapshot, it just says it continuously. Hence the
-// same gate action "logs" and `extern-ok` in the route table.
+// same gate action "logs".
 //
 // ⚠️ Redaction is mandatory, not optional (§16.4 point 1): a live log is the
 // most convenient secret leak channel of all. The secrets come from TWO
@@ -253,15 +245,14 @@ export async function handleLogs(ctx: ContainerRouteContext): Promise<void> {
 // without a caller until here). Both together go into
 // `redactKnownSecrets()`.
 export async function handleLogsStream(ctx: ContainerRouteContext): Promise<void> {
-  const { response, url, actor, tier, parsedTier, containerId } = ctx;
-  const result = await gate(containerId, { mutating: false, action: "logs", tier: parsedTier });
+  const { response, url, actor, containerId } = ctx;
+  const result = await gate(containerId, { mutating: false, action: "logs" });
   if (!result.ok) {
     audit.write({
       action: "logs-stream",
       containerId,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: result.reason
     });
@@ -281,7 +272,6 @@ export async function handleLogsStream(ctx: ContainerRouteContext): Promise<void
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: "too-many-streams"
     });
@@ -323,7 +313,6 @@ export async function handleLogsStream(ctx: ContainerRouteContext): Promise<void
     containerId,
     containerName,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     // `envFile` says how far the redaction reached — see the reasoning at
     // the snapshot endpoint above.
@@ -395,15 +384,14 @@ export async function handleLogsStream(ctx: ContainerRouteContext): Promise<void
 // container, not the global base path (§20.2, R2 in §27.4). Otherwise "add
 // log file" would be the way to read from neighbouring containers.
 export async function handleLogFile(ctx: ContainerRouteContext): Promise<void> {
-  const { response, url, actor, tier, parsedTier, containerId } = ctx;
-  const result = await gate(containerId, { mutating: false, action: "logs", tier: parsedTier });
+  const { response, url, actor, containerId } = ctx;
+  const result = await gate(containerId, { mutating: false, action: "logs" });
   if (!result.ok) {
     audit.write({
       action: "log-file",
       containerId,
       containerName: null,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: result.reason
     });
@@ -432,7 +420,6 @@ export async function handleLogFile(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: "compose-registry-anchor-missing-or-different"
     });
@@ -450,16 +437,13 @@ export async function handleLogFile(ctx: ContainerRouteContext): Promise<void> {
   // The reason is the same and weighs heavier here: under
   // /home/docker/dashboard-repo and /home/docker/dashboard-state live the DB
   // password, the session secret, the agent shared secret and the audit
-  // records. A log file is a way to hand out a file LINE BY LINE — and that
-  // route is also open EXTERNALLY via a grant, while the `.env` tab is
-  // internal-only.
+  // records. A log file is a way to hand out a file LINE BY LINE.
   if (forcedManagement(projectDir) === "read-only") {
     audit.write({
       action: "log-file",
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: `self-management-locked: ${projectDir}`
     });
@@ -489,7 +473,6 @@ export async function handleLogFile(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: checked.reason
     });
@@ -507,7 +490,6 @@ export async function handleLogFile(ctx: ContainerRouteContext): Promise<void> {
       containerId,
       containerName,
       actor,
-      networkTier: tier,
       outcome: "denied",
       reason: "too-many-streams"
     });
@@ -531,7 +513,6 @@ export async function handleLogFile(ctx: ContainerRouteContext): Promise<void> {
     containerId,
     containerName,
     actor,
-    networkTier: tier,
     outcome: "allowed",
     reason: `${checked.relative} (tail=${safeTail})`
   });
@@ -542,7 +523,7 @@ export async function handleLogFile(ctx: ContainerRouteContext): Promise<void> {
     "x-accel-buffering": "no"
   });
   // ⚠️ The ABSOLUTE path stays in here: it names the structure of the host
-  // and this route is also reachable externally via a grant. Only the
+  // and this route is also reachable via a grant. Only the
   // relative path, which the caller knows anyway, goes outside.
   const streamAbort = new AbortController();
   const onDisconnect = () => streamAbort.abort();

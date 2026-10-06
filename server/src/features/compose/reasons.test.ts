@@ -32,15 +32,12 @@ test("jeder bekannte Schlüssel des Agenten hat einen Satz, und die Tabelle füh
 test("jeder bekannte Schlüssel kommt mit seinem Satz und als reason an", () => {
   for (const key of COMPOSE_RAW_FAILURE_REASONS) {
     // 409 stands for "the arm answered and named it": it is no `agent-unreachable`
-    // for any key. The hub-fault key is the one that is read as the hub's own.
+    // for any key.
     const answer = describeComposeRejection(rejection(409, { error: key }, "Text des Transports"));
     if (key === "compose-file-missing" || key.startsWith("compose-anchor-")) {
       // The three anchor reasons take the way of a missing file (#185).
       assert.equal(answer.body.error, "compose-file-missing");
       assert.equal(answer.body.message, COMPOSE_REASONS[key].message, key);
-    } else if (key === "tier-missing") {
-      assert.equal(answer.body.error, "agent-unreachable");
-      assert.notEqual(answer.body.message, COMPOSE_REASONS[key].message);
     } else {
       assert.equal(answer.body.message, COMPOSE_REASONS[key].message, key);
     }

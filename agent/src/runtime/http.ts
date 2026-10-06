@@ -1,5 +1,5 @@
 import http from "node:http";
-import { agentTierSchema, requestRejectionOf, type AgentTier, type RequestRejection } from "contract";
+import { requestRejectionOf, type RequestRejection } from "contract";
 import { CONTRACT_HEADERS } from "../contract.js";
 import { bodyWithLegacyKeys } from "../request-keys.js";
 import {
@@ -27,28 +27,6 @@ export const EXEC_AUDIT_NAME: Record<string, string> = {
   size: "exec-resize",
   close: "exec-close"
 };
-
-// Actions that the agent itself hard-binds to the internal path (stage plan
-// 3.3, class "never") — now from the route table instead of from a second list
-// next to it.
-//
-// ⚠️ Up to here the tier binding lived in THREE places: in this list, in the
-// `if` in gate() and in a hand-written `if` per special route. Two routes had
-// not received the third place — that was finding S1. The list itself has
-// therefore moved to route-policy.ts, where it stands next to the routes it
-// applies to; the check in gate() remains as a second, container-level
-// instance. The reasons for the individual entries are given there.
-
-export type { AgentTier };
-
-// Fail closed: a missing or unknown tier is not "external" but an error. The
-// main API MUST send the tier along; if it does not, that is a bug that should
-// become visible instead of silently falling to the weaker level and letting
-// actions through there.
-export function parseTier(value: string | null): AgentTier | null {
-  const parsed = agentTierSchema.safeParse(value);
-  return parsed.success ? parsed.data : null;
-}
 
 export function isAuthorized(request: http.IncomingMessage): boolean {
   const header = request.headers[CONTRACT_HEADERS.secret];
@@ -129,7 +107,6 @@ export function rejectRequest(
     containerId: target.containerId,
     containerName: target.containerName,
     actor: ctx.actor,
-    networkTier: ctx.tier,
     outcome: "denied",
     reason: rejectionReason(rejection)
   });
@@ -165,8 +142,7 @@ export const unauthThrottle = new UnauthThrottle();
 export function logUnauth(
   method: string,
   pathname: string,
-  actor: string | null,
-  tier: string | null
+  actor: string | null
 ): void {
   const decision = unauthThrottle.report(Date.now());
   if (!decision.write) return;
@@ -178,7 +154,6 @@ export function logUnauth(
     containerId: null,
     containerName: null,
     actor,
-    networkTier: tier,
     outcome: "denied",
     reason: decision.suppressed > 0
       ? `bad-secret (+${decision.suppressed} more in the previous window)`
@@ -192,8 +167,6 @@ export type RouteContext = {
   response: http.ServerResponse;
   url: URL;
   actor: string | null;
-  tier: string | null;
-  parsedTier: AgentTier | null;
 };
 
 // A handler below `/containers/:id`, and one below `/containers/:id/:action`.
