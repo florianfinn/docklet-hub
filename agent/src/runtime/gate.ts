@@ -23,7 +23,7 @@ export type GateResult =
 
 export async function gate(
   containerId: string,
-  options: { mutating: boolean; action: string; actor?: string | null }
+  options: { mutating: boolean; action: string; actor?: string | null; onDelegation?: (reason: string) => void }
 ): Promise<GateResult> {
   // 1. Kill switch. Comes first so that it really stops everything.
   if (options.mutating && config.readOnly) {
@@ -93,13 +93,15 @@ export async function gate(
   const hardeningOptions = hardeningOptionsFor(containerId);
   const report = hardeningReport(inspected, hardeningOptions);
   if (options.mutating && report.delegationLock.length > 0) {
-    audit.write({
+    const reason = `delegation-lock-allowed: ${hardeningRuleNames(inspected, hardeningOptions).delegationLock.join(",")}`;
+    if (options.onDelegation) options.onDelegation(reason);
+    else audit.write({
       action: options.action,
       containerId,
       containerName: (inspect.Name ?? "").replace(/^\//, ""),
       actor: options.actor ?? null,
       outcome: "allowed",
-      reason: `delegation-lock-allowed: ${hardeningRuleNames(inspected, hardeningOptions).delegationLock.join(",")}`
+      reason
     });
   }
 

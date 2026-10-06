@@ -1,4 +1,6 @@
-import type { RuntimeAction, RuntimeServiceResult, StackActionRequest, StackRuntimeResult } from "contract";
+import type { ActionFailure } from "./action-failure.js";
+import { runtimeReadback } from "./runtime-readback.js";
+import type { RuntimeAction, RuntimeServiceResult, StackActionRequest } from "contract";
 import { expectedStackMatches, StackEndpointError } from "./stack-control.js";
 import { gracePeriodSeconds, serviceResult, stackActionTimeoutMs, runtimeOutcome } from "./runtime-actions.js";
 import type { PreparedStack, StackContextResponse } from "./runtime/stack.js";
@@ -26,16 +28,13 @@ export async function executeStackRuntimeAction(
   ops: StackRuntimeOps,
   action: RuntimeAction,
   body: StackActionRequest,
-  options: { signal?: AbortSignal; onStart?: (applyDefinition: boolean, prepared: PreparedStack) => void; onProgress?: (service: RuntimeServiceResult) => void } = {}
-): Promise<{ status: number; mutationStarted: boolean; body: StackRuntimeResult & { context: StackContextResponse } }> {
+  options: { signal?: AbortSignal; onStart?: (applyDefinition: boolean, prepared: PreparedStack) => void; onProgress?: (service: RuntimeServiceResult) => void; onMutation?: () => void; observationFailure?: () => ActionFailure | undefined } = {}
+) {
   const prepared = await ops.prepare();
   const applyDefinition = body.applyDefinition === true && !prepared.externallyManaged;
   const creating = !prepared.externallyManaged && (action === "start" || action === "restart");
-  let errorCode: string | undefined;
   let mutationStarted = false;
-  let errorStatus = 409;
-  let after: StackContextResponse;
-  try {
+  const result = await runtimeReadback(async () => {
     if (!expectedStackMatches(body.expectedStack, {
       projectName: prepared.project.projectName, projectDir: prepared.project.projectDir,
       composeFileName: prepared.project.composeFileName,
@@ -62,6 +61,7 @@ export async function executeStackRuntimeAction(
     ops.checkRuntimeScope(prepared);
     if (creating) ops.checkCreateScope(prepared);
     mutationStarted = true;
+    options.onMutation?.();
     if (creating) {
       if (action === "restart" && !applyDefinition) await ops.restart(timeoutMs, true);
       else await ops.up({ applyDefinition, forceRecreate: action === "restart", timeoutMs });
@@ -69,32 +69,20 @@ export async function executeStackRuntimeAction(
     else if (action === "start") await ops.start(timeoutMs);
     else if (action === "stop") await ops.stop(timeoutMs);
     else await ops.restart(timeoutMs, false);
-  } catch (error) {
-    errorCode = error instanceof StackEndpointError ? error.code : "compose-stack-action-failed";
-    errorStatus = error instanceof StackEndpointError ? error.status : 409;
-  } finally {
-    // Refresh ids even after a guard or CLI failure: another writer may have
-    // replaced containers before the operation acquired its project lock.
-    try {
-      after = await ops.refresh(prepared);
-    } catch {
-      errorCode = "runtime-state-unreadable";
-      after = { ...prepared.context, services: prepared.context.services.map((service) => ({
-        ...service, containerId: null, status: "unknown", exitCode: null, health: null, startedAt: null
-      })) };
-    }
-  }
-  const services = runtimeServices(action, after, prepared.externallyManaged);
-  for (const service of services) options.onProgress?.(service);
-  const outcome = runtimeOutcome(services);
-  const ok = outcome === "ok" && !errorCode;
-  return {
-    status: ok ? 200 : errorStatus,
-    mutationStarted,
-    body: {
+  }, () => ops.refresh(prepared), () => ({
+    ...prepared.context, services: prepared.context.services.map((service) => ({
+      ...service, containerId: null, status: "unknown", exitCode: null, health: null, startedAt: null
+    }))
+  }), (after) => {
+    const services = runtimeServices(action, after, prepared.externallyManaged);
+    for (const service of services) options.onProgress?.(service);
+    const outcome = runtimeOutcome(services);
+    const ok = outcome === "ok";
+    return {
       ok, action, applyDefinition, outcome, services,
       containerIds: Object.fromEntries(services.flatMap((service) => service.containerId ? [[service.serviceName, service.containerId]] : [])),
-      context: after, ...(errorCode ? { error: errorCode } : outcome !== "ok" ? { error: "runtime-target-not-reached" } : {})
-    }
-  };
+      context: after, ...(ok ? {} : { error: "runtime-target-not-reached" })
+    };
+  }, options.observationFailure);
+  return { ...result, mutationStarted };
 }

@@ -1,3 +1,4 @@
+import { actionFailureOf } from "../action-failure.js";
 import { stackRuntimeResponder } from "../runtime/action-stream.js";
 import { runStackRuntimeAction } from "../runtime/stack-action.js";
 import { actionConnection } from "../runtime/action-connection.js";
@@ -505,18 +506,21 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
 
   const connection = actionConnection(request, response);
   let releaseStream: (() => void) | null = null;
+  let mutationStarted = false;
+  const delegation = new Set<string>();
+  const auditReason = (reason: string) => [reason, ...delegation].join("; ");
   const streaming = streamSuffix || request.headers.accept?.includes("application/x-ndjson") === true;
   try {
     const project = stackProjectFromRegistry(anchorContainerId);
     if (action === "start" || action === "stop" || action === "restart") {
       if (streaming) {
         releaseStream = openStreams.tryAcquire();
-        if (!releaseStream) { send(response, 429, { error: "too-many-streams" }); return; }
+        if (!releaseStream) throw new StackEndpointError(429, "too-many-streams");
       }
       const responder = stackRuntimeResponder(response, action, project.projectName, streaming);
-      const result = await runStackRuntimeAction(project, anchorContainerId, action, body, actor, connection.signal, streaming ? responder : {});
+      const result = await runStackRuntimeAction(project, anchorContainerId, action, body, actor, connection.signal, { ...(streaming ? responder : {}), onMutation: () => { mutationStarted = true; }, onDelegation: (reason) => { delegation.add(reason); } });
       audit.write({ action: `stack-${action}`, containerId: anchorContainerId, containerName: project.anchorEntry.containerName,
-        actor, outcome: result.body.ok ? "allowed" : result.mutationStarted ? "error" : "denied", reason: result.body.error ?? result.body.outcome });
+        actor, outcome: result.body.ok ? "allowed" : result.mutationStarted ? "error" : "denied", reason: auditReason(result.body.error ?? result.body.outcome) });
       responder.finish(result);
       return;
     }
@@ -620,19 +624,20 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
       context: outcome.context
     });
   } catch (error) {
-    if (!(error instanceof StackEndpointError)) throw error;
+    if (action !== "start" && action !== "stop" && action !== "restart" && !(error instanceof StackEndpointError)) throw error;
+    const failure = actionFailureOf(error, true);
     audit.write({
-      action: `stack-${action}`,
-      containerId: anchorContainerId,
-      containerName: null,
-      actor,
-      outcome: error.code === "compose-stack-action-failed" ? "error" : "denied",
-      reason: error.code
+      action: `stack-${action}`, containerId: anchorContainerId, containerName: null, actor,
+      outcome: mutationStarted || failure.body.error === "compose-stack-action-failed" ? "error" : "denied",
+      reason: auditReason(failure.auditReason)
     });
-    if (response.headersSent) {
-      sendLine(response, { kind: "error", reason: "runtime-stream-failed" } satisfies StackActionStreamLine);
-      response.end();
-    } else send(response, error.status, { error: error.code, ...error.details });
+    if (!response.destroyed && !response.writableEnded) {
+      if (response.headersSent) {
+        sendLine(response, { kind: "error", reason: String(failure.body.error), status: failure.status,
+          body: failure.body } satisfies StackActionStreamLine);
+        response.end();
+      } else send(response, failure.status, failure.body);
+    }
   } finally {
     connection.dispose();
     releaseStream?.();

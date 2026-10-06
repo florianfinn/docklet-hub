@@ -211,7 +211,7 @@ export function stackState(services: readonly StackServiceSnapshot[]): StackCont
 
 export async function prepareStack(
   project: StackResolvedProject,
-  options: { mutating: boolean; action: string; actor: string | null; tolerateUnreadableDefinition?: boolean },
+  options: { mutating: boolean; action: string; actor: string | null; tolerateUnreadableDefinition?: boolean; runtimeAction?: boolean; onDelegation?: (reason: string) => void },
   readConfig: typeof composeConfig = composeConfig
 ): Promise<PreparedStack> {
   if (options.mutating) {
@@ -234,6 +234,7 @@ export async function prepareStack(
     definition = stackDefinitionFromConfig(normalized);
     if (!definition) throw new StackEndpointError(409, "compose-services-missing");
   } catch (error) {
+    if (options.runtimeAction) throw error;
     if (!options.tolerateUnreadableDefinition) {
       if (error instanceof StackEndpointError) throw error;
       throw new StackEndpointError(409, "compose-config-failed");
@@ -251,7 +252,8 @@ export async function prepareStack(
     const result = await gate(container.containerId, {
       mutating: options.mutating,
       action: options.action,
-      actor: options.actor
+      actor: options.actor,
+      onDelegation: options.onDelegation
     });
     if (!result.ok) {
       deniedServices.push({ serviceName, reason: result.reason, status: result.status });

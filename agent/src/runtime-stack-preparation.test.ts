@@ -393,7 +393,7 @@ for (const failure of [new EngineError("start refused by engine", 409), new Comp
     assert.equal(req.response.body.error, compose ? "compose-action-failed" : "engine-action-failed");
     assert.equal(records.length, 1);
     assert.equal(records[0].outcome, "error");
-    assert.equal(records[0].reason, compose ? "compose-action-failed (exit 7): start refused by Compose" : "engine-action-failed: start refused by engine");
+    assert.equal(records[0].reason, compose ? "compose-action-failed (exit 7): start refused by Compose; stderr: private tool output" : "engine-action-failed: start refused by engine");
     assert.equal("auditReason" in req.response.body, false);
     assert.equal(JSON.stringify(req.response.body).includes("private tool output"), false);
   });
@@ -437,12 +437,13 @@ for (const reason of ["state-changed", "compose-config-failed", "runtime-image-m
     if (reason === "state-changed") stack.services[0].status = "running";
     const req = stackRequest("start", { expectedStack: stack, applyDefinition: false });
     await handleStackAction(req.context, req.context.url.pathname.match(/^\/stacks\/([^/]+)\/actions\/([^/]+)$/)!);
-    assert.equal(req.response.status, reason.startsWith("stack-service-") || reason === "externally-managed" ? 403 : 409);
-    assert.equal(req.response.body.error, reason);
+    assert.equal(req.response.status, reason === "compose-config-failed" ? 502 : reason.startsWith("stack-service-") || reason === "externally-managed" ? 403 : 409);
+    assert.equal(req.response.body.error, reason === "compose-config-failed" ? "compose-action-failed" : reason);
     assert.equal(commands.some((args) => args.includes("up") || args.includes("start") || args.includes("stop")), false);
     assert.equal(records.length, 1);
     assert.equal(records[0].outcome, "denied");
-    assert.equal(records[0].reason, reason);
+    if (reason === "compose-config-failed") assert.match(String(records[0].reason), /stderr: definition unreadable/);
+    else assert.equal(records[0].reason, reason);
     assert.equal("mutationStarted" in req.response.body, false);
   });
 }
@@ -460,11 +461,11 @@ test("stack runtime unreadable state after a successful command is audited as er
   const req = stackRequest("start", { expectedStack: expectedStack(), applyDefinition: false });
   await handleStackAction(req.context, req.context.url.pathname.match(/^\/stacks\/([^/]+)\/actions\/([^/]+)$/)!);
   assert.equal(mutations, 1);
-  assert.equal(req.response.status, 409);
-  assert.equal(req.response.body.error, "runtime-state-unreadable");
+  assert.equal(req.response.status, 500);
+  assert.equal(req.response.body.error, "engine-action-failed");
   assert.equal(records.length, 1);
   assert.equal(records[0].outcome, "error");
-  assert.equal(records[0].reason, "runtime-state-unreadable");
+  assert.equal(records[0].reason, "engine-action-failed: inventory unavailable");
 });
 
 for (const action of ["start", "stop", "restart"] as const) {
@@ -480,11 +481,11 @@ for (const action of ["start", "stop", "restart"] as const) {
     const req = stackRequest(action, { expectedStack: expectedStack(), ...(action === "stop" ? {} : { applyDefinition: true }) });
     await handleStackAction(req.context, req.context.url.pathname.match(/^\/stacks\/([^/]+)\/actions\/([^/]+)$/)!);
     assert.equal(mutations, 1);
-    assert.equal(req.response.status, 409);
-    assert.equal(req.response.body.error, "compose-stack-action-failed");
+    assert.equal(req.response.status, 502);
+    assert.equal(req.response.body.error, "compose-action-failed");
     assert.equal(records.length, 1);
     assert.equal(records[0].outcome, "error");
-    assert.equal(records[0].reason, "compose-stack-action-failed");
+    assert.match(String(records[0].reason), /compose-action-failed \(exit \?\).*stderr: mutation failed/);
     assert.equal("mutationStarted" in req.response.body, false);
   });
 }

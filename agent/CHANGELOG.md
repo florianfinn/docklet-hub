@@ -25,6 +25,11 @@ Protokollbruch: Hub und Agenten müssen gemeinsam aktualisiert werden.
 - Ergebnisse enthalten nachgelesene Zustände, Exit-Code, Health und aktuelle Container-IDs; Stack-Aktionen liefern optional NDJSON-Fortschritt. Ein fehlender Service erfüllt das Stoppziel, Exit-Code 0 nach dem Start gilt als abgeschlossener Einmalauftrag. Health ist kein zusätzliches Erfolgskriterium.
 - Neue Laufzeitfehler sind `state-changed`, `action-queue-timeout`, `action-caller-disconnected`, `runtime-image-missing`, `runtime-state-unreadable`, `runtime-target-not-reached` und `runtime-stream-failed`. Skalierte Services werden vor einer Containeraktion mit `409 scaled-service-unsupported` abgelehnt.
 
+- Laufzeitaktionen protokollieren Fehler vom ersten Gate bis zur Neuverankerung genau einmal: vor der Mutation als `denied`, danach als `error`. Delegationshinweise stehen im selben Eintrag. Auch Fehler der Stack-Vorbereitung und der Warteschlange werden lokal beantwortet.
+- Engine-, Compose- und unbekannte Laufzeitfehler erhalten den ursprünglichen HTTP-Status beziehungsweise `502` oder `500` und die Schlüssel `engine-action-failed`, `compose-action-failed` und `internal-error`. Neuverankerungsfehler behalten `registry-reanchor-failed` beziehungsweise `container-anchor-mismatch`. Engine-Text, Compose-Exitcode und stderr werden an das Audit übergeben, nicht an die Laufzeitantwort. Bei zwei fehlgeschlagenen Neustartbefehlen bleiben beide Diagnosen erhalten.
+- Fehler bei `compose config` werden für Laufzeitaktionen vor der Mutation abgefangen; die bisherige Toleranz unlesbarer Definitionen anderer Kontextabfragen bleibt erhalten. Nach einer fehlgeschlagenen Mutation wird der Zustand weiterhin nachgelesen; scheitert auch die Nachlese, bleiben beide Diagnosen erhalten und der Zustand wird als unbekannt gemeldet.
+- Stack-Streams beantworten Fehler vor der ersten Zeile mit JSON und HTTP-Status. Danach tragen Fehlerzeilen den spezifischen Schlüssel in `reason`, den Fehlerstatus in `status` und das bereinigte Ergebnis in `body`. `CONTRACT_VERSION` bleibt für diesen unveröffentlichten Stand 12; der Vertragsfingerabdruck wird aktualisiert.
+
 ## 0.32.0
 
 Der erste Quellstand von docklet hub übernimmt Hub und Agent als Monorepo.

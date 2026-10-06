@@ -3,7 +3,6 @@ import { StackEndpointError } from "../stack-control.js";
 import { executeContainerRuntimeAction } from "../container-runtime-action.js";
 import { actionFailureOf } from "../action-failure.js";
 import { ACTION_QUEUE_WAIT_MS } from "../runtime-actions.js";
-import { ActionQueueError } from "../concurrency.js";
 import { actionConnection } from "../runtime/action-connection.js";
 import { applySpecRequestSchema, containerActionRequestSchema, type RuntimeAction } from "contract";
 import {
@@ -374,20 +373,21 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
     rejectRequest(ctx, { action, containerId, containerName: null }, parsed.rejection);
     return;
   }
-  const initial = await gate(containerId, { mutating: true, action, actor });
-  if (!initial.ok) {
-    audit.write({ action, containerId, containerName: null, actor, outcome: "denied", reason: initial.reason });
-    send(response, initial.status, { error: initial.reason });
-    return;
-  }
-  const context = composeContextOf(initial.inspect.Config?.Labels ?? undefined, composeBasePath);
-  const projectName = initial.inspect.Config?.Labels?.["com.docker.compose.project"] ?? registry.get(containerId)?.compose?.projectName;
-  const lockKey = projectName ?? `container:${containerId}`;
   const connection = actionConnection(request, response);
   let mutationStarted = false;
+  let containerName: string | null = null;
+  const delegation = new Set<string>();
+  const onDelegation = (reason: string) => { delegation.add(reason); };
+  const auditReason = (reason?: string) => [reason, ...delegation].filter(Boolean).join("; ") || undefined;
   try {
+    const initial = await gate(containerId, { mutating: true, action, actor, onDelegation });
+    if (!initial.ok) throw new StackEndpointError(initial.status, initial.reason);
+    containerName = initial.inspect.Name.replace(/^\//, "");
+    const context = composeContextOf(initial.inspect.Config?.Labels ?? undefined, composeBasePath);
+    const projectName = initial.inspect.Config?.Labels?.["com.docker.compose.project"] ?? registry.get(containerId)?.compose?.projectName;
+    const lockKey = projectName ?? `container:${containerId}`;
     const result = await stackLocks.runExclusive(lockKey, async () => {
-      const fresh = await gate(containerId, { mutating: true, action, actor });
+      const fresh = await gate(containerId, { mutating: true, action, actor, onDelegation });
       if (!fresh.ok && fresh.reason !== "container-gone" && fresh.reason !== "not-allowlisted") return { status: fresh.status, body: { error: fresh.reason } };
       if (!fresh.ok && registry.get(containerId) && !registry.isAllowed(containerId)) return { status: fresh.status, body: { error: fresh.reason } };
       const readState = async () => {
@@ -437,19 +437,15 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
         }
       }, action as RuntimeAction, parsed.value.expectedContainer, before, connection.signal);
     }, { waitMs: ACTION_QUEUE_WAIT_MS, signal: connection.signal });
-    audit.write({ action, containerId, containerName: initial.inspect.Name.replace(/^\//, ""), actor,
+    audit.write({ action, containerId, containerName, actor,
       outcome: result.status === 200 ? "allowed" : mutationStarted ? "error" : "denied",
-      reason: ("auditReason" in result ? result.auditReason : undefined) ?? ("error" in result.body ? String(result.body.error) : undefined) });
+      reason: auditReason("error" in result.body ? String(result.body.error) : undefined) });
     send(response, result.status, result.body);
   } catch (error) {
-    const endpointError = error instanceof ActionQueueError || error instanceof StackEndpointError;
-    const failure = endpointError ? null : actionFailureOf(error);
-    const reason = endpointError ? error.code : failure?.auditReason ?? (error instanceof Error ? `${error.name}: ${error.message}` : String(error));
-    audit.write({ action, containerId, containerName: initial.inspect.Name.replace(/^\//, ""), actor,
-      outcome: mutationStarted ? "error" : "denied", reason });
-    if (!response.destroyed) send(response,
-      error instanceof StackEndpointError ? error.status : error instanceof ActionQueueError ? 409 : failure?.status ?? 500,
-      endpointError ? { error: error.code, ...(error instanceof StackEndpointError ? error.details : {}) } : failure?.body ?? { error: "internal-error" });
+    const failure = actionFailureOf(error, true);
+    audit.write({ action, containerId, containerName, actor,
+      outcome: mutationStarted ? "error" : "denied", reason: auditReason(failure.auditReason) });
+    if (!response.destroyed) send(response, failure.status, failure.body);
   } finally {
     connection.dispose();
   }

@@ -1,3 +1,4 @@
+import { RuntimeActionFailure } from "./action-failure.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -11,6 +12,14 @@ import {
 import { executeContainerRuntimeAction } from "./container-runtime-action.js";
 import { EngineError } from "./engine.js";
 import { buildUpArgs } from "./compose-cli.js";
+
+async function containerResult(...args: Parameters<typeof executeContainerRuntimeAction>) {
+  try { return await executeContainerRuntimeAction(...args); }
+  catch (error) {
+    assert.ok(error instanceof RuntimeActionFailure);
+    return { ...error.failure, body: error.failure.body as Awaited<ReturnType<typeof executeContainerRuntimeAction>>["body"] };
+  }
+}
 
 const state = runtimeStateOf({ Id: "id", Name: "/app", State: { Status: "running", ExitCode: 0, StartedAt: "seen", Health: { Status: "unhealthy" } } });
 const expected = { containerId: "id", status: "running", startedAt: "seen" };
@@ -99,7 +108,7 @@ test("container expectations catch a changed state or restart with the same id",
 for (const action of ["start", "stop", "restart"] as const) {
   test(`container ${action} returns the freshly inspected state`, async () => {
     let reads = 0;
-    const result = await executeContainerRuntimeAction({
+    const result = await containerResult({
       execute: async () => {}, inspect: async () => {
         reads++;
         return { Id: "id", Name: "/app", State: { Status: action === "stop" ? "exited" : "running", StartedAt: "later", ExitCode: 0 } };
@@ -112,7 +121,7 @@ for (const action of ["start", "stop", "restart"] as const) {
 }
 
 test("container failures also return the new anchor and state", async () => {
-  const result = await executeContainerRuntimeAction({
+  const result = await containerResult({
     execute: async () => { throw new EngineError("failed", 409); },
     inspect: async () => ({ Id: "new", Name: "/app", State: { Status: "exited", ExitCode: 2 } })
   }, "start", expected, { Id: "id", Name: "/app", State: { Status: "running", StartedAt: "seen" } });
@@ -126,7 +135,7 @@ test("changed container state and a disconnected caller prevent mutation", async
     let calls = 0;
     const controller = new AbortController();
     if (disconnected) controller.abort();
-    const result = await executeContainerRuntimeAction({
+    const result = await containerResult({
       execute: async () => { calls++; }, inspect: async () => ({ Id: "id", Name: "/app", State: { Status: "exited" } })
     }, "start", expected, { Id: "id", Name: "/app", State: { Status: disconnected ? "running" : "exited", StartedAt: "seen" } }, controller.signal);
     assert.equal(calls, 0);
@@ -135,11 +144,11 @@ test("changed container state and a disconnected caller prevent mutation", async
 });
 
 test("unreadable container state never reports success", async () => {
-  const result = await executeContainerRuntimeAction({ execute: async () => {}, inspect: async () => { throw new Error("offline"); } },
+  const result = await containerResult({ execute: async () => {}, inspect: async () => { throw new Error("offline"); } },
     "start", expected, { Id: "id", Name: "/app", State: { Status: "running", StartedAt: "seen" } });
   assert.equal(result.body.ok, false);
   assert.equal(result.body.state.status, "unknown");
-  assert.equal(result.body.error, "runtime-state-unreadable");
+  assert.equal(result.body.error, "internal-error");
 });
 
 test("stream result schemas carry exactly the synchronous runtime result", () => {
@@ -151,7 +160,7 @@ test("stream result schemas carry exactly the synchronous runtime result", () =>
 
 test("an already stopped, never-started container satisfies stop after an engine 304", async () => {
   const inspect = { Id: "id", Name: "/app", State: { Status: "created", StartedAt: "seen", ExitCode: 0 } };
-  const result = await executeContainerRuntimeAction({ execute: async () => {}, inspect: async () => inspect },
+  const result = await containerResult({ execute: async () => {}, inspect: async () => inspect },
     "stop", { ...expected, status: "created" }, inspect);
   assert.equal(result.body.ok, true);
   assert.equal(result.body.state.status, "created");

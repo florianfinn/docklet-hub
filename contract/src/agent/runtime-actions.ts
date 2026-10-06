@@ -33,7 +33,8 @@ export type RuntimeOutcome = z.infer<typeof runtimeOutcomeSchema>;
 export const RUNTIME_ACTION_ERRORS = [
   "state-changed", "action-queue-timeout", "action-caller-disconnected",
   "runtime-image-missing", "runtime-state-unreadable", "runtime-target-not-reached", "runtime-stream-failed",
-  "compose-config-failed", "compose-services-missing", "compose-stack-action-failed"
+  "compose-config-failed", "compose-services-missing", "compose-stack-action-failed",
+  "engine-action-failed", "compose-action-failed", "internal-error", "registry-reanchor-failed", "container-anchor-mismatch"
 ] as const;
 export const runtimeActionErrorSchema = z.enum(RUNTIME_ACTION_ERRORS);
 export type RuntimeActionError = z.infer<typeof runtimeActionErrorSchema>;
@@ -62,6 +63,7 @@ export const stackActionStreamLineSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("start"), action: runtimeActionSchema, projectName: z.string(), applyDefinition: z.boolean() }),
   z.object({ kind: z.literal("progress"), service: runtimeServiceResultSchema }),
   z.object({ kind: z.literal("result"), status: z.number(), body: stackRuntimeResultSchema }),
-  z.object({ kind: z.literal("error"), reason: runtimeActionErrorSchema })
+  z.object({ kind: z.literal("error"), reason: z.string(), status: z.optional(z.number()),
+    body: z.optional(z.record(z.string(), z.unknown())) })
 ]);
 export type StackActionStreamLine = z.infer<typeof stackActionStreamLineSchema>;
