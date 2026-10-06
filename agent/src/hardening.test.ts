@@ -161,7 +161,7 @@ test("the own operational directories are a delegation lock, not a warning", () 
   }
 });
 
-test("a mount ABOVE the operational directories locks just the same", () => {
+test("a mount ABOVE the operational directories is a delegation lock just the same", () => {
   // The branch that a plain prefix list is blind to: "/" contains
   // dashboard-state and is therefore not one bit more harmless than the direct
   // mount. Without it "/" would only be a warning — and the container would carry no
@@ -215,7 +215,7 @@ test("an EMPTY list is not an off switch", () => {
   );
 });
 
-test("one host's own paths do not lock those of another", () => {
+test("one host's own paths are no delegation lock on another host", () => {
   // The unraid agent must not fire because of a path that only exists on the
   // local server — and vice versa.
   const c = container({ binds: ["/home/docker/dashboard-state:/s"] });
@@ -279,7 +279,7 @@ test("several violations are all reported, not just the first", () => {
 
 // --- Stage 4 / S9: hints and the separation of the three levels ------------
 
-test("missing no-new-privileges is reported but does not lock", () => {
+test("missing no-new-privileges is reported but is no delegation lock", () => {
   const c = container({ securityOpt: [] });
   assert.deepEqual(rules(c), ["no-new-privileges-missing"]);
   assert.equal(hasDelegationLock(c), false);
@@ -291,7 +291,7 @@ test("no-new-privileges is detected in both spellings", () => {
   }
 });
 
-test("missing cap_drop ALL is reported but does not lock", () => {
+test("missing cap_drop ALL is reported but is no delegation lock", () => {
   const c = container({ capDrop: [] });
   assert.deepEqual(rules(c), ["capabilities-not-dropped"]);
   assert.equal(hasDelegationLock(c), false);
@@ -313,7 +313,7 @@ test("a single missing limit is enough for the finding", () => {
   assert.deepEqual(rules(container({ memoryLimitBytes: 0 })), ["resource-limit-missing"]);
 });
 
-test("hints lock nothing, the delegation lock does", () => {
+test("hints carry no delegation lock, a socket mount does", () => {
   // The realistic existing case: nothing hardened, but no escape path either.
   const inventory = container({
     capDrop: [],
@@ -349,7 +349,7 @@ test("an unresolvable volume is fail-closed and carries a delegation lock", () =
 
 // --- S9: what the relaxation means in concrete terms ----------------------
 
-test("the three cases from §4 are no longer a lock", () => {
+test("the three cases from §4 are no delegation lock", () => {
   // Named explicitly in the stage plan: tailscale (NET_ADMIN), hardware
   // transcoding (/dev/dri), upsnap (network_mode: host — that one stays
   // locked because it shares the host namespace).

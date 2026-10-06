@@ -242,7 +242,7 @@ test("alle Ablehnungen des Agenten werden übersetzt, nicht durchgereicht", asyn
   }
 });
 
-test("die beiden Schlüssel mit angehängtem Text werden getroffen und behalten ihn", async () => {
+test("der Schlüssel mit angehängtem Text wird getroffen und behält ihn", async () => {
   // ⚠️ Wer `self-management-locked: /mnt/…` mit `===` verglich, träfe ihn
   // NIE: die Gleichheit scheitert am Zusatz, und der Betreiber bekäme eine
   // pauschale Ablehnung statt der Auskunft, welches Verzeichnis gesperrt ist.
