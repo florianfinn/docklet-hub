@@ -152,6 +152,7 @@ export type RawInspect = {
   Name: string;
   Config?: {
     Image?: string;
+    StopTimeout?: number | null;
     Env?: string[] | null;
     Labels?: Record<string, string> | null;
     // For the derived configuration information (S5b, §16.3): the container

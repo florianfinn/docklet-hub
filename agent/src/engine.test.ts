@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import assert from "node:assert/strict";
 import http from "node:http";
 import os from "node:os";
@@ -428,4 +429,48 @@ test("without credentials no empty header is sent either", async (t) => {
 
   await new DockerEngine({ socketPath: pathname }).remoteManifestDigest("ghcr.io/wer/was:latest");
   assert.deepEqual(seen, [undefined]);
+});
+
+test("304 runtime actions remain successful and stop reads the configured deadline", async (t) => {
+  const seen: string[] = [];
+  const server = http.createServer((request, response) => {
+    seen.push(request.url ?? "");
+    if (request.url?.endsWith("/json")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ Id: "id", Name: "/app", Config: { StopTimeout: 90 } }));
+    } else {
+      response.writeHead(304);
+      response.end();
+    }
+  });
+  const pathname = socketPath("runtime-304");
+  await new Promise<void>((done) => server.listen(pathname, done));
+  t.after(() => new Promise<void>((done) => void server.close(() => done())));
+  const engine = new DockerEngine({ socketPath: pathname });
+  await engine.start("id");
+  await engine.stop("id");
+  await engine.restart("id");
+  assert.deepEqual(seen, ["/containers/id/start", "/containers/id/json", "/containers/id/stop", "/containers/id/json", "/containers/id/restart"]);
+});
+
+test("runtime requests pass the calculated stop deadline to HTTP instead of the default", async (t) => {
+  const deadlines: number[] = [];
+  t.mock.method(http, "request", (options: http.RequestOptions, callback: (response: http.IncomingMessage) => void) => {
+    deadlines.push(Number(options.timeout));
+    const request = new EventEmitter() as http.ClientRequest;
+    request.end = (() => {
+      const response = Object.assign(new EventEmitter(), { statusCode: 304 }) as http.IncomingMessage;
+      callback(response);
+      response.emit("end");
+      return request;
+    }) as typeof request.end;
+    return request;
+  });
+  const engine = new DockerEngine({ socketPath: "/unused.sock", timeoutMs: 1 });
+  t.mock.method(engine, "inspect", async () => ({ Id: "id", Name: "/app", Config: { StopTimeout: 90 } }));
+  await engine.stop("id");
+  await engine.restart("id");
+  await engine.stop("id", null);
+  await engine.start("id");
+  assert.deepEqual(deadlines, [100_000, 100_000, 20_000, 30_000]);
 });

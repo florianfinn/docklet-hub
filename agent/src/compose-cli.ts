@@ -20,6 +20,7 @@
 // dependency logic. A second, slightly divergent interpretation of the same
 // file would be worse than this process start.
 
+import { RESTART_START_RESERVE_MS } from "./runtime-actions.js";
 import { execFile } from "node:child_process";
 import { COMPOSE_FILE_NAME, UPDATE_ROLLBACK_OVERRIDE_FILE_NAME } from "./compose.js";
 
@@ -184,6 +185,9 @@ export type UpOptions = {
   // On rollback Compose should restore the previous digest even if it
   // mistakenly considers the current state identical.
   forceRecreate?: boolean;
+  noRecreate?: boolean;
+  wait?: boolean;
+  timeoutMs?: number;
 };
 
 // Extracted so that the reach of the action can be tested without a running
@@ -197,9 +201,10 @@ export function buildUpArgs(project: ComposeProject, options: UpOptions): string
     ...projectArgs(project, options.rollbackOverride === true),
     "up",
     "--detach",
-    "--no-build",
-    "--wait"
+    "--no-build"
   ];
+  if (options.wait !== false) args.push("--wait");
+  if (options.noRecreate) args.push("--no-recreate");
   if (options.removeOrphans) args.push("--remove-orphans");
   if (options.pullNever) args.push("--pull", "never");
   if (options.noDeps) args.push("--no-deps");
@@ -212,7 +217,7 @@ export function buildUpArgs(project: ComposeProject, options: UpOptions): string
 }
 
 export async function composeUp(project: ComposeProject, options: UpOptions): Promise<string> {
-  const { stderr } = await run(buildUpArgs(project, options), { timeoutMs: 5 * 60_000 });
+  const { stderr } = await run(buildUpArgs(project, options), { timeoutMs: options.timeoutMs ?? 5 * 60_000 });
   return stderr;
 }
 
@@ -238,7 +243,7 @@ export function buildDownArgs(project: ComposeProject): string[] {
 // these functions; on the caller's side it comes from the agent registry and
 // never from the request.
 export type NamedComposeProject = ComposeProject & { projectName: string };
-export type SafeStackAction = "start" | "stop" | "restart";
+export type SafeStackAction = "start" | "stop";
 
 export function buildSafeStackActionArgs(
   project: NamedComposeProject,
@@ -250,45 +255,40 @@ export function buildSafeStackActionArgs(
 export function buildDependencySafeRestartArgs(project: NamedComposeProject): [string[], string[]] {
   return [
     buildSafeStackActionArgs(project, "stop"),
-    [...buildSafeStackActionArgs(project, "start"), "--wait"]
+    buildSafeStackActionArgs(project, "start")
   ];
 }
 
-export async function composeStart(project: NamedComposeProject): Promise<string> {
+export async function composeStart(project: NamedComposeProject, timeoutMs: number): Promise<string> {
   const { stderr } = await run(buildSafeStackActionArgs(project, "start"), {
-    timeoutMs: 2 * 60_000
+    timeoutMs
   });
   return stderr;
 }
 
-export async function composeStop(project: NamedComposeProject): Promise<string> {
+export async function composeStop(project: NamedComposeProject, timeoutMs: number): Promise<string> {
   const { stderr } = await run(buildSafeStackActionArgs(project, "stop"), {
-    timeoutMs: 2 * 60_000
+    timeoutMs
   });
   return stderr;
 }
 
-export async function composeRestart(project: NamedComposeProject): Promise<string> {
-  const { stderr } = await run(buildSafeStackActionArgs(project, "restart"), {
-    timeoutMs: 2 * 60_000
-  });
-  return stderr;
-}
-
-// Native `compose restart` can start coupled service: namespaces in parallel
-// in an invalid order. Stop followed by start with a health wait condition
-// keeps containers and volumes unchanged, but lets Compose apply its
-// dependency order.
 export async function composeDependencySafeRestart(
   project: NamedComposeProject,
-  execute: typeof run = run
+  timeoutMs: number,
+  execute: typeof run = run,
+  startUpOptions?: UpOptions
 ): Promise<string> {
-  const [stopArgs, startArgs] = buildDependencySafeRestartArgs(project);
+  const [stopArgs, existingStartArgs] = buildDependencySafeRestartArgs(project);
+  const startArgs = startUpOptions ? buildUpArgs(project, startUpOptions) : existingStartArgs;
+  // Reserve the normal start buffer even when stop consumes its whole budget.
+  const startReserveMs = Math.min(RESTART_START_RESERVE_MS, timeoutMs / 2);
+  const deadline = Date.now() + timeoutMs;
   let stopStderr = "";
   let stopFailed = false;
   let stopFailure: unknown;
   try {
-    stopStderr = (await execute(stopArgs, { timeoutMs: 2 * 60_000 })).stderr;
+    stopStderr = (await execute(stopArgs, { timeoutMs: timeoutMs - startReserveMs })).stderr;
   } catch (error) {
     // A stop can fail only after a partial mutation. The start must still
     // follow best-effort, so that the stack does not stay down merely because
@@ -299,7 +299,7 @@ export async function composeDependencySafeRestart(
 
   let startStderr: string;
   try {
-    startStderr = (await execute(startArgs, { timeoutMs: 2 * 60_000 })).stderr;
+    startStderr = (await execute(startArgs, { timeoutMs: Math.max(startReserveMs, deadline - Date.now()) })).stderr;
   } catch (startFailure) {
     if (stopFailed) {
       throw new AggregateError(

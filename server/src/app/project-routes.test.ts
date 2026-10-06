@@ -35,7 +35,7 @@ const HOST: HostRecord = {
 };
 
 const ROLE_HEADER = "x-test-role";
-const CURRENT: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 11, readOnly: false, entries: null };
+const CURRENT: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 12, readOnly: false, entries: null };
 const DRAFT = "services:\n  app:\n    image: example/notes:1.0\n";
 
 type Reply = { status: number; body: unknown };

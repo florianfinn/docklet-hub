@@ -1,19 +1,5 @@
-// How a thrown error becomes a response that actually says something.
-//
-// Without this mapping, a throw from an engine or Compose call falls into the
-// global handler in `src/index.ts` and becomes
-// `500 {"error":"internal-error"}` there. This is not cosmetic: that is exactly
-// how the outage of 2026-08-25 reached the operator (safe actions, fixed in
-// v0.13.0), and again the one of 2026-09-01 (#48, recreate). Both times the
-// engine had long since said a sentence about it, and both times the operator
-// took the path for failed and reached for the next bigger hammer — the second
-// time for a problem the first call had already solved.
-//
-// The translation sits in its own module and not in the handler code
-// (`src/index.ts`, `src/routes/*.ts`), because that code has no test and this
-// mapping is exactly the kind of rule you want to check: which status goes out,
-// what lands in the audit log, and what the caller gets to see.
-
+import { ActionQueueError } from "./concurrency.js";
+import { StackEndpointError } from "./stack-control.js";
 import { ComposeError } from "./compose-cli.js";
 import { EngineError, engineMessage } from "./engine.js";
 import { ImageMismatchError, RecreateFailure } from "./recreate.js";
@@ -29,12 +15,31 @@ export type ActionFailure = {
   body: Record<string, unknown>;
 };
 
-// `null` means: this error is none of the known failures but a programming
-// error. On recreate it also carries the rollback outcome, but stays a 500
-// with the generic error key.
-export function actionFailureOf(error: unknown): ActionFailure | null {
+// Carries the original classification and recovered state to the handler.
+export class RuntimeActionFailure extends Error {
+  constructor(readonly failure: ActionFailure) {
+    super(String(failure.body.error));
+    this.name = "RuntimeActionFailure";
+  }
+}
+
+export function actionFailureOf(error: unknown, runtime: true): ActionFailure;
+export function actionFailureOf(error: unknown): ActionFailure | null;
+export function actionFailureOf(error: unknown, runtime = false): ActionFailure | null {
+  if (error instanceof RuntimeActionFailure) return error.failure;
+  if (runtime && error instanceof AggregateError && error.errors.length > 0) {
+    const failures = error.errors.map((cause: unknown) => actionFailureOf(cause, true));
+    return { ...failures[0], auditReason: failures.map((failure) => failure.auditReason).join("; recovery: ") };
+  }
+  if (runtime && (error instanceof StackEndpointError || error instanceof ActionQueueError)) {
+    return {
+      status: error instanceof StackEndpointError ? error.status : 409,
+      auditReason: error.code,
+      body: { error: error.code, ...(error instanceof StackEndpointError ? error.details : {}) }
+    };
+  }
   if (error instanceof RecreateFailure) {
-    const original = actionFailureOf(error.original);
+    const original = runtime ? actionFailureOf(error.original, true) : actionFailureOf(error.original);
     const rollback = { rollbackAttempted: error.rollbackAttempted, rolledBack: error.rolledBack };
     // An unknown programming error stays a 500. The outcome of the rollback
     // steps that already ran must still not disappear.
@@ -55,7 +60,7 @@ export function actionFailureOf(error: unknown): ActionFailure | null {
       body: {
         error: "engine-action-failed",
         engineStatus: error.status,
-        engineMessage: message
+        ...(runtime ? {} : { engineMessage: message })
       }
     };
   }
@@ -65,13 +70,11 @@ export function actionFailureOf(error: unknown): ActionFailure | null {
       // Compose has no HTTP. 502 says what is true: the tool behind the agent
       // failed, not the request.
       status: 502,
-      auditReason: `compose-action-failed (exit ${error.code ?? "?"}): ${error.message}`,
+      auditReason: `compose-action-failed (exit ${error.code ?? "?"}): ${error.message}${error.stderr ? `; stderr: ${error.stderr}` : ""}`,
       body: {
         error: "compose-action-failed",
-        composeExitCode: error.code
-        // ⚠️ stderr does NOT go out. It carries host paths and image refs and
-        // stays in the agent log; the stack path draws the same line with
-        // `compose-stack-aktion-fehlgeschlagen`.
+        ...(runtime ? {} : { composeExitCode: error.code })
+        // stderr can contain host paths and stays in the audit.
       }
     };
   }
@@ -93,5 +96,9 @@ export function actionFailureOf(error: unknown): ActionFailure | null {
     };
   }
 
-  return null;
+  return runtime ? {
+    status: 500,
+    auditReason: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    body: { error: "internal-error" }
+  } : null;
 }

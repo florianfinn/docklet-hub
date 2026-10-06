@@ -31,10 +31,8 @@ export async function mapLimit<T, R>(
   return results;
 }
 
-// Per-project lock for compose actions (S11). A second request must not sit
-// invisibly in a queue and still mutate minutes later after an HTTP timeout.
-// The same project is therefore rejected immediately with
-// `stack-busy`; different projects stay independent.
+// Runtime callers opt into a bounded FIFO queue; other Compose paths keep
+// their immediate busy rejection. Both share the same project lock.
 export class KeyedMutexBusyError extends Error {
   constructor(readonly key: string) {
     super("stack-busy");
@@ -42,22 +40,60 @@ export class KeyedMutexBusyError extends Error {
   }
 }
 
+export class ActionQueueError extends Error {
+  constructor(readonly code: "action-queue-timeout" | "action-caller-disconnected") {
+    super(code);
+    this.name = "ActionQueueError";
+  }
+}
+
+type Waiter = { grant: () => void };
 export class KeyedMutex {
   private readonly active = new Set<string>();
+  private readonly queues = new Map<string, Waiter[]>();
 
-  async runExclusive<T>(key: string, operation: () => Promise<T>): Promise<T> {
-    if (this.active.has(key)) throw new KeyedMutexBusyError(key);
-    this.active.add(key);
+  async runExclusive<T>(
+    key: string,
+    operation: () => Promise<T>,
+    options?: { waitMs: number; signal?: AbortSignal }
+  ): Promise<T> {
+    if (options?.signal?.aborted) throw new ActionQueueError("action-caller-disconnected");
+    if (this.active.has(key)) {
+      if (!options) throw new KeyedMutexBusyError(key);
+      await new Promise<void>((resolve, reject) => {
+        const queue = this.queues.get(key) ?? [];
+        this.queues.set(key, queue);
+        const remove = () => {
+          clearTimeout(timer);
+          options.signal?.removeEventListener("abort", abort);
+          const index = queue.indexOf(waiter);
+          if (index >= 0) queue.splice(index, 1);
+          if (queue.length === 0) this.queues.delete(key);
+        };
+        const fail = (code: "action-queue-timeout" | "action-caller-disconnected") => {
+          remove();
+          reject(new ActionQueueError(code));
+        };
+        const abort = () => fail("action-caller-disconnected");
+        const waiter: Waiter = { grant: () => { remove(); resolve(); } };
+        const timer = setTimeout(() => fail("action-queue-timeout"), options.waitMs);
+        queue.push(waiter);
+        options.signal?.addEventListener("abort", abort, { once: true });
+      });
+    } else {
+      this.active.add(key);
+    }
     try {
+      if (options?.signal?.aborted) throw new ActionQueueError("action-caller-disconnected");
       return await operation();
     } finally {
-      this.active.delete(key);
+      const next = this.queues.get(key)?.[0];
+      if (next) next.grant();
+      else this.active.delete(key);
     }
   }
 
-  pendingKeys(): number {
-    return this.active.size;
-  }
+  pendingKeys(): number { return this.active.size; }
 }
 
 // Cap for simultaneously open streams (R3, security review 2026-08).

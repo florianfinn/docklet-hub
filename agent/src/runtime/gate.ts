@@ -23,7 +23,7 @@ export type GateResult =
 
 export async function gate(
   containerId: string,
-  options: { mutating: boolean; action: string; actor?: string | null }
+  options: { mutating: boolean; action: string; actor?: string | null; onDelegation?: (reason: string) => void }
 ): Promise<GateResult> {
   // 1. Kill switch. Comes first so that it really stops everything.
   if (options.mutating && config.readOnly) {
@@ -87,19 +87,21 @@ export async function gate(
   //
   // The delegation lock (the rules whose statement is "this container IS the
   // host", plus `volume-unresolved` while that cannot be checked) is reported
-  // and audited but does not block. A mutating action on such a container gets
-  // its own audit entry, so it is distinguishable in the log from any other.
+  // but does not block. Mutating actions pass the note to onDelegation for the
+  // handler's action audit, or write a separate entry when no callback is given.
   const inspected = await inspectedContainer(inspect);
   const hardeningOptions = hardeningOptionsFor(containerId);
   const report = hardeningReport(inspected, hardeningOptions);
   if (options.mutating && report.delegationLock.length > 0) {
-    audit.write({
+    const reason = `delegation-lock-allowed: ${hardeningRuleNames(inspected, hardeningOptions).delegationLock.join(",")}`;
+    if (options.onDelegation) options.onDelegation(reason);
+    else audit.write({
       action: options.action,
       containerId,
       containerName: (inspect.Name ?? "").replace(/^\//, ""),
       actor: options.actor ?? null,
       outcome: "allowed",
-      reason: `delegation-lock-allowed: ${hardeningRuleNames(inspected, hardeningOptions).delegationLock.join(",")}`
+      reason
     });
   }
 

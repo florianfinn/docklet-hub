@@ -50,7 +50,7 @@ const HOST: HostRecord = {
 const ROW_SECRET = "das-secret-aus-der-zeile-des-arms";
 const ROLE_HEADER = "x-test-role";
 const CONTAINER_ID = "c0ffee";
-const CURRENT: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 11, readOnly: false, entries: null };
+const CURRENT: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 12, readOnly: false, entries: null };
 
 /** Was der Agent auf den Leseaufruf antwortet. */
 const COMPOSE_READ = {
