@@ -63,7 +63,7 @@ export function translateAgentOutcome(
     return {
       status: 502,
       error: UNREACHABLE,
-      message: "Der Arm hat die Anmeldung dieses Hubs als nicht intern gelesen. Das ist ein Fehler der Einrichtung des Hubs."
+      message: "Der Arm hat eine Route abgelehnt, die an einen anderen Aufrufer gebunden ist. Das ist ein Fehler des Hubs."
     };
   }
   if (status === 403) {

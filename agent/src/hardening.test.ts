@@ -164,7 +164,8 @@ test("the own operational directories are a delegation lock, not a warning", () 
 test("a mount ABOVE the operational directories locks just the same", () => {
   // The branch that a plain prefix list is blind to: "/" contains
   // dashboard-state and is therefore not one bit more harmless than the direct
-  // mount. Without it "/" would only be a warning — and the container delegable.
+  // mount. Without it "/" would only be a warning — and the container would carry no
+  // delegation lock.
   for (const bind of ["/:/host", "/home:/h", "/home/docker:/hd", "/home/docker/../docker:/hd"]) {
     assert.deepEqual(rules(container({ binds: [bind] })), ["dashboard-self-mount"], bind);
   }
@@ -327,7 +328,7 @@ test("hints lock nothing, the delegation lock does", () => {
   assert.equal(report.hint.length, 3);
   assert.equal(hasDelegationLock(inventory), false);
 
-  // The same container with a socket mount: from here on it is no longer delegable.
+  // The same container with a socket mount: from here on it carries a delegation lock.
   const dangerous = container({ ...inventory, binds: ["/var/run/docker.sock:/var/run/docker.sock"] });
   assert.deepEqual(
     hardeningReport(dangerous).delegationLock.map((v) => v.rule),
@@ -336,7 +337,7 @@ test("hints lock nothing, the delegation lock does", () => {
   assert.equal(hasDelegationLock(dangerous), true);
 });
 
-test("an unresolvable volume is fail-closed and not delegable", () => {
+test("an unresolvable volume is fail-closed and carries a delegation lock", () => {
   const unknown = container({ unresolvedVolumes: ["proj_hostroot", "proj_hostroot"] });
   const report = hardeningReport(unknown);
 
