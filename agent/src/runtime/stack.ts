@@ -67,7 +67,6 @@ export type StackContextResponse = {
   couplings: Array<StackCoupling & { fingerprint: string }>;
   missingServices: string[];
   runningServices: string[];
-  capabilities: { startRequiresApply: boolean };
 };
 
 export type PreparedStack = {
@@ -318,8 +317,7 @@ export async function prepareStack(
     services,
     couplings,
     missingServices,
-    runningServices,
-    capabilities: { startRequiresApply: false }
+    runningServices
   };
   return { project, definition, normalized, definitionReadable, externallyManaged, context, entriesByService };
 }

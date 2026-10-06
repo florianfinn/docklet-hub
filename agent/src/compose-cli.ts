@@ -20,6 +20,7 @@
 // dependency logic. A second, slightly divergent interpretation of the same
 // file would be worse than this process start.
 
+import { RESTART_START_RESERVE_MS } from "./runtime-actions.js";
 import { execFile } from "node:child_process";
 import { COMPOSE_FILE_NAME, UPDATE_ROLLBACK_OVERRIDE_FILE_NAME } from "./compose.js";
 
@@ -275,15 +276,19 @@ export async function composeStop(project: NamedComposeProject, timeoutMs: numbe
 export async function composeDependencySafeRestart(
   project: NamedComposeProject,
   timeoutMs: number,
-  execute: typeof run = run
+  execute: typeof run = run,
+  startUpOptions?: UpOptions
 ): Promise<string> {
-  const [stopArgs, startArgs] = buildDependencySafeRestartArgs(project);
+  const [stopArgs, existingStartArgs] = buildDependencySafeRestartArgs(project);
+  const startArgs = startUpOptions ? buildUpArgs(project, startUpOptions) : existingStartArgs;
+  // Reserve the normal start buffer even when stop consumes its whole budget.
+  const startReserveMs = Math.min(RESTART_START_RESERVE_MS, timeoutMs / 2);
   const deadline = Date.now() + timeoutMs;
   let stopStderr = "";
   let stopFailed = false;
   let stopFailure: unknown;
   try {
-    stopStderr = (await execute(stopArgs, { timeoutMs })).stderr;
+    stopStderr = (await execute(stopArgs, { timeoutMs: timeoutMs - startReserveMs })).stderr;
   } catch (error) {
     // A stop can fail only after a partial mutation. The start must still
     // follow best-effort, so that the stack does not stay down merely because
@@ -294,7 +299,7 @@ export async function composeDependencySafeRestart(
 
   let startStderr: string;
   try {
-    startStderr = (await execute(startArgs, { timeoutMs: Math.max(1, deadline - Date.now()) })).stderr;
+    startStderr = (await execute(startArgs, { timeoutMs: Math.max(startReserveMs, deadline - Date.now()) })).stderr;
   } catch (startFailure) {
     if (stopFailed) {
       throw new AggregateError(

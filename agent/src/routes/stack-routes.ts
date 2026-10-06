@@ -5,6 +5,7 @@ import { sendLine } from "../ndjson-line.js";
 import {
   containerCreateRequestSchema,
   stackActionRequestSchema,
+  stackRuntimeActionRequestSchema,
   type StackActionStreamLine,
   stackAdoptRequestSchema,
   stackRawPreviewRequestSchema,
@@ -493,7 +494,7 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
   }
   const action: StackAction = requestedAction;
   // Invalid JSON is answered centrally (`400 invalid-json`), as everywhere.
-  const parsedBody = parseRequest(stackActionRequestSchema, await readJsonBody(request));
+  const parsedBody = parseRequest(action === "start" || action === "restart" ? stackRuntimeActionRequestSchema : stackActionRequestSchema, await readJsonBody(request));
   if (!parsedBody.ok) {
     rejectRequest(ctx, { action: `stack-${action}`, containerId: anchorContainerId, containerName: null }, parsedBody.rejection);
     return;
@@ -517,7 +518,6 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
       responder.finish(result);
       return;
     }
-    if (streaming) throw new StackEndpointError(400, "invalid-stack-action");
     const outcome = await stackLocks.runExclusive(project.projectName, async () => {
       if (!registry.isAllowed(anchorContainerId)) {
         throw new StackEndpointError(409, "stack-anchor-stale");
@@ -628,7 +628,7 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
       reason: error.code
     });
     if (response.headersSent) {
-      sendLine(response, { kind: "error", reason: "runtime-state-unreadable" } satisfies StackActionStreamLine);
+      sendLine(response, { kind: "error", reason: "runtime-stream-failed" } satisfies StackActionStreamLine);
       response.end();
     } else send(response, error.status, { error: error.code, ...error.details });
   } finally {

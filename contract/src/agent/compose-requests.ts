@@ -90,7 +90,8 @@ export const expectedStackServiceSchema = z.object({
 
 /**
  * What the caller saw of a stack before acting on it. The agent refuses with
- * `409 state-changed` when the stack looks different now.
+ * `409 state-changed` for runtime actions and `409 stack-expectation-mismatch`
+ * for apply/down when the stack looks different now.
  */
 export const expectedStackSchema = z.object({
   projectName: z.string(),
@@ -105,11 +106,17 @@ export const stackActionRequestSchema = z.object({
   expectedStack: expectedStackSchema,
   // `down` only: the project name, typed again.
   confirmation: z.optional(z.string()),
-  applyDefinition: z.boolean(),
+  // Required only for start/restart; stop, apply and down do not use it.
+  applyDefinition: z.optional(z.boolean()),
   // `apply` only.
   forceRecreate: z._default(z.boolean(), false)
 });
 export type StackActionRequest = z.input<typeof stackActionRequestSchema>;
+
+export const stackRuntimeActionRequestSchema = z.object({
+  ...stackActionRequestSchema.shape,
+  applyDefinition: z.boolean()
+});
 
 /** `PUT /containers/:id/compose-selection`: pick one of the offered files. */
 export const composeSelectionRequestSchema = z.object({ filePath: z.string() });

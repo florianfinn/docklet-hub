@@ -252,5 +252,32 @@ test("both restart phases share a single total deadline", async (t) => {
     deadlines.push(options.timeoutMs);
     return { stdout: "", stderr: "" };
   });
-  assert.deepEqual(deadlines, [2000, 500]);
+  assert.deepEqual(deadlines, [1000, 1000]);
+});
+
+test("restart reserves thirty seconds for recovery when stop exhausts its budget", async (t) => {
+  let now = 1000;
+  t.mock.method(Date, "now", () => now);
+  const calls: Array<{ args: string[]; timeout: number }> = [];
+  await assert.rejects(composeDependencySafeRestart(STACK_PROJECT, 600_000, async (args, options) => {
+    calls.push({ args, timeout: options.timeoutMs });
+    if (calls.length === 1) { now += options.timeoutMs; throw new Error("stop timeout"); }
+    return { stdout: "", stderr: "" };
+  }), /stop timeout/);
+  assert.deepEqual(calls.map((call) => call.timeout), [570_000, 30_000]);
+  assert.equal(calls[1].args.at(-1), "start");
+});
+
+test("own restart recovers with safe no-recreate up after a failed stop", async () => {
+  const calls: string[][] = [];
+  const stopFailure = new Error("stop failed");
+  await assert.rejects(composeDependencySafeRestart(STACK_PROJECT, 120_000, async (args) => {
+    calls.push(args);
+    if (args.at(-1) === "stop") throw stopFailure;
+    return { stdout: "", stderr: "" };
+  }, { removeOrphans: false, pullNever: true, wait: false, noRecreate: true }),
+  (error: unknown) => error === stopFailure);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].at(-1), "stop");
+  assert.deepEqual(calls[1], buildUpArgs(STACK_PROJECT, { removeOrphans: false, pullNever: true, wait: false, noRecreate: true }));
 });

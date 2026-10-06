@@ -374,11 +374,16 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
     return;
   }
   const initial = await gate(containerId, { mutating: true, action, actor });
-  if (!initial.ok) { send(response, initial.status, { error: initial.reason }); return; }
+  if (!initial.ok) {
+    audit.write({ action, containerId, containerName: null, actor, outcome: "denied", reason: initial.reason });
+    send(response, initial.status, { error: initial.reason });
+    return;
+  }
   const context = composeContextOf(initial.inspect.Config?.Labels ?? undefined, composeBasePath);
   const projectName = initial.inspect.Config?.Labels?.["com.docker.compose.project"] ?? registry.get(containerId)?.compose?.projectName;
   const lockKey = projectName ?? `container:${containerId}`;
   const connection = actionConnection(request, response);
+  let mutationStarted = false;
   try {
     const result = await stackLocks.runExclusive(lockKey, async () => {
       const fresh = await gate(containerId, { mutating: true, action, actor });
@@ -394,7 +399,7 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
             return current?.project === context.project && current.projectDir === context.projectDir &&
               current.composeFileName === context.composeFileName && current.serviceName === context.serviceName;
           });
-          if (matches.length > 1) throw new Error("scaled-service-unsupported");
+          if (matches.length > 1) throw new StackEndpointError(409, "scaled-service-unsupported");
           if (matches.length === 0) return null;
           id = matches[0].id;
         }
@@ -410,7 +415,11 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
         }
         return inspect;
       };
-      const before = fresh.ok ? fresh.inspect : await readState();
+      if (fresh.ok) {
+        const access = registry.checkAccess(fresh.inspect.Id, true);
+        if (access !== "allowed") return { status: 403, body: { error: access } };
+      }
+      const before = context || !fresh.ok ? await readState() : fresh.inspect;
       if (!before || !fresh.ok) return { status: 409, body: {
         ok: false, action: action as RuntimeAction, outcome: "failed" as const, error: "state-changed", state: runtimeStateOf(before)
       } };
@@ -420,6 +429,7 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
           if (config.readOnly) throw new StackEndpointError(503, "agent-read-only");
           const access = registry.checkAccess(inspect.Id, true);
           if (access !== "allowed") throw new StackEndpointError(403, access);
+          mutationStarted = true;
           if (action === "start") await engine.start(inspect.Id);
           else if (action === "stop") await engine.stop(inspect.Id, inspect.Config?.StopTimeout ?? null);
           else await engine.restart(inspect.Id, inspect.Config?.StopTimeout ?? null);
@@ -427,10 +437,12 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
       }, action as RuntimeAction, parsed.value.expectedContainer, before, connection.signal);
     }, { waitMs: ACTION_QUEUE_WAIT_MS, signal: connection.signal });
     audit.write({ action, containerId, containerName: initial.inspect.Name.replace(/^\//, ""), actor,
-      outcome: result.status === 200 ? "allowed" : "error", reason: "error" in result.body ? String(result.body.error) : undefined });
+      outcome: result.status === 200 ? "allowed" : mutationStarted ? "error" : "denied", reason: "error" in result.body ? String(result.body.error) : undefined });
     send(response, result.status, result.body);
   } catch (error) {
     if (!(error instanceof ActionQueueError) && !(error instanceof StackEndpointError)) throw error;
+    audit.write({ action, containerId, containerName: initial.inspect.Name.replace(/^\//, ""), actor,
+      outcome: "denied", reason: error.code });
     if (!response.destroyed) send(response, error instanceof StackEndpointError ? error.status : 409, { error: error.code });
   } finally {
     connection.dispose();

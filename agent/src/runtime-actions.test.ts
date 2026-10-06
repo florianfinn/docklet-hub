@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  CONTRACT_VERSION, containerActionRequestSchema, stackActionRequestSchema,
+  CONTRACT_VERSION, containerActionRequestSchema, stackActionRequestSchema, stackRuntimeActionRequestSchema,
   stackRuntimeResultSchema, stackActionStreamLineSchema, type RuntimeAction
 } from "contract";
 import {
@@ -20,8 +20,9 @@ test("contract 12 requires the mode and observed runtime state", () => {
   assert.equal(containerActionRequestSchema.safeParse({}).success, false);
   assert.equal(containerActionRequestSchema.safeParse({ expectedContainer: expected }).success, true);
   const stack = { projectName: "app", projectDir: "/srv/apps/app", composeFileName: "compose.yaml", services: [{ serviceName: "web", ...expected }] };
-  assert.equal(stackActionRequestSchema.safeParse({ expectedStack: stack, allowFallbackUp: true }).success, false);
-  assert.equal(stackActionRequestSchema.safeParse({ expectedStack: stack, applyDefinition: true }).success, true);
+  assert.equal(stackRuntimeActionRequestSchema.safeParse({ expectedStack: stack, allowFallbackUp: true }).success, false);
+  assert.equal(stackRuntimeActionRequestSchema.safeParse({ expectedStack: stack, applyDefinition: true }).success, true);
+  assert.equal(stackActionRequestSchema.safeParse({ expectedStack: stack }).success, true);
   assert.equal(stackActionRequestSchema.safeParse({ expectedStack: { ...stack, services: [{ serviceName: "web", containerId: "id" }] }, applyDefinition: true }).success, false);
 });
 
@@ -154,4 +155,11 @@ test("an already stopped, never-started container satisfies stop after an engine
     "stop", { ...expected, status: "created" }, inspect);
   assert.equal(result.body.ok, true);
   assert.equal(result.body.state.status, "created");
+});
+
+test("missing services satisfy stop but unreadable states do not", () => {
+  for (const external of [false, true]) {
+    assert.equal(serviceResult("stop", "job", runtimeStateOf(null), external).outcome, "ok");
+    assert.equal(serviceResult("stop", "job", runtimeStateOf(null, true), external).outcome, "failed");
+  }
 });

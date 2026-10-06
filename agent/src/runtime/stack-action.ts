@@ -4,7 +4,7 @@ import {
 } from "../compose-cli.js";
 import { executeStackRuntimeAction, runtimeServices } from "../stack-runtime-action.js";
 import { ActionQueueError } from "../concurrency.js";
-import { ACTION_QUEUE_WAIT_MS } from "../runtime-actions.js";
+import { ACTION_QUEUE_WAIT_MS, runtimeStateOf } from "../runtime-actions.js";
 import { config, engine, registry, stackLocks } from "./state.js";
 import {
   StackEndpointError, prepareStack, currentStackContainers, reanchorStackRegistry,
@@ -40,9 +40,7 @@ export async function runStackRuntimeAction(
           // Poll only authorized containers; new ids are authorized after reanchor.
           if (container && !registry.isAllowed(container.containerId)) continue;
           const inspect = container ? await engine.inspect(container.containerId) : null;
-          services.push({ ...before, containerId: inspect?.Id ?? null, status: inspect?.State?.Status ?? "missing",
-            exitCode: inspect?.State?.ExitCode ?? null, health: inspect?.State?.Health?.Status ?? null,
-            startedAt: inspect?.State?.StartedAt ?? null });
+          services.push({ ...before, ...runtimeStateOf(inspect) });
         }
         if (!stopped) for (const service of runtimeServices(action, { ...prepared.context, services }, prepared.externallyManaged)) progress(service);
       };
@@ -69,7 +67,9 @@ export async function runStackRuntimeAction(
           }),
           start: (timeoutMs) => composeStart(project, timeoutMs),
           stop: (timeoutMs) => composeStop(project, timeoutMs),
-          restart: (timeoutMs) => composeDependencySafeRestart(project, timeoutMs),
+          restart: (timeoutMs, startWithUp) => composeDependencySafeRestart(project, timeoutMs, undefined, startWithUp ? {
+            removeOrphans: false, pullNever: true, wait: false, noRecreate: true, forceRecreate: false
+          } : undefined),
           refresh: async (prepared) => {
             stopped = true;
             if (timer) clearInterval(timer);

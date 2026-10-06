@@ -11,8 +11,7 @@ function fixture(external = false, missing = false) {
     running: false, missing, allowed: true, delegationLocked: false, hardeningVerified: true };
   const context: StackContextResponse = {
     projectName: "app", projectDir: "/srv/apps/app", composeFileName: "compose.yaml", anchorServiceName: "web",
-    state: "stopped", readOnly: false, services: [service], couplings: [], missingServices: missing ? ["web"] : [], runningServices: [],
-    capabilities: { startRequiresApply: false }
+    state: "stopped", readOnly: false, services: [service], couplings: [], missingServices: missing ? ["web"] : [], runningServices: []
   };
   const entry = { containerId: "old", containerName: "app-web-1", imageRef: "example/app:1.0", allowed: true, observeOnly: false,
     externallyManaged: external, secured: false };
@@ -32,7 +31,7 @@ function fixture(external = false, missing = false) {
     up: async (args) => { calls.push({ name: "up", args }); },
     start: async (timeoutMs) => { calls.push({ name: "start", args: timeoutMs }); },
     stop: async (timeoutMs) => { calls.push({ name: "stop", args: timeoutMs }); },
-    restart: async (timeoutMs) => { calls.push({ name: "stop-start", args: timeoutMs }); },
+    restart: async (timeoutMs, startWithUp) => { calls.push({ name: startWithUp ? "stop-up" : "stop-start", args: timeoutMs }); },
     refresh: async () => { calls.push({ name: "reanchor-read" }); return after; }
   };
   const body: StackActionRequest = { applyDefinition: false, expectedStack: {
@@ -48,11 +47,12 @@ for (const action of ["start", "stop", "restart"] as const) for (const applyDefi
     f.body.applyDefinition = applyDefinition;
     if (action === "stop") f.setAfter({ ...f.prepared.context, services: f.prepared.context.services });
     const result = await executeStackRuntimeAction(f.ops, action, f.body);
-    const creating = action === "start" || (action === "restart" && applyDefinition);
+    const creating = action !== "stop";
+    const command = action === "restart" && !applyDefinition ? "stop-up" : "up";
     assert.deepEqual(f.calls.map((call) => call.name), creating
-      ? ["config", "scope", "image", "scope", "up", "reanchor-read"]
-      : ["config", action === "restart" ? "stop-start" : "stop", "reanchor-read"]);
-    if (creating) assert.deepEqual(f.calls.find((call) => call.name === "up")?.args, {
+      ? ["config", "scope", "image", "scope", command, "reanchor-read"]
+      : ["config", "stop", "reanchor-read"]);
+    if (command === "up" && creating) assert.deepEqual(f.calls.find((call) => call.name === "up")?.args, {
       applyDefinition, forceRecreate: action === "restart", timeoutMs: action === "restart" ? 300_000 : 150_000
     });
     assert.equal(result.body.ok, true);
@@ -79,6 +79,8 @@ test("foreign stacks report missing services as partial without creation", async
   ] });
   const result = await executeStackRuntimeAction(f.ops, "start", f.body);
   assert.equal(result.body.outcome, "partial");
+  assert.equal(result.status, 409);
+  assert.equal(result.body.error, "runtime-target-not-reached");
   assert.equal(result.body.services[1].outcome, "not-created-externally-managed");
   assert.equal(f.calls.some((call) => call.name === "up"), false);
 });
@@ -92,16 +94,16 @@ test("unreadable foreign definition uses only the existing services", async () =
   assert.equal(f.calls.some((call) => call.name === "start"), true);
 });
 
-for (const error of ["compose-config-failed", "runtime-image-missing", "stack-service-not-allowlisted", "externally-managed"]) {
-  test(`preflight ${error} leaves the stack unchanged and rereads ids`, async () => {
+for (const action of ["start", "restart"] as const) for (const error of ["compose-config-failed", "runtime-image-missing", "stack-service-not-allowlisted", "externally-managed"]) {
+  test(`preflight ${error} leaves the stack unchanged before ${action} and rereads ids`, async () => {
     const f = fixture();
     f.setAfter(f.prepared.context);
     if (error === "compose-config-failed") f.prepared.definitionReadable = false;
     else if (error === "runtime-image-missing") f.ops.imageId = async () => null;
     else f.ops.checkCreateScope = () => { throw new StackEndpointError(403, error); };
-    const result = await executeStackRuntimeAction(f.ops, "start", f.body);
+    const result = await executeStackRuntimeAction(f.ops, action, f.body);
     assert.equal(result.body.error, error);
-    assert.equal(f.calls.some((call) => ["up", "start", "stop", "stop-start"].includes(call.name)), false);
+    assert.equal(f.calls.some((call) => ["up", "start", "stop", "stop-start", "stop-up"].includes(call.name)), false);
     assert.equal(result.body.containerIds.web, "old");
     assert.equal(f.calls.at(-1)?.name, "reanchor-read");
   });
@@ -224,4 +226,24 @@ test("disconnect when opening the stream also prevents a mutation that has not b
   const result = await executeStackRuntimeAction(f.ops, "start", f.body, { signal: controller.signal, onStart: () => controller.abort() });
   assert.equal(result.body.error, "action-caller-disconnected");
   assert.equal(f.calls.some((call) => call.name === "up"), false);
+});
+
+for (const external of [false, true]) {
+  test(`stack stop treats a missing service as already stopped (external ${external})`, async () => {
+    const f = fixture(external);
+    f.prepared.context.services.push({ ...f.prepared.context.services[0], serviceName: "job", containerId: null, missing: true, status: "missing" });
+    f.body.expectedStack.services.push({ serviceName: "job", containerId: null, status: "missing", startedAt: "seen" });
+    f.setAfter(f.prepared.context);
+    const result = await executeStackRuntimeAction(f.ops, "stop", f.body);
+    assert.equal(result.status, 200);
+    assert.equal(result.body.outcome, "ok");
+    assert.deepEqual(result.body.services.map((service) => service.outcome), ["ok", "ok"]);
+  });
+}
+
+test("own restart with definition off prechecks and creates missing services without recreation", async () => {
+  const f = fixture(false, true);
+  const result = await executeStackRuntimeAction(f.ops, "restart", f.body);
+  assert.equal(result.body.ok, true);
+  assert.deepEqual(f.calls.map((call) => call.name), ["config", "scope", "image", "scope", "stop-up", "reanchor-read"]);
 });

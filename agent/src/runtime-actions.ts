@@ -6,6 +6,7 @@ import type { RawInspect } from "./engine-model.js";
 export const ACTION_QUEUE_WAIT_MS = 60_000;
 export const STOP_BUFFER_MS = 10_000;
 export const STACK_BUFFER_MS = 30_000;
+export const RESTART_START_RESERVE_MS = 30_000;
 export const MAX_STACK_ACTION_MS = 10 * 60_000;
 
 export function stopTimeoutSeconds(value: unknown): number {
@@ -47,7 +48,7 @@ export function expectedContainerMatches(expected: ExpectedContainer, state: Run
 }
 
 export function runtimeTargetReached(action: RuntimeAction, state: RuntimeState): boolean {
-  if (!state.containerId) return false;
+  if (!state.containerId) return action === "stop" && state.status === "missing";
   if (action === "stop") return state.status === "exited" || state.status === "created";
   return state.status === "running" || (state.status === "exited" && state.exitCode === 0);
 }
@@ -57,7 +58,7 @@ export function serviceResult(
 ): RuntimeServiceResult {
   return {
     serviceName, ...state,
-    outcome: externallyManaged && state.status === "missing"
+    outcome: action !== "stop" && externallyManaged && state.status === "missing"
       ? "not-created-externally-managed"
       : runtimeTargetReached(action, state) ? "ok" : "failed"
   };

@@ -362,6 +362,7 @@ export {
   expectedStackSchema,
   recreateRequestSchema,
   stackActionRequestSchema,
+  stackRuntimeActionRequestSchema,
   stackAdoptRequestSchema,
   stackRawPreviewRequestSchema,
   stackRawRequestSchema

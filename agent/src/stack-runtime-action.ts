@@ -11,7 +11,7 @@ export type StackRuntimeOps = {
   up: (options: { applyDefinition: boolean; forceRecreate: boolean; timeoutMs: number }) => Promise<unknown>;
   start: (timeoutMs: number) => Promise<unknown>;
   stop: (timeoutMs: number) => Promise<unknown>;
-  restart: (timeoutMs: number) => Promise<unknown>;
+  restart: (timeoutMs: number, startWithUp: boolean) => Promise<unknown>;
   refresh: (prepared: PreparedStack) => Promise<StackContextResponse>;
 };
 
@@ -29,8 +29,8 @@ export async function executeStackRuntimeAction(
   options: { signal?: AbortSignal; onStart?: (applyDefinition: boolean, prepared: PreparedStack) => void; onProgress?: (service: RuntimeServiceResult) => void } = {}
 ): Promise<{ status: number; body: StackRuntimeResult & { context: StackContextResponse } }> {
   const prepared = await ops.prepare();
-  const applyDefinition = body.applyDefinition && !prepared.externallyManaged;
-  const creating = !prepared.externallyManaged && (action === "start" || (action === "restart" && applyDefinition));
+  const applyDefinition = body.applyDefinition === true && !prepared.externallyManaged;
+  const creating = !prepared.externallyManaged && (action === "start" || action === "restart");
   let errorCode: string | undefined;
   let errorStatus = 409;
   let after: StackContextResponse;
@@ -61,11 +61,12 @@ export async function executeStackRuntimeAction(
     ops.checkRuntimeScope(prepared);
     if (creating) {
       ops.checkCreateScope(prepared);
-      await ops.up({ applyDefinition, forceRecreate: action === "restart", timeoutMs });
+      if (action === "restart" && !applyDefinition) await ops.restart(timeoutMs, true);
+      else await ops.up({ applyDefinition, forceRecreate: action === "restart", timeoutMs });
     }
     else if (action === "start") await ops.start(timeoutMs);
     else if (action === "stop") await ops.stop(timeoutMs);
-    else await ops.restart(timeoutMs);
+    else await ops.restart(timeoutMs, false);
   } catch (error) {
     errorCode = error instanceof StackEndpointError ? error.code : "compose-stack-action-failed";
     errorStatus = error instanceof StackEndpointError ? error.status : 409;
@@ -90,7 +91,7 @@ export async function executeStackRuntimeAction(
     body: {
       ok, action, applyDefinition, outcome, services,
       containerIds: Object.fromEntries(services.flatMap((service) => service.containerId ? [[service.serviceName, service.containerId]] : [])),
-      context: after, ...(errorCode ? { error: errorCode } : outcome === "failed" ? { error: "runtime-target-not-reached" } : {})
+      context: after, ...(errorCode ? { error: errorCode } : outcome !== "ok" ? { error: "runtime-target-not-reached" } : {})
     }
   };
 }
