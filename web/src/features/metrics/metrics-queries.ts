@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { queryKeys } from "../../platform/query/query-keys";
 import { fetchContainerStats } from "./api";
@@ -18,9 +18,13 @@ import { fetchContainerStats } from "./api";
 export const STATS_REFRESH_MS = 10_000;
 
 export function useContainerStats(hostId: string, containerId: string) {
+  const client = useQueryClient();
   return useQuery({
     queryKey: queryKeys.metrics.containerStats(hostId, containerId),
-    queryFn: () => fetchContainerStats(hostId, containerId),
+    queryFn: async () => {
+      const next = await fetchContainerStats(hostId, containerId);
+      return next.stats === null ? client.getQueryData<Awaited<ReturnType<typeof fetchContainerStats>>>(queryKeys.metrics.containerStats(hostId, containerId)) ?? next : next;
+    },
     refetchInterval: STATS_REFRESH_MS,
     retry: false
   });

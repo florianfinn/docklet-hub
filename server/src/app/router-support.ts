@@ -25,7 +25,10 @@ import type { Enrollment } from "../features/hosts/index.js";
 // Aufteilung gleichermassen kennen, ohne dass eine der anderen unterstellt
 // ist.
 
+import type { LiveEvents } from "../domain/live-events/index.js";
+
 export type ApiOptions = {
+  liveEvents?: LiveEvents;
   auth: Auth;
   pool: Pool;
   // Der Weg zum Bestand. Einspeisbar, weil der Integrationstest dieser Fläche

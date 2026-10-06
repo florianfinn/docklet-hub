@@ -7,6 +7,7 @@ import { toNodeHandler } from "better-auth/node";
 import express from "express";
 
 import {
+  createHostAccess,
   createObservedProbe,
   createPoolRepository,
   ensureLocalHost,
@@ -15,6 +16,7 @@ import {
   staleAfterMs,
   startHostCycleService
 } from "./domain/hosts/index.js";
+import { startLiveEvents } from "./domain/live-events/index.js";
 import { createApiRouter } from "./app/router.js";
 import { createAuth } from "./platform/auth/auth.js";
 import { ConfigError, loadConfig } from "./platform/config/config.js";
@@ -152,9 +154,24 @@ async function main(): Promise<void> {
     repository,
     agentSecret: config.agentSecret,
     intervalSeconds: config.hostCycleIntervalSeconds,
+    onInventoryChanged: async (hostId) => {
+      await liveEvents.refresh(hostId, { host: true }).catch(() => undefined);
+    },
     log: (message) => console.log(message),
     logError: (message, error) => console.error(message, error)
   });
+
+  const liveEvents = startLiveEvents({
+    hosts: createHostAccess({ pool, repository, agentSecret: config.agentSecret }),
+    resync: async (hostId) => {
+      const record = await repository.find(hostId);
+      if (!record) throw new Error("host-unknown");
+      const outcome = await hostCycle.syncHost(record, { kind: "system", name: "hub" });
+      if (outcome.status !== "synced" && outcome.status !== "unchanged") throw new Error("host-resync-failed");
+    },
+    onError: () => console.error("Live-Abonnements konnten nicht abgeglichen werden.")
+  });
+  liveEvents.start();
 
   const auth = createAuth({ pool, secret: config.authSecret, baseUrl: config.authBaseUrl });
 
@@ -212,6 +229,7 @@ async function main(): Promise<void> {
       pool,
       repository,
       enrollment,
+      liveEvents,
       agentSecret: config.agentSecret,
       config,
       // ⚠️ Die Erreichbarkeit aus dem Halter statt aus einer Sonde je Anfrage.
@@ -327,8 +345,9 @@ async function main(): Promise<void> {
       // Durchlauf mehr gegen einen bereits geschlossenen Verbindungspool
       // startet.
       hostCycle.stop();
+      const liveStopped = liveEvents.stop();
       server.close(() => {
-        void pool.end().then(() => process.exit(0));
+        void liveStopped.then(() => pool.end()).then(() => process.exit(0));
       });
     });
   }

@@ -412,3 +412,5 @@ export type {
   RuntimeOutcome, RuntimeActionError, StackRuntimeResult, ContainerRuntimeResult,
   StackActionStreamLine
 } from "./agent/runtime-actions.js";
+
+export { liveEventSchema, liveStatusSchema, liveActionSchema, type LiveEvent, type LiveStatus, type LiveAction } from "./api/live-events.js";

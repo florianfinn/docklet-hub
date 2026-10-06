@@ -83,6 +83,8 @@ export type OriginDecision =
  * `request-origin-routing.test.ts`.
  */
 export const GET_ROUTES_WITH_EFFECT: readonly string[] = [
+  // A live session occupies a bounded shared hub connection.
+  "/live-events",
   // `GET /hosts/:hostId/archive`, denn er rotiert bei jedem Aufruf
   // Schlüsselpaar, Agent-Secret und Token und setzt den Host auf `pending`
   // zurück (docs/design/phase-4-bootstrap-and-registration.md §4). Ein

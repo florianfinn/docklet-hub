@@ -6,6 +6,7 @@ import { ApiError } from "./platform/http/transport";
 import { fetchSession, fetchSetupState } from "./platform/session/api";
 import type { SessionUser } from "./platform/session/session-user";
 import { onUnauthorized } from "./platform/http/session-expiry";
+import { LiveEvents } from "./features/live-events";
 import { useGlobalTheme } from "./features/appearance";
 import { useLanguage } from "./platform/i18n";
 import { DotWave } from "./platform/ui/dot-wave";
@@ -188,6 +189,7 @@ export function App() {
     case "signedIn":
       return (
         <AppShell userName={state.user.name} role={state.user.role} onSignedOut={reload}>
+          <LiveEvents />
           <AppRoutes user={state.user} />
         </AppShell>
       );

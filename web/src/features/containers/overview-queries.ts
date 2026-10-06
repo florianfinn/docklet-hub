@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { ContainerViewSettings, HostOverview } from "contract";
 
+import { retainHostOverview } from "../../domain/hosts";
 import { queryKeys } from "../../platform/query/query-keys";
 import { fetchContainerViewSettings, fetchOverview } from "./api";
 
@@ -21,9 +22,14 @@ import { fetchContainerViewSettings, fetchOverview } from "./api";
  * of an agent is the one trace that points from this hub to a person.
  */
 export function useOverview() {
+  const client = useQueryClient();
   return useQuery({
     queryKey: queryKeys.containers.overview(),
-    queryFn: async (): Promise<HostOverview[]> => (await fetchOverview()).hosts
+    queryFn: async (): Promise<HostOverview[]> => {
+      const next = (await fetchOverview()).hosts;
+      const previous = client.getQueryData<HostOverview[]>(queryKeys.containers.overview());
+      return next.map((entry) => retainHostOverview(entry, previous?.find((old) => old.host.id === entry.host.id)));
+    }
   });
 }
 

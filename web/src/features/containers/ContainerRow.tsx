@@ -115,7 +115,7 @@ export function ContainerRow({
               VOR dem Statustext und nicht dahinter: der Status ist der rechte
               Rand der Zeile, an dem das Auge über alle Zeilen hinweg
               entlangläuft. */}
-          {slots?.containerUsage?.(container)}
+          {slots?.containerUsage?.(container, hostId)}
           <span className="shrink-0 truncate text-xs text-subtle-foreground">
             {container.status}
           </span>
