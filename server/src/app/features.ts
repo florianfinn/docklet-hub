@@ -1,5 +1,6 @@
 import type { Router } from "express";
 
+import { createRuntimeSettingsSync } from "./runtime-settings.js";
 import type { ApiOptions } from "./router-support.js";
 import { registerAccountRoutes } from "../features/account/index.js";
 import { readGlobalTheme, registerAppearanceRoutes } from "../features/appearance/index.js";
@@ -12,7 +13,7 @@ import { readHostDecoration, registerMarkRoutes } from "../features/marks/index.
 import { hostLoad, registerMetricsRoutes } from "../features/metrics/index.js";
 import { registerLiveEventRoutes } from "../features/live-events/index.js";
 import { registerResourcesRoutes } from "../features/resources/index.js";
-import { registerSettingsRoutes } from "../features/settings/index.js";
+import { readRuntimeSettings, readSelfHealingSettings, registerSettingsRoutes } from "../features/settings/index.js";
 import { registerShellRoutes } from "../features/shell/index.js";
 
 // The static feature list of the server (docs/design/feature-architecture.md,
@@ -110,10 +111,13 @@ export const FEATURES: readonly RegisterFeature[] = [
   (router, options) =>
     registerSettingsRoutes(router, {
       ...options,
+      selfHealingSync: options.selfHealingSync ?? createRuntimeSettingsSync(options),
       readers: {
         readTheme: () => readGlobalTheme(options.pool),
         readLogSettings: () => readLogSettings(options.pool),
-        readContainerView: () => readContainerViewSettings(options.pool)
+        readContainerView: () => readContainerViewSettings(options.pool),
+        readRuntime: () => readRuntimeSettings(options.pool),
+        readSelfHealing: () => readSelfHealingSettings(options.pool)
       }
     }),
   // The feature `appearance`: the theme of the hub (`PUT /settings/theme`) and

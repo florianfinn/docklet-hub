@@ -13,9 +13,12 @@ import type { Auth } from "../platform/auth/auth.js";
 import type { Config } from "../platform/config/config.js";
 import type { Enrollment } from "../features/hosts/index.js";
 
+import type { SelfHealingSync } from "../features/settings/index.js";
+
 // Shared router dependencies for feature registration and request handlers.
 export type ApiOptions = {
   liveEvents?: LiveEvents;
+  selfHealingSync?: SelfHealingSync;
   auth: Auth;
   pool: Pool;
   // Der Weg zum Bestand. Einspeisbar, weil der Integrationstest dieser Fläche

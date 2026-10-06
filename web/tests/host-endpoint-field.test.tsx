@@ -1,3 +1,4 @@
+import { DEFAULT_SELF_HEALING_CONFIG } from "contract";
 // ⚠️ Die Reihenfolge der Importe ist BEDEUTUNG: der DOM muss stehen, bevor
 // React geladen wird (siehe `dom-harness.tsx`).
 import { renderInDom, settle } from "./dom-harness.js";
@@ -87,6 +88,8 @@ function stubHub(network: typeof REACHABLE | typeof UNREACHABLE): {
       // contract since #248.
       const settings: Settings = {
         theme: DEFAULT_GLOBAL_THEME,
+        runtime: { applyComposeDefinition: true },
+        selfHealing: { config: DEFAULT_SELF_HEALING_CONFIG, revision: 1, hosts: [] },
         logs: { tailLines: 500 },
         containers: { showSystem: false },
         network,

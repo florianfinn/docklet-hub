@@ -1,22 +1,14 @@
-import type { ContainerViewSettings, GlobalThemePreset, HubNetworkView, LogSettings, Settings } from "contract";
+import type { ContainerViewSettings, GlobalThemePreset, HubNetworkView, LogSettings, Settings, RuntimeSettings, SelfHealingSettings } from "contract";
 
 import { isUnreachableFromOutside, resolveWireguardEndpoint, type Config } from "../../platform/config/config.js";
-
-// The service of the feature `settings` (#269): the answer of `GET /settings`,
-// put together from what the other surfaces keep. The route reads the
-// parameters, sets the status and writes the answer; `service.test.ts` checks
-// the rest without Express and without Postgres.
-//
-// ⚠️ `settings` IMPORTS NO FEATURE. The settings of `logs`, `appearance` and the
-// container view are handed in as readers, by `server/src/app/features.ts`, the
-// one place that knows several features (docs/design/feature-architecture.md,
-// section 7, decided at #259).
 
 /** What `GET /settings` reads; every entry is one reader the app hands in. */
 export type SettingsReaders = {
   readTheme: () => Promise<GlobalThemePreset>;
   readLogSettings: () => Promise<LogSettings>;
   readContainerView: () => Promise<ContainerViewSettings>;
+  readRuntime: () => Promise<RuntimeSettings>;
+  readSelfHealing: () => Promise<SelfHealingSettings>;
   readNetwork: () => Promise<{ externalEndpoint: string | null }>;
 };
 
@@ -64,11 +56,11 @@ export function describeNetwork(config: SettingsConfig, externalEndpoint: string
 
 /** Every setting of the hub in one answer. None of them is a secret, so every account may read it. */
 export async function readSettings(readers: SettingsReaders, config: SettingsConfig): Promise<Settings> {
-  // One after the other and in this order, as the route read them before: a
-  // test pool that answers by order of the queries depends on it.
   const network = await readers.readNetwork();
   const theme = await readers.readTheme();
   const logs = await readers.readLogSettings();
   const containers = await readers.readContainerView();
-  return { theme, logs, containers, network: describeNetwork(config, network.externalEndpoint) };
+  const runtime = await readers.readRuntime();
+  const selfHealing = await readers.readSelfHealing();
+  return { theme, logs, containers, runtime, selfHealing, network: describeNetwork(config, network.externalEndpoint) };
 }

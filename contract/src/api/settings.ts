@@ -15,6 +15,7 @@ import {
   TERMINAL_SIZE_STEPS,
   TERMINAL_SURFACE_STEPS
 } from "../presets.js";
+import { selfHealingConfigSchema } from "../agent/self-healing.js";
 import { stepSchema } from "./steps.js";
 
 // The response shapes of the settings routes (#248): `GET /api/settings` and
@@ -97,12 +98,34 @@ export const hubNetworkViewSchema = z.object({
 });
 export type HubNetworkView = z.infer<typeof hubNetworkViewSchema>;
 
+export const runtimeSettingsSchema = z.strictObject({ applyComposeDefinition: z.boolean() });
+export type RuntimeSettings = z.infer<typeof runtimeSettingsSchema>;
+export const runtimeSettingsResponseSchema = z.object({ runtime: runtimeSettingsSchema });
+export const selfHealingDeliverySchema = z.object({
+  hostId: z.string(),
+  hostName: z.string(),
+  status: z.enum(["pending", "synced", "failed"]),
+  appliedRevision: z.nullable(z.number()),
+  updatedAt: z.nullable(z.string())
+});
+export type SelfHealingDelivery = z.infer<typeof selfHealingDeliverySchema>;
+export const selfHealingSettingsSchema = z.object({
+  config: selfHealingConfigSchema,
+  revision: z.number(),
+  hosts: z.array(selfHealingDeliverySchema)
+});
+export type SelfHealingSettings = z.infer<typeof selfHealingSettingsSchema>;
+export const selfHealingSettingsResponseSchema = z.object({ selfHealing: selfHealingSettingsSchema });
+export const selfHealingSettingsRequestSchema = z.strictObject({ config: selfHealingConfigSchema });
+
 /** `GET /api/settings`: every setting of the hub, each under its own key. */
 export const settingsSchema = z.object({
   theme: globalThemeSchema,
   logs: logSettingsSchema,
   containers: containerViewSettingsSchema,
-  network: hubNetworkViewSchema
+  network: hubNetworkViewSchema,
+  runtime: runtimeSettingsSchema,
+  selfHealing: selfHealingSettingsSchema
 });
 export type Settings = z.infer<typeof settingsSchema>;
 

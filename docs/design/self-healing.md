@@ -30,6 +30,42 @@ Ab Werk hat jeder heilbare Container drei Versuche. Vor dem ersten wartet der Ag
 
 Die Selbstheilung ist ab Werk eingeschaltet. Schalter, Anzahl der Versuche, Abstände und Stabilitätsfenster stehen global in den Einstellungen des Hubs. Der Hub überträgt sie an jeden Agent, der sie speichert; bis zur ersten Übertragung gelten die Werte ab Werk. Auch den Stand des Budgets speichert der Agent dauerhaft, damit ein Neustart des Agents das Budget weder auffüllt noch eine neue Versuchsreihe beginnt.
 
+Die Konfiguration verwendet ganze Sekunden. Zulässig sind 1 bis 10 Versuche,
+mit genau einem Abstand pro Versuch von 1 bis 86.400 Sekunden. Das
+Stabilitätsfenster liegt zwischen 1 und 86.400 Sekunden; die Wartungsdauer-Vorgabe
+zwischen 60 und 604.800 Sekunden (eine Minute bis sieben Tage) oder ist
+unbegrenzt (`maintenanceDurationSeconds: null`). Ab Werk beträgt die globale
+Vorgabedauer 3.600 Sekunden; sie bestimmt die Vorauswahl einer neuen Wartung. Auch bei
+abgeschalteter Selbstheilung bleibt eine vollständige, gültige Konfiguration
+abgelegt. Die Grenzen verhindern unbeschränkte Versuchsreihen und Zeitwerte,
+die bei einer späteren Aktivierung keine sinnvolle Wirkung hätten.
+
+Der Hub speichert zuerst und überträgt anschließend mit `PUT /self-healing/config`
+als `system:hub`. Der Agent quittiert die gespeicherte Konfiguration erst nach
+atomarem Dateiersatz mit Modus `0600`. Diese reine Konfigurationsübertragung ist
+auch im Nur-Lese-Modus erlaubt; sie startet keinen Container und der Modus
+sperrt weiterhin jede Heilungsaktion. Die Route schreibt genau einen Audit-Eintrag:
+Erfolg als `allowed`, ungültige Eingaben als `denied` und Fehler beim Speichern
+als `error`. Engine- und Dateidiagnosen bleiben im Audit; Antworten enthalten nur
+Status und Fehlerschlüssel.
+Eine beschädigte vorhandene Konfigurationsdatei bricht das Laden ab, statt eine
+abgeschaltete Selbstheilung durch einen Rückfall auf Werkswerte einzuschalten.
+
+Jede Änderung im Hub erhält eine Revision. Die Einstellungen zeigen je Host,
+ob diese Revision bestätigt wurde, die Übertragung aussteht oder fehlgeschlagen
+ist. Die Bestätigung belegt die Speicherung, keine ausgeführte Heilung. Ein
+Übertragungsfehler nimmt die Speicherung im Hub nicht zurück. Nach Registrierung,
+nach jeder Live-Verbindung und nach einem Neustart des Hubs wird der aktuelle
+Stand erneut gesendet. Der Live-Dienst öffnet zuerst `/monitor-events`, gleicht
+die Registry über die gemeinsame Host-Sperre ab und überträgt anschließend die
+Konfiguration, bevor er den Verbindungsaufbau als abgeschlossen meldet. Auch
+neu registrierte Hosts kommen über diesen Weg hinzu. Fehlgeschlagene
+Übertragungen werden bei der nächsten erfolgreichen 15-Sekunden-Sonde des
+Live-Dienstes wiederholt. Der Weg bleibt bei abgeschaltetem Hintergrundlauf
+aktiv und benötigt keine zusätzliche Wiederverbindungserkennung in Lesewegen.
+Übertragungen je Host laufen nacheinander und lesen vor dem Senden den aktuellen
+Stand, damit verzögerte Antworten keine neueren Einstellungen überschreiben.
+
 Ist das Budget erschöpft, legt der Agent einen Vorfall an und unternimmt nichts mehr, bis jemand handelt. Ein manueller Start füllt das Budget wieder auf und schließt den Vorfall, gleich ob er über den Hub, die Docker-CLI oder die Unraid-Oberfläche kam. Manuell ist ein Start, den weder die Selbstheilung noch Docker über seine Neustartregel ausgelöst hat; einen Neustart durch Docker erkennt der Agent am gestiegenen `RestartCount`. Würde jeder Start auffüllen, setzten sich Docker-Wiederholungen nach einem Heilungsstart und das Budget gegenseitig zurück, und Agent und Docker wechselten sich endlos ab. Wiederholt Docker bei `on-failure:N` nach einem Heilungsstart selbst, verbraucht das keinen weiteren Versuch; erst wenn Docker wieder aufgibt, folgt der nächste. Quittiert jemand den Vorfall im Hub, füllt das ebenfalls das Budget auf, ohne den Container zu starten.
 
 ## Wartung

@@ -70,6 +70,8 @@ const EXPECTED_LAYERS = [
   // so the order changes no answer; the case below holds (`MOVED_BY_FEATURES`).
   "PUT /settings/containers",
   "GET /settings",
+  "PUT /settings/runtime",
+  "PUT /settings/self-healing",
   "PUT /settings/network",
   "PUT /settings/theme",
   "PUT /hosts/:hostId/display",

@@ -5,6 +5,8 @@
 import type { deAccount } from "./de";
 
 export const enAccount = {
+  setupComposeDefinitionLabel: "Apply Compose definition on start and restart",
+  setupComposeDefinitionHint: "On: hub-owned stacks apply their Compose definition on start; restart recreates their containers. Externally managed stacks keep their definitions. You can change this in Settings.",
   // Der Bildschirm, der beim ersten Start erscheint — und danach nie wieder.
   setupTitle: "First sign-in",
   setupLead:

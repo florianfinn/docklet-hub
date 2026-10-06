@@ -136,7 +136,7 @@ test("monitor-events is bound to its one caller", () => {
 
 test("only rows with onlyActor reject a caller at the route level", () => {
   const bound = ROUTES.filter((route) => route.onlyActor !== undefined).map((route) => route.pattern);
-  assert.deepEqual(bound, ["/monitor-events"]);
+  assert.deepEqual(bound, ["/self-healing/config", "/monitor-events"]);
   for (const route of ROUTES) {
     if (route.onlyActor !== undefined) continue;
     for (const method of route.methods) {
