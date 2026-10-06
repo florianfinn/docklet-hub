@@ -36,7 +36,7 @@ const stackMarks = (stack: StackView) => (
   <MarkList marks={stack.marks} limit={ROW_MARK_LIMIT} />
 );
 
-const containerUsage = (container: OverviewContainer) => <RowUsage container={container} />;
+const containerUsage = (container: OverviewContainer, hostId: string) => <RowUsage container={container} hostId={hostId} />;
 
 // Der Deckel gilt: die Zeile trägt schon Punkt, Namen und Statustext.
 const readOnlyContainerMarks = (container: OverviewContainer) => (

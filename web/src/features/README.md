@@ -30,3 +30,8 @@ und 3. Die Grenzen prüft `.dependency-cruiser.mjs`, die Türen
 | `containers/` | Übersicht (`OverviewView.tsx`) und Container-Fläche (`ContainersView.tsx`, `ContainerBrowser.tsx`) mit Host-Gruppen, Stack- und Container-Zeilen, Suche und Filter (`container-filter.ts`), fremdverwaltete Container, die Tafeln „Hub und Agenten“ und „Container von Hub und Agenten“ der Einstellungen, Aufrufe (`api.ts`), Abfragen (`overview-queries.ts`), Texte (`messages/`); Marken und Auslastung stecken die Plätze `ContainerSlots` aus `app/containers/` herein |
 | `metrics/` | Auslastung: Karte „Auslastung“ im Container-Detail (`ContainerMetrics.tsx`, fragt alle zehn Sekunden über `metrics-queries.ts`), letzter Wert in der Container-Zeile (`RowUsage.tsx`), Last durch Container auf der Host-Karte (`ContainerLoad.tsx`), Aufbereitung der Messwerte (`metric-values.ts`), Aufruf (`api.ts`), Texte (`messages/`); Zeile und Karte stecken `app/containers/` und `app/screens/HostsScreen.tsx` über die Plätze `containerUsage` und `renderLoad` herein; die Sparkline liegt in `platform/ui/metrics/` |
 | `resources/` | Ressourcen eines Hosts (`ResourcesView.lazy.tsx`, eingerahmt von `app/screens/HostResourcesScreen.tsx`): Speicherbelegung, Images, Volumes und Netze mit Verwendern und Merkmalen, Aufruf (`api.ts`), Abfrage (`resource-queries.ts`), reine Hilfen (`resource-values.ts`), Texte (`messages/`); den Verweis auf der Host-Karte steckt `app/screens/HostsScreen.tsx` über `renderActions` herein |
+
+`live-events/` hält einen gemeinsamen NDJSON-Strom im angemeldeten App-Baum
+und aktualisiert betroffene Host- und Containerabfragen. Der gemeinsame
+Veraltet-Zustand und die Erhaltung letzter Werte liegen in `domain/hosts/`.
+Begründung: `docs/design/live-events.md`.

@@ -2,6 +2,7 @@ import { useTranslations } from "use-intl";
 
 import type { HostLoad } from "contract";
 
+import { MeasurementStale } from "../../domain/hosts";
 import { byteSize, useLanguage } from "../../platform/i18n";
 import { LazySparkline } from "../../platform/ui/metrics/LazySparkline";
 import { formatPercent, hasValues, loadCpuPoints, loadMemoryPoints } from "./metric-values";
@@ -37,6 +38,7 @@ export function ContainerLoad({ hostId, load }: { hostId: string; load: HostLoad
     <div className="flex flex-col gap-2 border-t border-border px-4 py-3" data-testid={`host-load-${hostId}`}>
       <p className="flex items-baseline gap-2 text-[13px] font-medium">
         {t("hostLoadTitle")}
+        <MeasurementStale hostId={hostId} sampledAt={load.series.at(-1)?.sampledAt ?? null} />
         <span className="text-xs font-normal text-subtle-foreground">{t("metricsHistory")}</span>
       </p>
       <div className="grid gap-3 sm:grid-cols-2">

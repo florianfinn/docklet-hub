@@ -51,6 +51,7 @@ export type HostCycleServiceOptions = {
   agentSecret: string;
   intervalSeconds: number;
   log: (message: string) => void;
+  onInventoryChanged?: (hostId: string) => Promise<void>;
   logError: (message: string, error: unknown) => void;
 };
 
@@ -159,6 +160,9 @@ export function startHostCycleService(options: HostCycleServiceOptions): HostCyc
       // machte das Log unlesbar — und die eine Meldung, auf die es ankommt,
       // ginge darin unter (dieselbe Überlegung wie beim Warten auf die
       // Datenbank in `index.ts`).
+      for (const host of result.hosts) {
+        if (host.status === "synced") await options.onInventoryChanged?.(host.hostId);
+      }
       const summary = summarize(result);
       if (summary !== null) options.log(summary);
     },

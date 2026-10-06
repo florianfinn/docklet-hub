@@ -70,6 +70,15 @@ export function registerContainersRoutes(
     })
   );
 
+  router.get(
+    "/hosts/:hostId/overview",
+    withSession(auth, async (request, response, user) => {
+      const hosts = await service.overview({ userId: user.id, hostId: String(request.params.hostId) });
+      if (hosts.length === 0) { response.status(404).json({ error: "host-unknown" }); return; }
+      response.json({ hosts });
+    })
+  );
+
   // Ob Übersicht und Container-Fläche die Container des Leitstands selbst
   // zeigen. `requireAdmin` wie die übrigen Einstellungen des Hubs (#17).
   //

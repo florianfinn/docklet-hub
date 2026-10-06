@@ -12,6 +12,7 @@ Zielbild und Begründungen. Arbeitsstand steht in GitHub Issues und Meilensteine
 | [hub-color-and-structure.md](hub-color-and-structure.md) | Farbsystem und Gliederung der Oberfläche |
 | [language-layer.md](language-layer.md) | Die Sprachschicht der Oberfläche |
 | [lifecycle-controls.md](lifecycle-controls.md) | Bedienvertrag für Start, Stopp und Neustart |
+| [live-events.md](live-events.md) | Live-Ereignisse, begrenzte Wiederverbindung, Cache und Refresh-Schnittstelle |
 | [management-aids.md](management-aids.md) | Arbeitshilfen der Verwaltung |
 | [notification-channels.md](notification-channels.md) | Meldekanäle und Eskalation |
 | [outage-signals.md](outage-signals.md) | Ausfälle und Wiederherstellung |

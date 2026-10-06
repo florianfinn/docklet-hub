@@ -66,11 +66,12 @@ export type HostRouteOptions = {
   readHostInfo?: (hostId: string) => HostInfo | null;
   /** The load by containers (#214). `features.ts` hands it in; why there, it says. */
   hostLoad: HostLoadOf;
+  liveEvents?: { removeHost: (hostId: string) => void };
 };
 
 export function registerHostRoutes(
   router: Router,
-  { auth, pool, repository, enrollment, agentSecret, probeHost, readHostInfo = () => null, hostLoad }: HostRouteOptions
+  { auth, pool, repository, enrollment, agentSecret, probeHost, readHostInfo = () => null, hostLoad, liveEvents }: HostRouteOptions
 ): void {
   // Resolved once at registration; see `resolveProbeHost` in
   // `domain/hosts/health.ts`.
@@ -166,6 +167,7 @@ export function registerHostRoutes(
     guarded(async (request, response) => {
       try {
         await enrollment.removeHost(String(request.params.hostId));
+        liveEvents?.removeHost(String(request.params.hostId));
         response.status(204).end();
       } catch (error) {
         if (!handleHostError(error, response)) throw error;

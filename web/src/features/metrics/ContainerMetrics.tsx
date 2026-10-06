@@ -1,5 +1,6 @@
 import { useTranslations } from "use-intl";
 
+import { MeasurementStale } from "../../domain/hosts";
 import { byteSize, useLanguage } from "../../platform/i18n";
 import { LazySparkline } from "../../platform/ui/metrics/LazySparkline";
 import { Card } from "../../platform/ui/shadcn/card";
@@ -69,6 +70,7 @@ function LiveMetrics({ hostId, containerId }: { hostId: string; containerId: str
     <Card className="gap-3 border-card-line bg-body-face p-4" data-testid="container-metrics">
       <p className="flex items-baseline gap-2 text-sm font-medium">
         {t("metricsTitle")}
+        <MeasurementStale hostId={hostId} sampledAt={stats?.sampledAt ?? null} />
         <span className="text-xs font-normal text-subtle-foreground">{t("metricsHistory")}</span>
       </p>
       {failed ? (

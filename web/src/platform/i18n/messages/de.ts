@@ -31,6 +31,8 @@
 // alle Teile.
 
 export const de = {
+  liveStateStale: "Live-Stand getrennt oder veraltet",
+  liveMeasurementStale: "Messwerte veraltet",
   // The tab bar of the stack page. The texts of the tabs themselves live in
   // the features `logs` and `compose` (`web/src/features/<name>/messages/`).
   stackTabsLabel: "Reiter dieses Stacks",

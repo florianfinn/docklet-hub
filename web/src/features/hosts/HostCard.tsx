@@ -1,3 +1,4 @@
+import { LiveStatusLabel } from "../../domain/hosts";
 import { Download, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslations, type Messages } from "use-intl";
@@ -262,6 +263,7 @@ export function HostCard({ host, role, counters, onRemoved, onAgentUpdated, rend
           {kindKey === null ? t("hostKindUnknown", { kind: host.kind }) : t(kindKey)}
         </Badge>
         <HostStatusBadge status={host.status} />
+        <LiveStatusLabel hostId={host.id} />
         <span className="ml-auto">
           <HostCounts counters={counters} />
         </span>

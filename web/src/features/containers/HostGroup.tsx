@@ -1,3 +1,4 @@
+import { LiveStatusLabel } from "../../domain/hosts";
 import { ChevronRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "use-intl";
@@ -105,6 +106,7 @@ export function HostGroup({ entry, filter, query, onHiddenChange, slots }: HostG
         <HostStatusDot status={entry.host.status} className="size-[9px]" />
         <span className="font-mono text-sm font-medium">{entry.host.name}</span>
         <HostStatusBadge status={entry.host.status} />
+        <LiveStatusLabel hostId={entry.host.id} />
         {answered ? (
           <span className="flex items-center gap-1.5 font-mono text-[11.5px] text-subtle-foreground">
             <span>{t("hostStacksCount", { count: entry.stacks.length })}</span>

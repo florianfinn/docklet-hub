@@ -168,3 +168,11 @@ test("ein Wert, der kein Wahrheitswert ist, wird abgelehnt und nichts geschriebe
   }
   assert.deepEqual(calls.written, []);
 });
+
+ test("scoped overview asks only the selected host under the session actor", async () => {
+  const first = record("first"); const second = record("second");
+  const { service, calls } = serviceWith([first, second]);
+  const result = await service.overview({ userId: "user-1", hostId: second.id });
+  assert.deepEqual(result.map((entry) => entry.host.id), [second.id]);
+  assert.deepEqual(calls.fetched, [{ baseUrl: second.agentUrl, actor: { kind: "user", id: "user-1" } }]);
+});
