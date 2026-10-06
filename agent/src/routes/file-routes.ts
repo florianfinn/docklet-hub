@@ -229,7 +229,7 @@ export async function handleFileList(ctx: ContainerRouteContext): Promise<void> 
   });
 
   // ⚠️ Only the RELATIVE path goes out. The absolute one reveals the
-  // structure of the host, and this route is also open externally via grant —
+  // structure of the host, and this route is also open via a grant —
   // the same line as for the log sources (§16.3).
   send(response, 200, {
     share: before.shareRelative,

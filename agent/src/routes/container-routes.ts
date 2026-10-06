@@ -203,7 +203,7 @@ export async function handleLogs(ctx: ContainerRouteContext): Promise<void> {
   // ⚠️ Redaction as for the live stream (§16.4 point 1). Up to R2 it was
   // missing precisely HERE: the one-off snapshot is older than S6 and went
   // out raw, while the same content was masked in the stream. It is also
-  // reachable externally via the same grant-required scope and is
+  // reachable via the same grant-required scope and is
   // additionally used by the guided update as a 25-line attachment — masking
   // that depends on the chosen endpoint is no masking.
   const composeContext = verifiedComposeContextForLogs(
@@ -524,7 +524,7 @@ export async function handleLogFile(ctx: ContainerRouteContext): Promise<void> {
     "x-accel-buffering": "no"
   });
   // ⚠️ The ABSOLUTE path stays in here: it names the structure of the host
-  // and this route is also reachable externally via a grant. Only the
+  // and this route is also reachable via a grant. Only the
   // relative path, which the caller knows anyway, goes outside.
   const streamAbort = new AbortController();
   const onDisconnect = () => streamAbort.abort();

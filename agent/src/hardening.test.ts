@@ -66,9 +66,8 @@ test("an ANCESTOR of the socket is the same finding — not just a warning", () 
   // ⚠️ Finding from R3 (§27.4). Until then isDockerSocket only compared for
   // equality: `/var/run:/var/run` contains the socket but was classified as
   // `sensitive-host-path` (warning), and `/var:/var` even only as
-  // `bind-outside-base` (hint). Both containers were therefore DELEGABLE —
-  // they could receive a grant and were externally controllable, although
-  // they are host root via the contained socket.
+  // `bind-outside-base` (hint). Both containers would then carry no
+  // delegation lock, although they are host root via the contained socket.
   //
   // That is word for word the lesson S9 had already drawn for
   // `dashboard-self-mount`: a prefix list is blind to ancestors. It did not
@@ -176,8 +175,7 @@ test("a mount ABOVE the operational directories locks just the same", () => {
 // Until S23 the list of own operational directories was a constant with LOCAL
 // paths. On a remote host it never matched — one of the five
 // delegation locks was effectively switched off there, and a container that
-// mounts the agent directory would have been shareable via grant and
-// externally controllable.
+// mounts the agent directory would have carried no delegation lock.
 
 test("a remote host protects ITS own directories", () => {
   const selfPaths = ["/mnt/user/appdata/dashboard-agent-bootstrap"];

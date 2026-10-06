@@ -103,8 +103,8 @@ export function envPlaintextOf(env: string[] | null | undefined): Record<string,
 }
 
 export type SummaryOptions = {
-  // Only true if the main API has proven destructive rights. The default is deliberately false: whoever specifies nothing gets no
-  // secrets.
+  // Only true if the main API has proven destructive rights. The default is
+  // deliberately false: whoever specifies nothing gets no secrets.
   includeEnvPlaintext?: boolean;
   // Base path of the bind mount allowlist (stage 5a). Without it this one rule
   // does not run — see HardeningOptions.

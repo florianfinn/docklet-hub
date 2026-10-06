@@ -106,8 +106,7 @@ export const hardeningOptions = { bindBasePath: config.bindBasePath, selfPaths: 
 // Compose directories of all managed containers). That is its job, not its
 // secret. If this path were treated as "own", EVERY container with a bind
 // below it would be a delegation lock — that is, practically the entire
-// inventory, which would then be invisible externally and no longer
-// delegable.
+// inventory.
 //
 // That is why only what lies TRULY BELOW the base path counts (that is where
 // the agent's project directory with .env and wg0.conf sits) or entirely
