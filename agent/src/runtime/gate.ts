@@ -87,8 +87,8 @@ export async function gate(
   //
   // The delegation lock (the rules whose statement is "this container IS the
   // host", plus `volume-unresolved` while that cannot be checked) is reported
-  // and audited but does not block. A mutating action on such a container gets
-  // its own audit entry, so it is distinguishable in the log from any other.
+  // but does not block. Mutating actions pass the note to onDelegation for the
+  // handler's action audit, or write a separate entry when no callback is given.
   const inspected = await inspectedContainer(inspect);
   const hardeningOptions = hardeningOptionsFor(containerId);
   const report = hardeningReport(inspected, hardeningOptions);

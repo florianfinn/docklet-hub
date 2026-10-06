@@ -108,12 +108,11 @@ test("unreadable foreign definition uses only the existing services", async () =
   assert.equal(f.calls.some((call) => call.name === "start"), true);
 });
 
-for (const action of ["start", "restart"] as const) for (const error of ["compose-config-failed", "runtime-image-missing", "stack-service-not-allowlisted", "externally-managed"]) {
+for (const action of ["start", "restart"] as const) for (const error of ["runtime-image-missing", "stack-service-not-allowlisted", "externally-managed"]) {
   test(`preflight ${error} leaves the stack unchanged before ${action} and rereads ids`, async () => {
     const f = fixture();
     f.setAfter(f.prepared.context);
-    if (error === "compose-config-failed") f.prepared.definitionReadable = false;
-    else if (error === "runtime-image-missing") f.ops.imageId = async () => null;
+    if (error === "runtime-image-missing") f.ops.imageId = async () => null;
     else f.ops.checkCreateScope = () => { throw new StackEndpointError(403, error); };
     const result = await stackResult(f.ops, action, f.body);
     assert.equal(result.body.error, error);

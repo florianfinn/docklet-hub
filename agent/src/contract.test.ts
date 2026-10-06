@@ -45,7 +45,7 @@ test("a changed contract needs a new contract number", () => {
     9: "316edce52066f64f7ad6d774ca40a68bc16d8321f3400741ada74c5aeb2b69b6",
     10: "14858fa82db200035630dc67291bc686be0d6c3961cded9ec4d6fab926deafe2",
     11: "131c3b084c20c29860f2b9647732c2e4d90756f7c2725a4b7465fb5940ac605b",
-    12: "4590adf749ff2a5d37e0f5439bd40f19a62df5bf803cdf507647353af38004b9"
+    12: "cefef26986ee9486132ded37e9c673c6c180e29088f8e5e6dcc3fd17dc7fa8da"
   };
   const actual = createHash("sha256").update(JSON.stringify(AGENT_CONTRACT)).digest("hex");
   assert.equal(actual, hashes[CONTRACT_VERSION]);

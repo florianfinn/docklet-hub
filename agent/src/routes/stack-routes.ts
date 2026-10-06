@@ -508,7 +508,7 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
   let releaseStream: (() => void) | null = null;
   let mutationStarted = false;
   const delegation = new Set<string>();
-  const auditReason = (reason: string) => [reason, ...delegation].join("; ");
+  const auditReason = (reason: string) => [...delegation, reason].join("; ");
   const streaming = streamSuffix || request.headers.accept?.includes("application/x-ndjson") === true;
   try {
     const project = stackProjectFromRegistry(anchorContainerId);

@@ -9,6 +9,7 @@ import { Readable } from "node:stream";
 import type http from "node:http";
 import test, { after, type TestContext } from "node:test";
 import { stackActionStreamLineSchema, type RuntimeAction } from "contract";
+import { AgentAuditLog, MAX_FIELD_CHARS } from "./audit.js";
 import { ComposeError } from "./compose-cli.js";
 import { EngineError, type RawInspect } from "./engine.js";
 
@@ -67,10 +68,10 @@ class Response extends EventEmitter {
   end(chunk?: string) { if (chunk) this.chunks.push(chunk); this.writableEnded = true; }
 }
 
-function fixture(t: TestContext, cell: Cell) {
+function fixture(t: TestContext, cell: Cell, options: { stderr?: string; persistedAudit?: AgentAuditLog } = {}) {
   registry.replaceAll([{ ...entry, externallyManaged: cell.scope === "foreign-stack" }]);
   const diagnostic = `fault-${cell.scope}-${cell.action}-${cell.transport}-${cell.stage}-${cell.kind}`;
-  const stderr = `stderr-${diagnostic}`;
+  const stderr = options.stderr ?? `stderr-${diagnostic}`;
   const failure = cell.kind === "engine" ? new EngineError(`engine responded 503: ${JSON.stringify({ message: diagnostic })}`, 503) :
     cell.kind === "compose" ? new ComposeError(diagnostic, stderr, 17) : new Error(diagnostic);
   let hits = 0;
@@ -86,7 +87,10 @@ function fixture(t: TestContext, cell: Cell) {
     ...(cell.delegation ? { HostConfig: { Privileged: true } } : {}),
     State: { Status: mutations && cell.action !== "stop" ? "running" : "exited", StartedAt: "seen", ExitCode: 0 } });
   const records: Parameters<typeof audit.write>[0][] = [];
-  t.mock.method(audit, "write", (record: Parameters<typeof audit.write>[0]) => { records.push(record); });
+  t.mock.method(audit, "write", (record: Parameters<typeof audit.write>[0]) => {
+    records.push(record);
+    options.persistedAudit?.write(record);
+  });
   t.mock.method(engine, "inspect", async (containerId: string) => {
     reads++;
     if (cell.stage === "first-gate" && cell.scope === "container" && reads === 1) inject();
@@ -205,6 +209,29 @@ for (const scope of scopes) for (const kind of kinds) {
     assert.ok(f.records[0].reason?.includes(f.diagnostic));
     assert.match(String(f.records[0].reason), /delegation-lock-allowed:/);
     assert.equal(f.response.chunks.join("").includes("delegation-lock-allowed"), false);
+  });
+}
+
+for (const scope of scopes) for (const transport of scope === "container" ? ["sync"] as const : transports) {
+  test(`delegation hint survives persisted audit truncation: ${scope} / ${transport}`, async (t) => {
+    const auditFile = path.join(directory, `delegation-${scope}-${transport}.ndjson`);
+    const stderr = "compose diagnostic ".repeat(30);
+    assert.ok(stderr.length > MAX_FIELD_CHARS);
+    const f = fixture(t, { scope, action: "start", transport, kind: "compose",
+      stage: scope === "container" ? "engine-command" : "compose-command", delegation: true },
+    { stderr, persistedAudit: new AgentAuditLog(auditFile) });
+    await assert.doesNotReject(f.run);
+    assert.ok(f.hits() > 0);
+    assert.equal(f.records.length, 1);
+    assert.ok(f.records[0].reason?.includes(stderr));
+    const lines = fs.readFileSync(auditFile, "utf8").trim().split("\n");
+    assert.equal(lines.length, 1);
+    const persisted = JSON.parse(lines[0]) as { outcome: string; reason: string };
+    assert.equal(persisted.outcome, "error");
+    assert.equal(persisted.reason.length, MAX_FIELD_CHARS + 1);
+    assert.ok(persisted.reason.endsWith("…"));
+    assert.match(persisted.reason, /delegation-lock-allowed: privileged/);
+    assert.ok(persisted.reason.includes("compose-action-failed"));
   });
 }
 

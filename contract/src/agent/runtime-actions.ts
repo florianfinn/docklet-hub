@@ -32,7 +32,7 @@ export type RuntimeOutcome = z.infer<typeof runtimeOutcomeSchema>;
 
 export const RUNTIME_ACTION_ERRORS = [
   "state-changed", "action-queue-timeout", "action-caller-disconnected",
-  "runtime-image-missing", "runtime-state-unreadable", "runtime-target-not-reached", "runtime-stream-failed",
+  "runtime-image-missing", "runtime-state-unreadable", "runtime-target-not-reached",
   "compose-config-failed", "compose-services-missing", "compose-stack-action-failed",
   "engine-action-failed", "compose-action-failed", "internal-error", "registry-reanchor-failed", "container-anchor-mismatch"
 ] as const;

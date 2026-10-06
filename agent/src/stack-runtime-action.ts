@@ -42,7 +42,6 @@ export async function executeStackRuntimeAction(
     })) throw new StackEndpointError(409, "state-changed");
     if (creating) {
       ops.checkCreateScope(prepared);
-      if (!prepared.definitionReadable) throw new StackEndpointError(409, "compose-config-failed");
       const services = (prepared.normalized as { services: Record<string, { image?: string }> }).services;
       for (const name of prepared.definition.services) {
         const image = services[name]?.image;

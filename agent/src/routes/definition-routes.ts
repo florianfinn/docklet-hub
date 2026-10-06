@@ -378,7 +378,7 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
   let containerName: string | null = null;
   const delegation = new Set<string>();
   const onDelegation = (reason: string) => { delegation.add(reason); };
-  const auditReason = (reason?: string) => [reason, ...delegation].filter(Boolean).join("; ") || undefined;
+  const auditReason = (reason?: string) => [...delegation, reason].filter(Boolean).join("; ") || undefined;
   try {
     const initial = await gate(containerId, { mutating: true, action, actor, onDelegation });
     if (!initial.ok) throw new StackEndpointError(initial.status, initial.reason);
