@@ -487,8 +487,10 @@ export async function handleStackContext(ctx: RouteContext, stackContextMatch: R
 export async function handleStackAction(ctx: RouteContext, stackActionMatch: RegExpMatchArray): Promise<void> {
   const { request, response, actor } = ctx;
   const anchorContainerId = decodeURIComponent(stackActionMatch[1]);
-  const requestedAction = decodeURIComponent(stackActionMatch[2]).replace(/-stream$/, "");
-  if (!isStackAction(requestedAction)) {
+  const actionPath = decodeURIComponent(stackActionMatch[2]);
+  const streamSuffix = actionPath.endsWith("-stream");
+  const requestedAction = actionPath.replace(/-stream$/, "");
+  if (!isStackAction(requestedAction) || (streamSuffix && requestedAction !== "start" && requestedAction !== "stop" && requestedAction !== "restart")) {
     send(response, 400, { error: "invalid-stack-action" });
     return;
   }
@@ -503,7 +505,7 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
 
   const connection = actionConnection(request, response);
   let releaseStream: (() => void) | null = null;
-  const streaming = stackActionMatch[2].endsWith("-stream") || request.headers.accept?.includes("application/x-ndjson") === true;
+  const streaming = streamSuffix || request.headers.accept?.includes("application/x-ndjson") === true;
   try {
     const project = stackProjectFromRegistry(anchorContainerId);
     if (action === "start" || action === "stop" || action === "restart") {
@@ -514,7 +516,7 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
       const responder = stackRuntimeResponder(response, action, project.projectName, streaming);
       const result = await runStackRuntimeAction(project, anchorContainerId, action, body, actor, connection.signal, streaming ? responder : {});
       audit.write({ action: `stack-${action}`, containerId: anchorContainerId, containerName: project.anchorEntry.containerName,
-        actor, outcome: result.body.ok ? "allowed" : "error", reason: result.body.error ?? result.body.outcome });
+        actor, outcome: result.body.ok ? "allowed" : result.mutationStarted ? "error" : "denied", reason: result.body.error ?? result.body.outcome });
       responder.finish(result);
       return;
     }

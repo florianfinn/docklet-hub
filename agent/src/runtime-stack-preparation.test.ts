@@ -6,6 +6,7 @@ import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 import type http from "node:http";
 import { EngineError } from "./engine.js";
+import { ComposeError } from "./compose-cli.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -216,10 +217,10 @@ for (const action of ["start", "stop", "restart"]) {
   });
 }
 
-function mockCompose(t: TestContext, execute: (args: string[], done: () => void) => void = (_args, done) => done()) {
+function mockCompose(t: TestContext, execute: (args: string[], done: (error?: Error) => void) => void = (_args, done) => done()) {
   t.mock.method(childProcess, "execFile", (_file: string, args: string[], _options: unknown,
     callback: (error: Error | null, stdout: string, stderr: string) => void) => {
-    execute(args, () => callback(null, args.includes("config") ? JSON.stringify({ services: { web: { image: "example/app:1.0" } } }) : "", ""));
+    execute(args, (error) => callback(error ?? null, args.includes("config") ? JSON.stringify({ services: { web: { image: "example/app:1.0" } } }) : "", error?.message ?? ""));
     return {} as childProcess.ChildProcess;
   });
   syncBuiltinESMExports();
@@ -321,5 +322,169 @@ for (const action of ["apply", "down"]) {
     await handleStackAction(req.context, req.context.url.pathname.match(/^\/stacks\/([^/]+)\/actions\/([^/]+)$/)!);
     assert.equal(req.response.status, 409);
     assert.equal(req.response.body.error, "stack-expectation-mismatch");
+  });
+}
+
+function recordAudit(t: TestContext) {
+  const records: Array<Parameters<typeof audit.write>[0]> = [];
+  t.mock.method(audit, "write", (record: Parameters<typeof audit.write>[0]) => { records.push(record); });
+  return records;
+}
+
+for (const source of ["inventory", "inspect", "unknown"] as const) {
+  test(`container preflight ${source} failure is audited before the response without mutation`, async (t) => {
+    mockEngine(t);
+    const records = recordAudit(t);
+    const failure = source === "unknown" ? new Error("inventory unavailable") :
+      new EngineError('engine responded 500: {"message":"inventory unavailable"}', 500);
+    if (source === "inspect") {
+      let reads = 0;
+      t.mock.method(engine, "inspect", async () => { if (++reads === 3) throw failure; return inspect(); });
+    } else t.mock.method(engine, "listWithComposeLabels", async () => { throw failure; });
+    let mutations = 0;
+    t.mock.method(engine, "start", async () => { mutations++; });
+    const req = containerRequest("start");
+    const end = req.response.end.bind(req.response);
+    t.mock.method(req.response, "end", (payload: string) => { assert.equal(records.length, 1); end(payload); });
+    await handleSafeAction(req.context);
+    assert.equal(mutations, 0);
+    assert.equal(req.response.status, 500);
+    assert.equal(req.response.body.error, source === "unknown" ? "internal-error" : "engine-action-failed");
+    assert.deepEqual(records.map(({ outcome, reason }) => ({ outcome, reason })), [{ outcome: "denied",
+      reason: source === "unknown" ? "Error: inventory unavailable" : "engine-action-failed: inventory unavailable" }]);
+  });
+}
+
+for (const failure of ["name-mismatch", "project-mismatch", "registry-reanchor-failed"] as const) {
+  test(`container preflight ${failure} returns an audited anchor conflict`, async (t) => {
+    mockEngine(t);
+    const records = recordAudit(t);
+    t.mock.method(engine, "listWithComposeLabels", async () => inventory("new"));
+    t.mock.method(engine, "inspect", async (id: string) => ({ ...inspect(id),
+      ...(id === "new" && failure === "name-mismatch" ? { Name: "/other-web-1" } : {}),
+      ...(id === "new" && failure === "project-mismatch" ? { Config: { ...inspect(id).Config,
+        Labels: { ...labels, "com.docker.compose.project": "other" } } } : {}) }));
+    if (failure === "registry-reanchor-failed") t.mock.method(registry, "replaceContainerId", () => false);
+    let mutations = 0;
+    t.mock.method(engine, "start", async () => { mutations++; });
+    const req = containerRequest("start");
+    await handleSafeAction(req.context);
+    const code = failure === "registry-reanchor-failed" ? failure : "container-anchor-mismatch";
+    assert.equal(mutations, 0);
+    assert.equal(req.response.status, 409);
+    assert.equal(req.response.body.error, code);
+    assert.equal(records.length, 1);
+    assert.equal(records[0].outcome, "denied");
+    assert.equal(records[0].reason, code);
+  });
+}
+
+for (const failure of [new EngineError("start refused by engine", 409), new ComposeError("start refused by Compose", "private tool output", 7)]) {
+  test(`container ${failure.name} keeps the full audit reason after mutation begins`, async (t) => {
+    mockEngine(t);
+    const records = recordAudit(t);
+    let mutations = 0;
+    t.mock.method(engine, "start", async () => { mutations++; throw failure; });
+    const req = containerRequest("start");
+    await handleSafeAction(req.context);
+    const compose = failure instanceof ComposeError;
+    assert.equal(mutations, 1);
+    assert.equal(req.response.status, compose ? 502 : 409);
+    assert.equal(req.response.body.error, compose ? "compose-action-failed" : "engine-action-failed");
+    assert.equal(records.length, 1);
+    assert.equal(records[0].outcome, "error");
+    assert.equal(records[0].reason, compose ? "compose-action-failed (exit 7): start refused by Compose" : "engine-action-failed: start refused by engine");
+    assert.equal("auditReason" in req.response.body, false);
+    assert.equal(JSON.stringify(req.response.body).includes("private tool output"), false);
+  });
+}
+
+for (const action of ["apply-stream", "down-stream"]) {
+  test(`stack ${action} is rejected before any project or Compose access`, async (t) => {
+    mockEngine(t);
+    let calls = 0;
+    t.mock.method(engine, "listWithComposeLabels", async () => { calls++; return inventory(); });
+    mockCompose(t, (_args, done) => { calls++; done(); });
+    const req = stackRequest(action, { expectedStack: expectedStack(), confirmation: "app" });
+    await handleStackAction(req.context, req.context.url.pathname.match(/^\/stacks\/([^/]+)\/actions\/([^/]+)$/)!);
+    assert.equal(req.response.status, 400);
+    assert.equal(req.response.body.error, "invalid-stack-action");
+    assert.equal(calls, 0);
+  });
+}
+
+for (const reason of ["state-changed", "compose-config-failed", "runtime-image-missing", "stack-service-gate-denied", "stack-service-not-allowlisted", "externally-managed", "action-queue-timeout", "action-caller-disconnected"] as const) {
+  test(`stack runtime preflight ${reason} is audited as denied without mutation`, async (t) => {
+    mockEngine(t);
+    const records = recordAudit(t);
+    const commands: string[][] = [];
+    if (reason === "stack-service-not-allowlisted") t.mock.method(engine, "listWithComposeLabels", async () => [
+      ...inventory(), { ...inventory("neighbour")[0], labels: { ...labels, "com.docker.compose.service": "job" } }
+    ]);
+    mockCompose(t, (args, done) => {
+      commands.push(args);
+      done(reason === "compose-config-failed" && args.includes("config") ? new Error("definition unreadable") : undefined);
+    });
+    t.mock.method(engine, "imageId", async () => {
+      if (reason === "externally-managed") registry.replaceAll([{ ...entry, externallyManaged: true }]);
+      if (reason === "stack-service-gate-denied") registry.replaceAll([{ ...entry, observeOnly: true }]);
+      return reason === "runtime-image-missing" ? null : "local-image";
+    });
+    if (reason === "action-queue-timeout" || reason === "action-caller-disconnected") {
+      t.mock.method(stackLocks, "runExclusive", async () => { throw new ActionQueueError(reason); });
+    }
+    const stack = expectedStack();
+    if (reason === "state-changed") stack.services[0].status = "running";
+    const req = stackRequest("start", { expectedStack: stack, applyDefinition: false });
+    await handleStackAction(req.context, req.context.url.pathname.match(/^\/stacks\/([^/]+)\/actions\/([^/]+)$/)!);
+    assert.equal(req.response.status, reason.startsWith("stack-service-") || reason === "externally-managed" ? 403 : 409);
+    assert.equal(req.response.body.error, reason);
+    assert.equal(commands.some((args) => args.includes("up") || args.includes("start") || args.includes("stop")), false);
+    assert.equal(records.length, 1);
+    assert.equal(records[0].outcome, "denied");
+    assert.equal(records[0].reason, reason);
+    assert.equal("mutationStarted" in req.response.body, false);
+  });
+}
+
+test("stack runtime unreadable state after a successful command is audited as error", async (t) => {
+  mockEngine(t);
+  const records = recordAudit(t);
+  t.mock.method(engine, "imageId", async () => "local-image");
+  let mutations = 0;
+  mockCompose(t, (args, done) => { if (args.includes("up")) mutations++; done(); });
+  t.mock.method(engine, "listWithComposeLabels", async () => {
+    if (mutations) throw new EngineError("inventory unavailable", 500);
+    return inventory();
+  });
+  const req = stackRequest("start", { expectedStack: expectedStack(), applyDefinition: false });
+  await handleStackAction(req.context, req.context.url.pathname.match(/^\/stacks\/([^/]+)\/actions\/([^/]+)$/)!);
+  assert.equal(mutations, 1);
+  assert.equal(req.response.status, 409);
+  assert.equal(req.response.body.error, "runtime-state-unreadable");
+  assert.equal(records.length, 1);
+  assert.equal(records[0].outcome, "error");
+  assert.equal(records[0].reason, "runtime-state-unreadable");
+});
+
+for (const action of ["start", "stop", "restart"] as const) {
+  test(`stack runtime ${action} CLI failure after mutation begins is audited as error`, async (t) => {
+    mockEngine(t);
+    const records = recordAudit(t);
+    t.mock.method(engine, "imageId", async () => "local-image");
+    let mutations = 0;
+    mockCompose(t, (args, done) => {
+      if (args.includes("config")) done();
+      else { mutations++; done(new Error("mutation failed")); }
+    });
+    const req = stackRequest(action, { expectedStack: expectedStack(), ...(action === "stop" ? {} : { applyDefinition: true }) });
+    await handleStackAction(req.context, req.context.url.pathname.match(/^\/stacks\/([^/]+)\/actions\/([^/]+)$/)!);
+    assert.equal(mutations, 1);
+    assert.equal(req.response.status, 409);
+    assert.equal(req.response.body.error, "compose-stack-action-failed");
+    assert.equal(records.length, 1);
+    assert.equal(records[0].outcome, "error");
+    assert.equal(records[0].reason, "compose-stack-action-failed");
+    assert.equal("mutationStarted" in req.response.body, false);
   });
 }

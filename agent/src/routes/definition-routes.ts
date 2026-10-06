@@ -1,6 +1,7 @@
 import { runtimeStateOf } from "../runtime-actions.js";
 import { StackEndpointError } from "../stack-control.js";
 import { executeContainerRuntimeAction } from "../container-runtime-action.js";
+import { actionFailureOf } from "../action-failure.js";
 import { ACTION_QUEUE_WAIT_MS } from "../runtime-actions.js";
 import { ActionQueueError } from "../concurrency.js";
 import { actionConnection } from "../runtime/action-connection.js";
@@ -410,8 +411,8 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
         catch (error) { if (error instanceof EngineError && error.status === 404) return null; throw error; }
         if (id !== containerId) {
           if (inspect.Name !== initial.inspect.Name ||
-              inspect.Config?.Labels?.["com.docker.compose.project"] !== context?.project) throw new Error("container-anchor-mismatch");
-          if (!registry.isAllowed(id) && !registry.replaceContainerId(containerId, id)) throw new Error("registry-reanchor-failed");
+              inspect.Config?.Labels?.["com.docker.compose.project"] !== context?.project) throw new StackEndpointError(409, "container-anchor-mismatch");
+          if (!registry.isAllowed(id) && !registry.replaceContainerId(containerId, id)) throw new StackEndpointError(409, "registry-reanchor-failed");
         }
         return inspect;
       };
@@ -437,13 +438,18 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
       }, action as RuntimeAction, parsed.value.expectedContainer, before, connection.signal);
     }, { waitMs: ACTION_QUEUE_WAIT_MS, signal: connection.signal });
     audit.write({ action, containerId, containerName: initial.inspect.Name.replace(/^\//, ""), actor,
-      outcome: result.status === 200 ? "allowed" : mutationStarted ? "error" : "denied", reason: "error" in result.body ? String(result.body.error) : undefined });
+      outcome: result.status === 200 ? "allowed" : mutationStarted ? "error" : "denied",
+      reason: ("auditReason" in result ? result.auditReason : undefined) ?? ("error" in result.body ? String(result.body.error) : undefined) });
     send(response, result.status, result.body);
   } catch (error) {
-    if (!(error instanceof ActionQueueError) && !(error instanceof StackEndpointError)) throw error;
+    const endpointError = error instanceof ActionQueueError || error instanceof StackEndpointError;
+    const failure = endpointError ? null : actionFailureOf(error);
+    const reason = endpointError ? error.code : failure?.auditReason ?? (error instanceof Error ? `${error.name}: ${error.message}` : String(error));
     audit.write({ action, containerId, containerName: initial.inspect.Name.replace(/^\//, ""), actor,
-      outcome: "denied", reason: error.code });
-    if (!response.destroyed) send(response, error instanceof StackEndpointError ? error.status : 409, { error: error.code });
+      outcome: mutationStarted ? "error" : "denied", reason });
+    if (!response.destroyed) send(response,
+      error instanceof StackEndpointError ? error.status : error instanceof ActionQueueError ? 409 : failure?.status ?? 500,
+      endpointError ? { error: error.code, ...(error instanceof StackEndpointError ? error.details : {}) } : failure?.body ?? { error: "internal-error" });
   } finally {
     connection.dispose();
   }

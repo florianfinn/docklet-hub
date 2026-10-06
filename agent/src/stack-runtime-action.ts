@@ -27,11 +27,12 @@ export async function executeStackRuntimeAction(
   action: RuntimeAction,
   body: StackActionRequest,
   options: { signal?: AbortSignal; onStart?: (applyDefinition: boolean, prepared: PreparedStack) => void; onProgress?: (service: RuntimeServiceResult) => void } = {}
-): Promise<{ status: number; body: StackRuntimeResult & { context: StackContextResponse } }> {
+): Promise<{ status: number; mutationStarted: boolean; body: StackRuntimeResult & { context: StackContextResponse } }> {
   const prepared = await ops.prepare();
   const applyDefinition = body.applyDefinition === true && !prepared.externallyManaged;
   const creating = !prepared.externallyManaged && (action === "start" || action === "restart");
   let errorCode: string | undefined;
+  let mutationStarted = false;
   let errorStatus = 409;
   let after: StackContextResponse;
   try {
@@ -59,8 +60,9 @@ export async function executeStackRuntimeAction(
     ]);
     if (options.signal?.aborted) throw new StackEndpointError(409, "action-caller-disconnected");
     ops.checkRuntimeScope(prepared);
+    if (creating) ops.checkCreateScope(prepared);
+    mutationStarted = true;
     if (creating) {
-      ops.checkCreateScope(prepared);
       if (action === "restart" && !applyDefinition) await ops.restart(timeoutMs, true);
       else await ops.up({ applyDefinition, forceRecreate: action === "restart", timeoutMs });
     }
@@ -88,6 +90,7 @@ export async function executeStackRuntimeAction(
   const ok = outcome === "ok" && !errorCode;
   return {
     status: ok ? 200 : errorStatus,
+    mutationStarted,
     body: {
       ok, action, applyDefinition, outcome, services,
       containerIds: Object.fromEntries(services.flatMap((service) => service.containerId ? [[service.serviceName, service.containerId]] : [])),

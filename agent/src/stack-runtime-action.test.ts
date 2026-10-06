@@ -103,6 +103,7 @@ for (const action of ["start", "restart"] as const) for (const error of ["compos
     else f.ops.checkCreateScope = () => { throw new StackEndpointError(403, error); };
     const result = await executeStackRuntimeAction(f.ops, action, f.body);
     assert.equal(result.body.error, error);
+    assert.equal(result.mutationStarted, false);
     assert.equal(f.calls.some((call) => ["up", "start", "stop", "stop-start", "stop-up"].includes(call.name)), false);
     assert.equal(result.body.containerIds.web, "old");
     assert.equal(f.calls.at(-1)?.name, "reanchor-read");
@@ -118,6 +119,7 @@ for (const change of ["id", "status", "startedAt"]) {
     if (change === "startedAt") expected.startedAt = "different";
     const result = await executeStackRuntimeAction(f.ops, "restart", f.body);
     assert.equal(result.body.error, "state-changed");
+    assert.equal(result.mutationStarted, false);
     assert.deepEqual(f.calls.map((call) => call.name), ["config", "reanchor-read"]);
     assert.equal(result.body.containerIds.web, "new");
   });
@@ -133,6 +135,7 @@ test("a CLI failure returns replacement ids and the actual per-service states", 
   assert.equal(result.body.services[0].exitCode, 2);
   assert.equal(result.body.services[0].health, "unhealthy");
   assert.equal(result.body.error, "compose-stack-action-failed");
+  assert.equal(result.mutationStarted, true);
 });
 
 test("stream callbacks preserve the exact synchronous result", async () => {
@@ -152,6 +155,7 @@ test("an aborted caller is discarded before the first mutation", async () => {
   controller.abort();
   const result = await executeStackRuntimeAction(f.ops, "stop", f.body, { signal: controller.signal });
   assert.equal(result.body.error, "action-caller-disconnected");
+  assert.equal(result.mutationStarted, false);
   assert.equal(f.calls.some((call) => call.name === "stop"), false);
 });
 
@@ -160,6 +164,7 @@ test("failed state read is an unknown outcome with no stale ids", async () => {
   f.ops.refresh = async () => { throw new Error("read failed"); };
   const result = await executeStackRuntimeAction(f.ops, "start", f.body);
   assert.equal(result.body.error, "runtime-state-unreadable");
+  assert.equal(result.mutationStarted, true);
   assert.equal(result.body.outcome, "failed");
   assert.deepEqual(result.body.containerIds, {});
 });
@@ -180,6 +185,7 @@ test("permission changes during image preflight still block the creating command
   const result = await executeStackRuntimeAction(f.ops, "start", f.body);
   assert.equal(result.status, 403);
   assert.equal(result.body.error, "externally-managed");
+  assert.equal(result.mutationStarted, false);
   assert.equal(f.calls.some((call) => call.name === "up"), false);
 });
 
@@ -189,6 +195,7 @@ test("runtime permission revocation also blocks stop and the non-creating restar
     f.ops.checkRuntimeScope = () => { throw new StackEndpointError(403, "stack-service-gate-denied"); };
     const result = await executeStackRuntimeAction(f.ops, action, f.body);
     assert.equal(result.status, 403);
+    assert.equal(result.mutationStarted, false);
     assert.equal(f.calls.some((call) => ["stop", "stop-start"].includes(call.name)), false);
   }
 });
@@ -225,6 +232,7 @@ test("disconnect when opening the stream also prevents a mutation that has not b
   const controller = new AbortController();
   const result = await executeStackRuntimeAction(f.ops, "start", f.body, { signal: controller.signal, onStart: () => controller.abort() });
   assert.equal(result.body.error, "action-caller-disconnected");
+  assert.equal(result.mutationStarted, false);
   assert.equal(f.calls.some((call) => call.name === "up"), false);
 });
 
