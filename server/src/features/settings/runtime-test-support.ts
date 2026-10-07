@@ -1,6 +1,7 @@
 import { DEFAULT_SELF_HEALING_CONFIG, type SelfHealingConfig } from "contract";
 import type { Pool } from "pg";
 
+// This SQL mock verifies store behavior, not PostgreSQL syntax or transaction semantics.
 export function runtimePool() {
   const state = { applyComposeDefinition: true, config: structuredClone(DEFAULT_SELF_HEALING_CONFIG), revision: 1 };
   const writes: unknown[][] = [];

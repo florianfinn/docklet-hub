@@ -20,6 +20,7 @@ export type SettingsRouteOptions = {
 };
 
 export function registerSettingsRoutes(router: Router, { auth, pool, config, readers, selfHealingSync }: SettingsRouteOptions): void {
+  // Settings contain no secrets and are readable by every signed-in account.
   router.get(
     "/settings",
     withSession(auth, async (_request, response) => {

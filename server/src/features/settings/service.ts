@@ -1,3 +1,4 @@
+// Readers are injected by the app so this feature imports no other feature.
 import type { ContainerViewSettings, GlobalThemePreset, HubNetworkView, LogSettings, Settings, RuntimeSettings, SelfHealingSettings } from "contract";
 
 import { isUnreachableFromOutside, resolveWireguardEndpoint, type Config } from "../../platform/config/config.js";

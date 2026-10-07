@@ -53,7 +53,7 @@ Der Hub öffnet den Monitor vor dem Bestandsabgleich, synchronisiert die Registr
 überträgt die aktuelle Selbstheilungskonfiguration über den Verbindungshaken und
 liest `GET /containers` einmal je erfolgreichem Verbindungsaufbau. Die vorhandene
 15-Sekunden-Sonde wiederholt fehlgeschlagene Konfigurationsübertragungen bei
-erreichbaren Hosts; eine weitere Verbindungserkennung ist nicht erforderlich. Ereignisse
+erreichbaren Hosts mit dem begrenzten Backoff aus [self-healing.md](self-healing.md); eine weitere Verbindungserkennung ist nicht erforderlich. Ereignisse
 währenddessen liegen nur im begrenzten Transportpuffer. Es gibt keine Ereignis-
 Historie, Cursor oder Rücklaufparameter. Neue Web-Verbindungen erhalten eine
 Momentaufnahme der Monitorzustände und lesen betroffene Hosts gezielt neu.

@@ -73,6 +73,7 @@ export function SetupView({ onDone, background }: SetupViewProps) {
           type="password"
           value={password}
           autoComplete="new-password"
+          // Match the server minimum: this account grants access to host shells.
           minLength={12}
           onChange={(event) => setPassword(event.target.value)}
           required
@@ -80,9 +81,10 @@ export function SetupView({ onDone, background }: SetupViewProps) {
         <span className="text-[12px] text-subtle-foreground">{t("setupPasswordHint")}</span>
       </div>
 
+      {/* Label and input IDs keep every setup field accessible to keyboard and screen-reader users. */}
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3">
-          <Label htmlFor="setup-compose-definition">{t("setupComposeDefinitionLabel")}</Label>
+          <Label className={authFieldLabelClassName} htmlFor="setup-compose-definition">{t("setupComposeDefinitionLabel")}</Label>
           <Switch id="setup-compose-definition" checked={applyComposeDefinition} disabled={busy}
             onCheckedChange={setApplyComposeDefinition} aria-describedby="setup-compose-definition-hint" />
         </div>
