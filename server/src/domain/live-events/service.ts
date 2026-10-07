@@ -5,6 +5,7 @@ export type LiveHost = { id: string; agentUrl: string; state: "pending" | "regis
 export type RefreshTarget = { containerId: string } | { project: string } | { host: true };
 export type LiveListener = (event: LiveEvent | null) => void;
 export type LiveEvents = {
+  hostStatus: (hostId: string) => LiveStatus | null;
   subscribe: (listener: LiveListener) => () => void;
   reconcile: (hosts: readonly LiveHost[]) => Promise<void>;
   removeHost: (hostId: string) => void;
@@ -137,6 +138,10 @@ export function createLiveEvents(deps: LiveEventsDeps): LiveEvents {
   }
 
   return {
+    hostStatus: (hostId) => {
+      const entry = subscriptions.get(hostId);
+      return entry && active(entry) ? entry.attempt?.signal.aborted ? "disconnected" : entry.status : null;
+    },
     subscribe: (listener) => {
       if (stopped) { listener(null); return () => undefined; }
       listeners.add(listener);
@@ -172,7 +177,10 @@ export function createLiveEvents(deps: LiveEventsDeps): LiveEvents {
       return reconciliation;
     },
     removeHost,
-    disconnectHost: (hostId) => { subscriptions.get(hostId)?.attempt?.abort(); },
+    disconnectHost: (hostId) => {
+      const entry = subscriptions.get(hostId);
+      entry?.attempt?.abort();
+    },
     refresh: async (hostId, target, options) => {
       if (stopped) throw new Error("live-events-stopped");
       const entry = subscriptions.get(hostId);

@@ -253,3 +253,16 @@ test("a failed asynchronous recreate sync reports its cause and disconnects the 
     assert.equal(h.events.some((event) => event?.kind === "status" && event.status === "disconnected"), true);
   } finally { await h.live.stop(); }
 });
+
+test("runtime routes can read current monitor state and a probe disconnect is visible immediately", async () => {
+  const h = harness();
+  try {
+    assert.equal(h.live.hostStatus(HOST.id), null);
+    await h.live.reconcile([HOST]);
+    await until(() => h.live.hostStatus(HOST.id) === "connected");
+    h.live.disconnectHost(HOST.id);
+    assert.equal(h.live.hostStatus(HOST.id), "disconnected");
+    h.live.removeHost(HOST.id);
+    assert.equal(h.live.hostStatus(HOST.id), null);
+  } finally { await h.live.stop(); }
+});

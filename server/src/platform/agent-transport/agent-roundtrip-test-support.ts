@@ -115,6 +115,11 @@ function installFakeDocker(modules: AgentModules, projectDir: string): void {
       if (!known(id)) throw gone();
       return inspectOf(projectDir);
     },
+    async listWithComposeLabels() {
+      const inspect = inspectOf(projectDir) as { Config: { Labels: Record<string, string> } };
+      return [{ id: CONTAINER_ID, name: CONTAINER_NAME, image: "nginx:1.27",
+        imageId: "sha256:" + "1".repeat(64), status: "running", labels: inspect.Config.Labels }];
+    },
     async listContainerIds() {
       return [CONTAINER_ID];
     },

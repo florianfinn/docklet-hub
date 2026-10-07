@@ -55,5 +55,5 @@
     // `rootDir`.
     "customConditions": []
   },
-  "exclude": ["src/**/*.test.ts", "src/**/agent-simulator.ts", "src/**/exec-test-support.ts", "src/**/port-test-support.ts", "src/**/file-routes-test-support.ts", "src/**/agent-roundtrip-test-support.ts", "src/**/agent-client-test-support.ts", "src/**/runtime-test-support.ts"]
+  "exclude": ["src/**/*.test.ts", "src/**/agent-simulator.ts", "src/**/exec-test-support.ts", "src/**/port-test-support.ts", "src/**/file-routes-test-support.ts", "src/**/agent-roundtrip-test-support.ts", "src/**/agent-client-test-support.ts", "src/**/runtime-test-support.ts", "src/**/runtime-actions-test-support.ts"]
 }
