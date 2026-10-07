@@ -68,8 +68,12 @@ class Response extends EventEmitter {
   end(chunk?: string) { if (chunk) this.chunks.push(chunk); this.writableEnded = true; }
 }
 
-function fixture(t: TestContext, cell: Cell, options: { stderr?: string; persistedAudit?: AgentAuditLog } = {}) {
-  registry.replaceAll([{ ...entry, externallyManaged: cell.scope === "foreign-stack" }]);
+function fixture(t: TestContext, cell: Cell, options: { stderr?: string; persistedAudit?: AgentAuditLog; delegationProfiles?: Array<Pick<RawInspect, "HostConfig">> } = {}) {
+  const profiles = options.delegationProfiles ?? [cell.delegation ? { HostConfig: { Privileged: true } } : {}];
+  const services = profiles.map((profile, index) => ({ profile, containerId: index ? `peer-${index}` : "old",
+    serviceName: index ? `service-${index}` : "web" }));
+  registry.replaceAll(services.map(({ containerId, serviceName }) => ({ ...entry, containerId,
+    compose: { ...entry.compose, serviceName }, externallyManaged: cell.scope === "foreign-stack" })));
   const diagnostic = `fault-${cell.scope}-${cell.action}-${cell.transport}-${cell.stage}-${cell.kind}`;
   const stderr = options.stderr ?? `stderr-${diagnostic}`;
   const failure = cell.kind === "engine" ? new EngineError(`engine responded 503: ${JSON.stringify({ message: diagnostic })}`, 503) :
@@ -83,8 +87,8 @@ function fixture(t: TestContext, cell: Cell, options: { stderr?: string; persist
   let commandStarted!: () => void;
   const started = new Promise<void>((resolve) => { commandStarted = resolve; });
   const inspect = (containerId: string): RawInspect => ({ Id: containerId, Name: "/app-web-1",
-    Config: { Labels: labels, Image: "example/app:1.0" },
-    ...(cell.delegation ? { HostConfig: { Privileged: true } } : {}),
+    Config: { Labels: { ...labels, "com.docker.compose.service": services.find((service) => service.containerId === containerId)?.serviceName ?? "web" }, Image: "example/app:1.0" },
+    ...(services.find((service) => service.containerId === containerId)?.profile ?? profiles[0]),
     State: { Status: mutations && cell.action !== "stop" ? "running" : "exited", StartedAt: "seen", ExitCode: 0 } });
   const records: Parameters<typeof audit.write>[0][] = [];
   t.mock.method(audit, "write", (record: Parameters<typeof audit.write>[0]) => {
@@ -104,7 +108,9 @@ function fixture(t: TestContext, cell: Cell, options: { stderr?: string; persist
   });
   t.mock.method(engine, "listWithComposeLabels", async () => {
     if (cell.stage === "inventory" && !mutations) inject();
-    return [{ id, name: "app-web-1", image: "example/app:1.0", status: "exited", labels }];
+    return services.map(({ containerId, serviceName }) => ({ id: containerId === "old" ? id : containerId,
+      name: `app-${serviceName}-1`, image: "example/app:1.0", status: "exited",
+      labels: { ...labels, "com.docker.compose.service": serviceName } }));
   });
   t.mock.method(engine, "imageId", async () => { if (cell.stage === "image-lookup") inject(); return "local-image"; });
   const mutate = async () => {
@@ -122,7 +128,8 @@ function fixture(t: TestContext, cell: Cell, options: { stderr?: string; persist
     callback: (error: Error | null, stdout: string, stderr: string) => void) => {
     if (args.includes("config")) {
       if (cell.stage === "compose-config" && !mutations) inject();
-      callback(null, JSON.stringify({ services: { web: { image: "example/app:1.0" } } }), "");
+      callback(null, JSON.stringify({ services: Object.fromEntries(services.map(({ serviceName }) =>
+        [serviceName, { image: "example/app:1.0" }])) }), "");
     } else {
       mutations++;
       if (cell.stage === "re-anchor") id = "new";
@@ -139,7 +146,7 @@ function fixture(t: TestContext, cell: Cell, options: { stderr?: string; persist
   const actionPath = cell.action + (cell.transport === "stream" ? "-stream" : "");
   const body = cell.scope === "container" ? { expectedContainer: { containerId: "old", status: "exited", startedAt: "seen" } } :
     { expectedStack: { projectName: "app", projectDir, composeFileName: "compose.yaml",
-      services: [{ serviceName: "web", containerId: "old", status: "exited", startedAt: "seen" }] }, applyDefinition: cell.applyDefinition ?? true };
+      services: services.map(({ serviceName, containerId }) => ({ serviceName, containerId, status: "exited", startedAt: "seen" })) }, applyDefinition: cell.applyDefinition ?? true };
   const request = Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), { headers: {}, aborted: false }) as unknown as http.IncomingMessage;
   const response = new Response();
   const context = { request, response: response as unknown as http.ServerResponse, actor: null, containerId: "old", action: cell.action,
@@ -232,6 +239,35 @@ for (const scope of scopes) for (const transport of scope === "container" ? ["sy
     assert.ok(persisted.reason.endsWith("…"));
     assert.match(persisted.reason, /delegation-lock-allowed: privileged/);
     assert.ok(persisted.reason.includes("compose-action-failed"));
+  });
+}
+
+for (const scope of ["own-stack", "foreign-stack"] as const) for (const transport of transports) for (const kind of kinds) {
+  test(`failure key and combined delegation survive long rule combinations: ${scope} / ${transport} / ${kind}`, async (t) => {
+    const delegationProfiles = Array.from({ length: 7 }, (_, index) => ({ HostConfig: {
+      Privileged: Boolean((index + 1) & 1), NetworkMode: (index + 1) & 2 ? "host" : "bridge",
+      Binds: (index + 1) & 4 ? ["/var/run/docker.sock:/var/run/docker.sock"] : []
+    } }));
+    const originalNotes = delegationProfiles.map(({ HostConfig: host }) => `delegation-lock-allowed: ${[
+      ...(host.Binds.length ? ["docker-socket-mount"] : []), ...(host.Privileged ? ["privileged"] : []),
+      ...(host.NetworkMode === "host" ? ["host-namespace"] : [])
+    ].join(",")}`);
+    assert.equal(new Set(originalNotes).size, 7);
+    assert.ok(originalNotes.join("; ").length > MAX_FIELD_CHARS);
+    const auditFile = path.join(directory, `combined-delegation-${scope}-${transport}-${kind}.ndjson`);
+    const f = fixture(t, { scope, action: "start", transport, kind, stage: "compose-command" },
+      { delegationProfiles, stderr: "synthetic diagnostic ".repeat(30), persistedAudit: new AgentAuditLog(auditFile) });
+    await assert.doesNotReject(f.run);
+    assert.ok(f.hits() > 0);
+    assert.equal(f.records.length, 1);
+    const lines = fs.readFileSync(auditFile, "utf8").trim().split("\n");
+    assert.equal(lines.length, 1);
+    const persisted = JSON.parse(lines[0]) as { reason: string };
+    const key = kind === "engine" ? "engine-action-failed" : kind === "compose" ? "compose-action-failed" : "internal-error";
+    assert.ok(persisted.reason.startsWith(`${key}; delegation-lock-allowed: `));
+    for (const rule of ["docker-socket-mount", "host-namespace", "privileged"]) assert.ok(persisted.reason.includes(rule));
+    assert.equal(persisted.reason.match(/delegation-lock-allowed:/g)?.length, 1);
+    assert.equal(f.response.chunks.join("").includes("delegation-lock-allowed"), false);
   });
 }
 

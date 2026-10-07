@@ -172,7 +172,10 @@ export class SelfHealingController {
         if (this.observing) this.abort = new AbortController();
       }
       this.store.expire(this.now());
-      if (!this.observing) return;
+      if (!this.observing) {
+        this.retryDelay = 1000;
+        return;
+      }
       for (const snapshot of this.store.entries()) {
         if (!this.observing) break;
         await this.process(snapshot);
