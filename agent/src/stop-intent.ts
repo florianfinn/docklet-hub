@@ -6,6 +6,9 @@ import type { DockerMonitorEvent, RawInspect } from "./engine-model.js";
 
 export const STOP_INTENT_BUFFER_MS = 5_000;
 const DEFAULT_STOP_TIMEOUT_SECONDS = 10;
+// Docker uses the Linux/glibc application signal range.
+const LINUX_SIGRTMIN = 34;
+const LINUX_SIGRTMAX = 64;
 const RECENT_EXIT_LIMIT = 256;
 export const STOP_INTENT_LIMIT = 256;
 type PendingKill = { target: StopIntentTarget; containerId: string; atMs: number; windowMs: number; actor: string | null };
@@ -35,8 +38,17 @@ export function stopIntentWindow(container: RawInspect): number {
 function signalNumber(signal: string | undefined): number | null {
   if (!signal) return null;
   if (/^\d+$/.test(signal)) return Number(signal);
-  const name = signal.toUpperCase();
-  return constants.signals[(name.startsWith("SIG") ? name : `SIG${name}`) as keyof typeof constants.signals] ?? null;
+  const upper = signal.toUpperCase();
+  const name = upper.startsWith("SIG") ? upper : `SIG${upper}`;
+  const realtime = /^SIGRT(MIN|MAX)(?:([+-])(\d+))?$/.exec(name);
+  if (realtime) {
+    const [, bound, direction, offset = "0"] = realtime;
+    const fromMin = bound === "MIN";
+    if (direction && direction !== (fromMin ? "+" : "-")) return null;
+    const number = fromMin ? LINUX_SIGRTMIN + Number(offset) : LINUX_SIGRTMAX - Number(offset);
+    return number >= LINUX_SIGRTMIN && number <= LINUX_SIGRTMAX ? number : null;
+  }
+  return constants.signals[name as keyof typeof constants.signals] ?? null;
 }
 
 export class StopIntentStore {

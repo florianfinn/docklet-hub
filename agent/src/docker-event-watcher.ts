@@ -3,6 +3,8 @@ import type { DockerMonitorEvent, RawInspect } from "./engine-model.js";
 import type { DockerEngine } from "./engine.js";
 import { StopIntentStore } from "./stop-intent.js";
 
+type WatcherDependencies = { wait?: (delayMs: number, signal: AbortSignal) => Promise<void> };
+
 type EventEngine = Pick<DockerEngine, "inspect" | "listContainerIds" | "monitorEvents">;
 type Listener = (event: Omit<DockerMonitorEvent, "action" | "signal"> & { action: Exclude<DockerMonitorEvent["action"], "kill"> }) => void;
 
@@ -12,13 +14,17 @@ export class DockerEventWatcher {
   private controller: AbortController | null = null;
   private task: Promise<void> | null = null;
   private observing = false;
+  private readonly wait: (delayMs: number, signal: AbortSignal) => Promise<void>;
 
   constructor(
     private readonly engine: EventEngine,
     private readonly intents: StopIntentStore,
     private readonly generation: () => string,
-    private readonly onError: (error: unknown) => void = (error) => console.error("[agent] Docker event watcher:", error)
-  ) {}
+    private readonly onError: (error: unknown) => void = (error) => console.error("[agent] Docker event watcher:", error),
+    deps: WatcherDependencies = {}
+  ) {
+    this.wait = deps.wait ?? ((delayMs, signal) => setTimeout(delayMs, undefined, { signal, ref: false }));
+  }
 
   isObserving(): boolean { return this.observing; }
 
@@ -120,7 +126,7 @@ export class DockerEventWatcher {
         }
       }
       if (!signal.aborted) {
-        await setTimeout(retryDelayMs, undefined, { signal, ref: false }).catch(() => {});
+        await this.wait(retryDelayMs, signal).catch(() => {});
         retryDelayMs = Math.min(retryDelayMs * 2, 30_000);
       }
     }

@@ -20,7 +20,7 @@ async function until(condition: () => boolean): Promise<void> {
   }
 }
 
-function fixture(t: test.TestContext) {
+function fixture(t: test.TestContext, wait?: (delayMs: number, signal: AbortSignal) => Promise<void>) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "event-watcher-test-"));
   const file = path.join(directory, "stop-intents.json");
   const store = new StopIntentStore(file);
@@ -50,7 +50,7 @@ function fixture(t: test.TestContext) {
       });
     }
   };
-  const watcher = new DockerEventWatcher(engine, store, () => "boot-a:socket-a", (error) => { errors.push(error); });
+  const watcher = new DockerEventWatcher(engine, store, () => "boot-a:socket-a", (error) => { errors.push(error); }, { wait });
   t.after(async () => { await watcher.stop(); fs.rmSync(directory, { recursive: true, force: true }); });
   return { store, watcher, errors, file, engine, since: () => since,
     failInspect: (error: unknown) => { inspectFailure = error; },
@@ -253,31 +253,42 @@ test("startup removes saved intent whose target no longer exists in Docker", asy
   assert.deepEqual(f.store.list(), []);
 });
 
-test("repeated disconnects back off and a processed live event resets the delay", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const f = fixture(t);
+test("repeated disconnects back off and a processed live event resets the delay", { timeout: 2_000 }, async (t) => {
+  const delays: number[] = [];
+  let resume!: () => void;
+  const f = fixture(t, async (delayMs, signal) => {
+    delays.push(delayMs);
+    const pending = new Promise<void>((resolve) => { resume = resolve; });
+    const abort = resume;
+    signal.addEventListener("abort", abort, { once: true });
+    try { await pending; }
+    finally { signal.removeEventListener("abort", abort); }
+  });
   f.watcher.start();
   await until(() => f.watcher.isObserving());
-  f.end();
-  await until(() => !f.watcher.isObserving());
-  t.mock.timers.tick(999);
-  await setImmediate();
-  assert.equal(f.subscriptions(), 1);
-  t.mock.timers.tick(1);
-  await until(() => f.subscriptions() === 2);
-  f.end();
-  await until(() => !f.watcher.isObserving());
-  t.mock.timers.tick(1_999);
-  await setImmediate();
-  assert.equal(f.subscriptions(), 2);
-  t.mock.timers.tick(1);
-  await until(() => f.subscriptions() === 3);
+  const expected = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000];
+  for (let index = 0; index < expected.length; index++) {
+    f.end();
+    await until(() => delays.length === index + 1);
+    assert.equal(f.watcher.isObserving(), false);
+    assert.deepEqual(delays, expected.slice(0, index + 1));
+    await setImmediate();
+    assert.equal(f.subscriptions(), index + 1);
+    resume();
+    await until(() => f.subscriptions() === index + 2 && f.watcher.isObserving());
+  }
   const received: string[] = [];
   f.watcher.subscribe((event) => received.push(event.action));
-  f.emit("stop");
+  f.emit("die");
   await until(() => received.length === 1);
-  f.end();
-  await until(() => !f.watcher.isObserving());
-  t.mock.timers.tick(1_000);
-  await until(() => f.subscriptions() === 4);
+  assert.equal(f.store.recentExits()[0].kind, "unexpected");
+  for (const delay of [1_000, 2_000]) {
+    f.end();
+    expected.push(delay);
+    await until(() => delays.length === expected.length);
+    assert.deepEqual(delays, expected);
+    resume();
+    await until(() => f.subscriptions() === expected.length + 1 && f.watcher.isObserving());
+  }
+  assert.deepEqual(f.errors, []);
 });

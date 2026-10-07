@@ -46,14 +46,25 @@ class Response extends EventEmitter {
   }
 }
 
-function openMonitor() {
+async function withinDeadline(task: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([task, new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error("Synthetic monitor task did not settle within 2000 ms")), 2_000);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+function openMonitor(t: test.TestContext) {
   const request = Object.assign(Readable.from([]), { url: "/monitor-events", method: "GET",
     headers: { [SECRET_HEADER]: secret, [ACTOR_HEADER]: "system:monitor" } }) as unknown as http.IncomingMessage;
   const response = new Response();
-  return { response, task: handleRequest(request, response as unknown as http.ServerResponse) };
+  const task = handleRequest(request, response as unknown as http.ServerResponse);
+  t.after(async () => { response.end(); await withinDeadline(task); });
+  return { response, task };
 }
 
-test("two Hub readers receive the full monitor vocabulary from one Docker stream with local metadata removed", async (t) => {
+test("two Hub readers receive the full monitor vocabulary from one Docker stream with local metadata removed", { timeout: 5_000 }, async (t) => {
   const id = "a".repeat(64);
   const observedId = "b".repeat(64);
   const unknownId = "c".repeat(64);
@@ -71,12 +82,11 @@ test("two Hub readers receive the full monitor vocabulary from one Docker stream
     options?.onConnected?.();
     await new Promise<void>((resolve) => signal?.addEventListener("abort", () => resolve(), { once: true }));
   });
-  t.after(() => dockerEvents.stop());
+  t.after(() => withinDeadline(dockerEvents.stop()));
   dockerEvents.start();
   await until(() => dockerEvents.isObserving());
-  const first = openMonitor();
-  const second = openMonitor();
-  t.after(async () => { first.response.end(); second.response.end(); await Promise.all([first.task, second.task]); });
+  const first = openMonitor(t);
+  const second = openMonitor(t);
   await until(() => first.response.headersSent && second.response.headersSent);
   const actions = ["start", "stop", "restart", "create", "destroy", "die", "health_status", "oom"] as const;
   for (const action of actions) {
@@ -93,12 +103,12 @@ test("two Hub readers receive the full monitor vocabulary from one Docker stream
   }
   assert.equal(subscriptions, 1);
   first.response.end();
-  await first.task;
+  await withinDeadline(first.task);
   emit({ action: "stop", containerId: id });
   await until(() => second.response.chunks.length === expected.length + 1);
   assert.equal(first.response.chunks.length, expected.length);
   second.response.end();
-  await second.task;
+  await withinDeadline(second.task);
   emit({ action: "kill", signal: "15", containerId: id });
   emit({ action: "die", containerId: id });
   await until(() => stopIntents.list().length === 1);
@@ -107,14 +117,14 @@ test("two Hub readers receive the full monitor vocabulary from one Docker stream
   assert.equal(second.response.chunks.length, expected.length + 1);
 });
 
-test("monitor route returns 503 before the watcher starts", async () => {
-  const reader = openMonitor();
-  await reader.task;
+test("monitor route returns 503 before the watcher starts", { timeout: 5_000 }, async (t) => {
+  const reader = openMonitor(t);
+  await withinDeadline(reader.task);
   assert.equal(reader.response.status, 503);
   assert.deepEqual(JSON.parse(reader.response.chunks.join("")), { error: "events-unavailable" });
 });
 
-test("losing observation closes readers, rejects readers during reconnect and serves late readers", async (t) => {
+test("losing observation closes readers, rejects readers during reconnect and serves late readers", { timeout: 5_000 }, async (t) => {
   const id = "a".repeat(64);
   registry.replaceAll([{ containerId: id, containerName: "demo-web", imageRef: "example/app:1.0", allowed: true }]);
   t.mock.method(fs, "statSync", () => ({ dev: 1n, ino: 1n, ctimeNs: 1n, isSocket: () => true }));
@@ -132,24 +142,22 @@ test("losing observation closes readers, rejects readers during reconnect and se
     options?.onConnected?.();
     await new Promise<void>((resolve) => signal?.addEventListener("abort", () => resolve(), { once: true }));
   });
-  t.after(() => dockerEvents.stop());
+  t.after(() => withinDeadline(dockerEvents.stop()));
   dockerEvents.start();
   await until(() => dockerEvents.isObserving());
-  const first = openMonitor();
-  t.after(() => first.response.end());
+  const first = openMonitor(t);
   await until(() => first.response.headersSent);
   fail = true;
   emit({ action: "die", containerId: id });
-  await first.task;
+  await withinDeadline(first.task);
   assert.equal(first.response.status, 200);
   assert.equal(first.response.writableEnded, true);
   assert.equal(dockerEvents.isObserving(), false);
-  const reconnecting = openMonitor();
-  await reconnecting.task;
+  const reconnecting = openMonitor(t);
+  await withinDeadline(reconnecting.task);
   assert.equal(reconnecting.response.status, 503);
   await until(() => dockerEvents.isObserving() && subscriptions === 2);
-  const late = openMonitor();
-  t.after(async () => { late.response.end(); await late.task; });
+  const late = openMonitor(t);
   await until(() => late.response.headersSent);
   emit({ action: "die", containerId: id });
   await until(() => late.response.chunks.length === 1);

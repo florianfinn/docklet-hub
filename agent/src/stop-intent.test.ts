@@ -399,3 +399,33 @@ test("loading an oversized state retains only the newest durable intent", (t) =>
   assert.equal(reloaded.list().length, STOP_INTENT_LIMIT);
   assert.equal(reloaded.list().some((entry) => entry.target.kind === "container" && entry.target.containerName === "demo-0"), false);
 });
+
+for (const [stopSignal, signal] of [
+  ["SIGRTMIN+3", "37"], ["37", "SIGRTMIN+3"], ["RTMIN+3", "rtmax-27"],
+  ["SIGRTMAX-3", "61"], ["61", "SIGRTMAX-3"], ["sigrtmax-3", "RTMIN+27"],
+  ["SIGRTMIN", "34"], ["34", "RTMIN"], ["SIGRTMAX", "64"], ["64", "RTMAX"],
+  ["SIGRTMIN+0", "34"], ["SIGRTMAX-0", "64"], ["SIGRTMIN+30", "64"], ["SIGRTMAX-30", "34"]
+]) {
+  test(`Linux realtime stop signals authorize die: ${stopSignal} / ${signal}`, (t) => {
+    const { store } = fixture(t);
+    const container = { ...standalone, Config: { StopSignal: stopSignal } };
+    store.observe({ ...event("kill"), signal }, container);
+    assert.equal(store.observe(event("die", 1), container), "manual-stop");
+  });
+}
+
+for (const [stopSignal, signal] of [
+  ["SIGRTMIN+3", "38"], ["37", "SIGRTMAX-26"],
+  ["SIGRTMIN+31", "65"], ["33", "SIGRTMAX-31"],
+  ["SIGRTMIN-1", "33"], ["65", "SIGRTMAX+1"],
+  ["SIGRTMIN+", "34"], ["64", "SIGRTMAX-"], ["SIGRTMIN+1.5", "35"],
+  ["SIGRTMIN+9007199254740993", "34"], ["SIGRTMIN+3", "SIGRTMIN+invalid"]
+]) {
+  test(`mismatched or invalid realtime signals cannot authorize die: ${stopSignal} / ${signal}`, (t) => {
+    const { store } = fixture(t);
+    const container = { ...standalone, Config: { StopSignal: stopSignal } };
+    store.observe({ ...event("kill"), signal }, container);
+    assert.equal(store.observe(event("die", 1), container), "unexpected");
+    assert.deepEqual(store.list(), []);
+  });
+}
