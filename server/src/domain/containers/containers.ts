@@ -1,3 +1,4 @@
+import { runtimeAccessSchema } from "contract";
 import type { ContainerEntry, ContainerStats, ContainerStatsSample, ExternalManagement } from "contract";
 
 import { agentGet, AgentError, type AgentTarget, type RequestOptions } from "../../platform/agent-transport/protocol.js";
@@ -189,6 +190,9 @@ export function parseContainerList(body: unknown): ContainerOverviewEntry[] {
       image: requiredText(record, "image", what),
       status: requiredText(record, "status", what),
       running: record.running === true,
+      exitCode: optionalNumber(record, "exitCode"),
+      ...(runtimeAccessSchema.safeParse(record.runtimeAccess).success
+        ? { runtimeAccess: runtimeAccessSchema.parse(record.runtimeAccess) } : {}),
       startedAt: optionalText(record, "startedAt"),
       health: optionalText(record, "health"),
       compose: parseCompose(record.compose),

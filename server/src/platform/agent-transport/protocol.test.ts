@@ -630,3 +630,12 @@ test("JSON posts preserve caller cancellation and release its abort listener aft
   assert.equal(received?.aborted, true);
   assert.equal(remove.mock.calls.some((call) => call.arguments[0] === "abort"), true);
 });
+
+
+test("JSON action timeout carries a stable reason without caller cancellation", async () => {
+  const fetchImpl = ((_input: unknown, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })), { once: true });
+  })) as typeof fetch;
+  await assert.rejects(agentPost(TARGET, "/containers/demo/start", {}, { actor: ACTOR, fetchImpl, timeoutMs: 5 }),
+    (error: unknown) => error instanceof AgentError && (error.detail as { error: string }).error === "agent-request-timeout");
+});

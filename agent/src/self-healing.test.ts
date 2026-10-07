@@ -55,6 +55,7 @@ test("each attempt respects its delay and exhaustion opens exactly one incident 
   assert.equal(incident.recommendation, "inspect-container-logs-and-configuration");
   for (let index = 0; index < 100; index++) { f.advance(100_000); f.crash(); await f.controller.tick(); }
   assert.equal(f.starts(), 3); assert.equal(f.logCalls(), 1); assert.equal(f.status().incidents.length, 1);
+  assert.deepEqual(f.incidentChanges, [f.current.Id]);
   selfHealingStatusResponseSchema.parse(f.status());
 });
 

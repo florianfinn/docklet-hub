@@ -30,7 +30,7 @@ export function liveBackoffMs(failures: number): number {
 export function monitorAction(action: string): LiveAction | null {
   if (action === "health_status" || action.startsWith("health_status:")) return "health";
   if (action === "create" || action === "destroy" || action === "recreate") return "recreate";
-  return ["start", "stop", "restart", "die"].includes(action) ? action as LiveAction : null;
+  return ["start", "stop", "restart", "die", "refresh"].includes(action) ? action as LiveAction : null;
 }
 
 export function abortableWait(ms: number, signal: AbortSignal): Promise<void> {

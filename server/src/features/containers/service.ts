@@ -1,5 +1,7 @@
 import type { ContainerViewSettings, HostOverview } from "contract";
 
+import { readLifecycleSnapshot } from "../../domain/lifecycle/index.js";
+import { fetchStackDiscovery } from "../../domain/containers/index.js";
 import { fetchContainers } from "../../domain/containers/index.js";
 import type { AgentHealth, HostAccess, HostRecord } from "../../domain/hosts/index.js";
 import type { HostDecoration } from "./decoration.js";
@@ -29,6 +31,7 @@ export type ContainersServiceDeps = {
   decorationFor: (record: HostRecord) => Promise<HostDecoration>;
   writeViewSettings: (settings: ContainerViewSettings) => Promise<ContainerViewSettings>;
   agent?: ContainersAgent;
+  readLifecycleSettings?: () => Promise<{ applyDefinition: boolean; maintenanceDurationSeconds: number | null }>;
 };
 
 export type ContainersService = {
@@ -54,11 +57,13 @@ export function createContainersService({
   probe,
   decorationFor,
   writeViewSettings,
-  agent = DEFAULT_AGENT
+  agent = DEFAULT_AGENT,
+  readLifecycleSettings
 }: ContainersServiceDeps): ContainersService {
   return {
-    overview: async ({ userId, hostId }) =>
-      buildOverview((await hosts.list()).filter((record) => hostId === undefined || record.id === hostId), {
+    overview: async ({ userId, hostId }) => {
+      const settings = await readLifecycleSettings?.();
+      return buildOverview((await hosts.list()).filter((record) => hostId === undefined || record.id === hostId), {
         // ⚠️ The REACHABILITY comes from the holder of the background cycle,
         // not from a probe per request (B4a-C2, #5). Before, this one surface
         // waited for N agents with 3 s each, and the wait grew with every new
@@ -72,8 +77,19 @@ export function createContainersService({
         // The own marks and the indent of this arm (D7b, #62). They come from
         // the own database and not from the agent, which knows nothing of
         // them and should not.
-        decorationFor
-      }),
+        decorationFor,
+        ...(settings ? { lifecycleFor: async (record: HostRecord) => {
+          const target = await hosts.connect(record);
+          const options = { actor: { kind: "user" as const, id: userId } };
+          const [lifecycle, discovery] = await Promise.all([
+            readLifecycleSnapshot(target, options, settings),
+            fetchStackDiscovery(target, options).catch(() => null)
+          ]);
+          return { lifecycle, hubOwnedProjects: new Set(discovery?.stacks.filter((stack) => stack.filePresent && stack.management === "full")
+            .map((stack) => stack.projectName) ?? []) };
+        } } : {})
+      });
+    },
     updateViewSettings: async (showSystem) => {
       const parsed = normalizeShowSystem(showSystem);
       if (!parsed.ok) return { ok: false };

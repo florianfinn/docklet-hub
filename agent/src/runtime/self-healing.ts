@@ -13,6 +13,7 @@ export const selfHealing = new SelfHealingController(selfHealingState, {
   eligible: (container) => !config.readOnly && registry.checkAccess(container.Id, true) === "allowed"
     && forcedManagement(container.Config?.Labels?.["com.docker.compose.project.working_dir"] ?? "") !== "read-only",
   restartInProgress: (id) => stopIntents.isHubRestartActive(id),
+  onIncident: (id) => dockerEvents.notifyLifecycleChange(id),
   async check(id) {
     try {
       // Eligibility is observation; any later action gathers its own delegation evidence once.

@@ -456,3 +456,6 @@ export {
 } from "./api/runtime-actions.js";
 export type { HubRuntimeError, HubContainerRuntimeResult, HubStackRuntimeResult,
   HubStackActionStreamLine } from "./api/runtime-actions.js";
+
+export { lifecycleSnapshotSchema, runtimeAccessSchema, hubRuntimeContextSchema, lifecycleWriteResultSchema } from "./api/lifecycle.js";
+export type { LifecycleSnapshot, HubRuntimeContext } from "./api/lifecycle.js";

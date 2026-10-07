@@ -20,6 +20,8 @@ export type ContainerSummary = {
   image: string;
   status: string;
   running: boolean;
+  exitCode?: number | null;
+  runtimeAccess?: { blocker: "not-allowlisted" | "observe-only" | "self-management-locked" | null };
   startedAt: string | null;
   health: string | null;
   // A running container can hang in an old network namespace even though

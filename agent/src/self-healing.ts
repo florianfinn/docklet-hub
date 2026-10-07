@@ -10,6 +10,7 @@ import { isStopSignal, stopIntentTarget, targetKey } from "./stop-intent.js";
 import { SelfHealingStore, type HealingEntry } from "./self-healing-store.js";
 
 export type HealingPorts = {
+  onIncident?: (containerId: string) => void;
   config: () => SelfHealingConfig;
   eligible?: (container: RawInspect) => boolean;
   restartInProgress?: (id: string) => boolean;
@@ -232,6 +233,7 @@ export class SelfHealingController {
           recommendation: SELF_HEALING_RECOMMENDATION });
         state.entries.find((item) => targetKey(item.target) === key)!.pending = null;
       });
+      this.ports.onIncident?.(current.Id);
       return;
     }
     if (pending.dueAt === null) {

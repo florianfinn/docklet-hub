@@ -6,7 +6,7 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import type { Pool } from "pg";
 
-import { CONTRACT_VERSION, SECRET_HEADER } from "contract";
+import { DEFAULT_SELF_HEALING_CONFIG, CONTRACT_VERSION, SECRET_HEADER } from "contract";
 import type { Auth } from "../platform/auth/auth.js";
 import type { HostRecord, HostRepository } from "../domain/hosts/index.js";
 import { createApiRouter } from "./router.js";
@@ -101,6 +101,8 @@ function record(overrides: Partial<HostRecord> & { id: string; name: string; age
 function fakePool(secrets: Map<string, string | null>): Pool {
   return {
     query(text: string, values: unknown[] = []) {
+      if (text.startsWith("SELECT apply_compose_definition")) return Promise.resolve({ rows: [{ apply_compose_definition: true }] });
+      if (text.startsWith("SELECT self_healing_config")) return Promise.resolve({ rows: [{ self_healing_config: DEFAULT_SELF_HEALING_CONFIG, self_healing_revision: 1 }] });
       if (/FROM mark_assignment/.test(text) || /FROM stack_display/.test(text)) {
         return Promise.resolve({ rows: [], rowCount: 0 });
       }

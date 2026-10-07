@@ -9,7 +9,7 @@ import type { Pool } from "pg";
 import type { Auth } from "../platform/auth/auth.js";
 import type { AgentHealth, HostInfo, HostRecord, HostRepository } from "../domain/hosts/index.js";
 import type { Enrollment } from "../features/hosts/index.js";
-import { CONTRACT_VERSION, DEFAULT_HOST_THEME, hostContainersSchema, overviewSchema } from "contract";
+import { DEFAULT_SELF_HEALING_CONFIG, CONTRACT_VERSION, DEFAULT_HOST_THEME, hostContainersSchema, overviewSchema } from "contract";
 import { createApiRouter } from "./router.js";
 import { listenOnFetchablePort } from "../platform/testing/port-test-support.js";
 
@@ -99,6 +99,8 @@ async function start(
       } as unknown as Auth,
       pool: {
         query: (text: string) => {
+      if (text.startsWith("SELECT apply_compose_definition")) return Promise.resolve({ rows: [{ apply_compose_definition: true }] });
+      if (text.startsWith("SELECT self_healing_config")) return Promise.resolve({ rows: [{ self_healing_config: DEFAULT_SELF_HEALING_CONFIG, self_healing_revision: 1 }] });
           if (/FROM mark_assignment/.test(text) || /FROM stack_display/.test(text)) {
             return Promise.resolve({ rows: [], rowCount: 0 });
           }

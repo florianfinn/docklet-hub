@@ -34,12 +34,13 @@ export type ContainersRouteOptions = {
   agentSecret: string;
   probeHost?: (record: HostRecord) => Promise<AgentHealth>;
   /** The marks and the display of one arm, handed in by `server/src/app/features.ts`. */
+  readLifecycleSettings?: () => Promise<{ applyDefinition: boolean; maintenanceDurationSeconds: number | null }>;
   decorationFor: (record: HostRecord) => Promise<HostDecoration>;
 };
 
 export function registerContainersRoutes(
   router: Router,
-  { auth, pool, repository, agentSecret, probeHost, decorationFor }: ContainersRouteOptions
+  { auth, pool, repository, agentSecret, probeHost, decorationFor, readLifecycleSettings }: ContainersRouteOptions
 ): void {
   // ⚠️ Resolved ONCE when the routes are registered and not per request: the
   // fall back to the own probe is a property of this router and not one that
@@ -48,6 +49,7 @@ export function registerContainersRoutes(
     hosts: createHostAccess({ repository, pool, agentSecret }),
     probe: resolveProbeHost({ probeHost }),
     decorationFor,
+    ...(readLifecycleSettings ? { readLifecycleSettings } : {}),
     writeViewSettings: (settings) => writeContainerViewSettings(pool, settings)
   });
 

@@ -1,7 +1,7 @@
 import { containerRuntimeResultSchema, stackRuntimeResultSchema, stackActionStreamLineSchema,
   hubContainerRuntimeResultSchema, hubStackRuntimeResultSchema, readNdjson,
   type RuntimeAction } from "contract";
-import { AgentError, agentStreamPost, streamBodyOf, type AgentTarget, type RequestOptions }
+import { AgentError, agentGet, agentStreamPost, streamBodyOf, type AgentTarget, type RequestOptions }
   from "../../platform/agent-transport/protocol.js";
 import { watchStreamRejection, agentFailureReason } from "../../platform/agent-transport/stream-rejection.js";
 import type { AgentStreamRelay } from "../../platform/streams/agent-stream-relay.js";
@@ -76,4 +76,8 @@ export async function runStack(target: AgentTarget, id: string, action: RuntimeA
   } finally {
     if (response.body && !response.body.locked) await response.body.cancel().catch(() => undefined);
   }
+}
+
+export async function readContext(target: AgentTarget, id: string, options: RequestOptions) {
+  return agentGet(target, `/stacks/${encodeURIComponent(id)}/context`, options);
 }

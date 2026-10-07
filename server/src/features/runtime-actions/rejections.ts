@@ -13,7 +13,7 @@ export function runtimeErrorKey(reason: unknown): HubRuntimeError {
 
 export function runtimeRejection(error: AgentError, stack: boolean) {
   const reason = agentFailureReason(error);
-  const key = error.status === null ? "runtime-agent-unreachable" : runtimeErrorKey(reason);
+  const key = reason === "agent-request-timeout" ? "runtime-action-timeout" : error.status === null ? "runtime-agent-unreachable" : runtimeErrorKey(reason);
   const status = error.status !== null && error.status >= 400 && error.status < 600 ? error.status : 502;
   const detail = typeof error.detail === "object" && error.detail !== null ? error.detail : {};
   const body = { ...detail, error: key };

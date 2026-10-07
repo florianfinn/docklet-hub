@@ -13,7 +13,7 @@ export type LifecycleObserver = {
   setObserving: (observing: boolean) => void;
   fail: () => void;
 };
-type Listener = (event: Omit<DockerMonitorEvent, "action" | "signal"> & { action: Exclude<DockerMonitorEvent["action"], "kill"> }) => void;
+type Listener = (event: Omit<DockerMonitorEvent, "action" | "signal"> & { action: Exclude<DockerMonitorEvent["action"], "kill"> | "refresh" }) => void;
 
 export class DockerEventWatcher {
   private listeners = new Set<Listener>();
@@ -52,6 +52,12 @@ export class DockerEventWatcher {
       this.listeners.delete(listener);
       if (onUnavailable) this.unavailableListeners.delete(onUnavailable);
     };
+  }
+
+  notifyLifecycleChange(containerId: string): void {
+    for (const listener of this.listeners) {
+      try { listener({ action: "refresh", containerId }); } catch (error) { this.onError(error); }
+    }
   }
 
   start(): void {

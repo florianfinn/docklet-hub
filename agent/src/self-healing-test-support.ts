@@ -22,6 +22,7 @@ export function healingFixture(t: TestContext, policy = "no", maximum = 0) {
   let failures = false;
   let starts = 0;
   let logCalls = 0;
+  const incidentChanges: string[] = [];
   let evidence: { logs: SelfHealingLog; cause: SelfHealingCause } | null = null;
   let store = new SelfHealingStore(file, () => now, () => monotonic);
   let intents = new StopIntentStore(path.join(directory, "intents.json"), () => now);
@@ -29,6 +30,7 @@ export function healingFixture(t: TestContext, policy = "no", maximum = 0) {
   const ports: HealingPorts = {
     config: () => structuredClone(config),
     restartInProgress: (id) => intents.isHubRestartActive(id),
+    onIncident: (id) => incidentChanges.push(id),
     check: async () => blocked ? null : structuredClone(current),
     inspect: async () => structuredClone(current),
     start: async (_id, expected, _signal, reserve) => {
@@ -56,7 +58,7 @@ export function healingFixture(t: TestContext, policy = "no", maximum = 0) {
   };
   setup();
   return {
-    file, directory, ports, get controller() { return controller; }, get store() { return store; },
+    file, directory, ports, incidentChanges, get controller() { return controller; }, get store() { return store; },
     get current() { return current; }, set current(value: RawInspect) { current = value; },
     get config() { return config; }, set config(value: SelfHealingConfig) { config = value; },
     get intents() { return intents; },

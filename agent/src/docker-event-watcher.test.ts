@@ -194,8 +194,8 @@ for (const failure of [Object.assign(new Error("inspect failed"), { status: 500 
 
 test("all live monitor actions fan out unchanged over the single background subscription", async (t) => {
   const f = fixture(t);
-  const first: DockerMonitorEvent[] = [];
-  const second: DockerMonitorEvent[] = [];
+  const first: Parameters<Parameters<DockerEventWatcher["subscribe"]>[0]>[0][] = [];
+  const second: typeof first = [];
   f.watcher.subscribe((event) => first.push(event));
   f.watcher.subscribe((event) => second.push(event));
   f.watcher.start();
@@ -380,4 +380,14 @@ for (const source of ["hub", "cli"] as const) test(`the single watcher forwards 
   f.emit("stop"); await until(() => received.includes("stop"));
   healing.advance(1000); await healing.controller.tick();
   assert.equal(healing.starts(), 1); assert.deepEqual(f.store.list(), []);
+});
+
+
+test("persisted incident changes fan out a reduced refresh without another engine event", (t) => {
+  const f = fixture(t); const events: unknown[] = [];
+  const unsubscribe = f.watcher.subscribe((event) => events.push(event));
+  f.watcher.notifyLifecycleChange(id);
+  assert.deepEqual(events, [{ action: "refresh", containerId: id }]);
+  unsubscribe(); f.watcher.notifyLifecycleChange(id);
+  assert.equal(events.length, 1);
 });

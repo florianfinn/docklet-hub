@@ -6,6 +6,7 @@ import { registerAccountRoutes } from "../features/account/index.js";
 import { readGlobalTheme, registerAppearanceRoutes } from "../features/appearance/index.js";
 import { registerComposeRoutes } from "../features/compose/index.js";
 import { readContainerViewSettings, registerContainersRoutes } from "../features/containers/index.js";
+import { registerLifecycleRoutes } from "../features/lifecycle/index.js";
 import { registerFileRoutes } from "../features/files/index.js";
 import { registerHostRoutes } from "../features/hosts/index.js";
 import { readLogSettings, registerLogRoutes } from "../features/logs/index.js";
@@ -13,7 +14,7 @@ import { readHostDecoration, registerMarkRoutes } from "../features/marks/index.
 import { hostLoad, registerMetricsRoutes } from "../features/metrics/index.js";
 import { registerLiveEventRoutes } from "../features/live-events/index.js";
 import { registerResourcesRoutes } from "../features/resources/index.js";
-import { readApplyComposeDefinition, readRuntimeSettings, readSelfHealingSettings, registerSettingsRoutes } from "../features/settings/index.js";
+import { readApplyComposeDefinition, readRuntimeSettings, readSelfHealingConfig, readSelfHealingSettings, registerSettingsRoutes } from "../features/settings/index.js";
 import { registerRuntimeActionsRoutes } from "../features/runtime-actions/index.js";
 import { registerShellRoutes } from "../features/shell/index.js";
 
@@ -89,6 +90,7 @@ export const FEATURES: readonly RegisterFeature[] = [
     ...options, readApplyDefinition: () => readApplyComposeDefinition(options.pool)
   }),
 
+  registerLifecycleRoutes,
   // The feature `containers`: the page after sign-in (`GET /overview`) and the
   // write of the container view (`PUT /settings/containers`). It took the place
   // of the group `overview-routes` and of the group `container-view-routes`
@@ -104,7 +106,11 @@ export const FEATURES: readonly RegisterFeature[] = [
   (router, options) =>
     registerContainersRoutes(router, {
       ...options,
-      decorationFor: (record) => readHostDecoration(options.pool, record.id)
+      decorationFor: (record) => readHostDecoration(options.pool, record.id),
+      readLifecycleSettings: async () => {
+        const [runtime, healing] = await Promise.all([readRuntimeSettings(options.pool), readSelfHealingConfig(options.pool)]);
+        return { applyDefinition: runtime.applyComposeDefinition, maintenanceDurationSeconds: healing.config.maintenanceDurationSeconds };
+      }
     }),
   // The feature `settings`: `GET /settings` with every setting of the hub and
   // `PUT /settings/network`. It took the place of the group `settings-routes`

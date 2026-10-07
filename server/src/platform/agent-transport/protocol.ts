@@ -131,7 +131,7 @@ const BINARY_TIMEOUT_MS = 120_000;
 // den nackten Rumpf entgegen (`src/index.ts:1436` ff.).
 type RequestShape =
   | { method: "GET" | "DELETE" }
-  | { method: "POST" | "PUT"; payload: unknown }
+  | { method: "POST" | "PUT" | "DELETE"; payload: unknown }
   | { method: "PUT"; body: Uint8Array };
 
 /**
@@ -262,7 +262,7 @@ async function agentRequest(
     if (error instanceof AgentError) throw error;
     if (options.signal?.aborted) throw error;
     if (error instanceof Error && error.name === "AbortError") {
-      throw new AgentError(`Der Agent antwortete nicht innerhalb von ${timeoutMs} ms auf „${path}".`);
+      throw new AgentError(`Der Agent antwortete nicht innerhalb von ${timeoutMs} ms auf „${path}".`, null, { detail: { error: "agent-request-timeout" } });
     }
     throw new AgentError(
       `Der Agent war nicht erreichbar: ${error instanceof Error ? error.message : String(error)}`,
@@ -331,7 +331,7 @@ export async function agentPost(
 }
 
 /**
- * An authenticated DELETE without a body.
+ * An authenticated DELETE, optionally with a JSON target.
  *
  * The first caller is clearing a compose selection (#185,
  * `DELETE /containers/:id/compose-selection`). As with `agentPut`, the return
@@ -341,9 +341,10 @@ export async function agentPost(
 export async function agentDelete(
   target: AgentTarget,
   path: string,
-  options: RequestOptions
+  options: RequestOptions,
+  body?: unknown
 ): Promise<unknown> {
-  return agentRequest(target, path, options, { method: "DELETE" });
+  return agentRequest(target, path, options, { method: "DELETE", ...(body === undefined ? {} : { payload: body }) });
 }
 
 /**
@@ -446,7 +447,7 @@ export async function agentDownload(
     if (error instanceof AgentError) throw error;
     if (error instanceof Error && error.name === "AbortError") {
       if (connectTimedOut) {
-        throw new AgentError(`Der Agent antwortete nicht innerhalb von ${connectTimeoutMs} ms auf „${path}".`);
+        throw new AgentError(`Der Agent antwortete nicht innerhalb von ${connectTimeoutMs} ms auf „${path}".`, null, { detail: { error: "agent-request-timeout" } });
       }
       // Der Aufrufer wollte es so — unverändert weiter nach außen.
       throw error;
@@ -609,7 +610,7 @@ async function openStream(
     if (error instanceof AgentError) throw error;
     if (error instanceof Error && error.name === "AbortError") {
       if (connectTimedOut) {
-        throw new AgentError(`Der Agent antwortete nicht innerhalb von ${connectTimeoutMs} ms auf „${path}".`);
+        throw new AgentError(`Der Agent antwortete nicht innerhalb von ${connectTimeoutMs} ms auf „${path}".`, null, { detail: { error: "agent-request-timeout" } });
       }
       // Der Aufrufer wollte es so. Unverändert weiter nach außen, damit er
       // seinen eigenen Abbruch wiedererkennt und nicht als Serverfehler liest.
