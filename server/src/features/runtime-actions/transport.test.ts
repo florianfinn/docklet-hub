@@ -1,15 +1,19 @@
 import assert from "node:assert/strict";
 import { createServer, globalAgent, type ClientRequestArgs, type Server } from "node:http";
+import { createServer as createTlsServer } from "node:https";
 import type { LookupFunction, Socket } from "node:net";
+import type { Duplex } from "node:stream";
 import test from "node:test";
 
 import { AgentError } from "../../platform/agent-transport/protocol.js";
 import { streamFetch, StreamFetchError } from "../../platform/agent-transport/stream-fetch.js";
 import { listenOnFetchablePort } from "../../platform/testing/port-test-support.js";
+import { selfSignedTlsCredentials } from "../../platform/testing/self-signed-tls.js";
 import { runContainer, runStack } from "./agent-client.js";
 import { runtimeRejection } from "./rejections.js";
 
 const actor = { kind: "user" as const, id: "demo-human" };
+const tlsCredentials = selfSignedTlsCredentials();
 
 function close(server: Server): Promise<void> {
   server.closeAllConnections();
@@ -42,7 +46,7 @@ test("real streamFetch does not count buffered bytes during an aborted lookup as
   finishLookup(Object.assign(new Error("synthetic lookup failure"), { code: "ENOTFOUND" }), "");
 });
 
-// Loopback listeners and an injected lookup exercise node:http without external services or DNS.
+// Loopback listeners and an injected lookup exercise HTTP/TLS without external services or DNS.
 for (const scope of ["container", "stack"] as const) {
   function run(baseUrl: string) {
     const target = { baseUrl, secret: "synthetic" };
@@ -67,6 +71,33 @@ for (const scope of ["container", "stack"] as const) {
     const port = await listenOnFetchablePort(listener);
     await close(listener);
     await assert.rejects(run(`http://127.0.0.1:${port}`), rejection("runtime-agent-unreachable"));
+  });
+
+  test(`${scope}: a self-signed TLS handshake failure is runtime-agent-unreachable`, { timeout: 5000 }, async (t) => {
+    let actions = 0;
+    let connections = 0;
+    const sockets = new Set<Duplex>();
+    const listener = createTlsServer(tlsCredentials, (_request, response) => { actions++; response.end("unexpected"); });
+    listener.on("connection", (socket) => {
+      connections++;
+      sockets.add(socket);
+      socket.once("close", () => sockets.delete(socket));
+    });
+    t.after(() => {
+      for (const socket of sockets) socket.destroy();
+      return close(listener);
+    });
+    const port = await listenOnFetchablePort(listener);
+    const baseUrl = `https://127.0.0.1:${port}`;
+    await assert.rejects(run(baseUrl), rejection("runtime-agent-unreachable"));
+    await assert.rejects(streamFetch(`${baseUrl}/action`, { method: "POST", body: "{}" }), (error: unknown) => {
+      assert.ok(error instanceof StreamFetchError);
+      assert.equal((error.cause as NodeJS.ErrnoException).code, "DEPTH_ZERO_SELF_SIGNED_CERT");
+      assert.equal(error.requestSent, false);
+      return true;
+    });
+    assert.equal(connections, 2, "each call must attempt the handshake exactly once");
+    assert.equal(actions, 0, "no HTTP action may reach the TLS listener");
   });
 
   for (const code of ["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED", "EHOSTUNREACH", "ENETUNREACH", "ECONNRESET"]) {

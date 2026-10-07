@@ -73,7 +73,6 @@ export type PreparedStack = {
   project: StackResolvedProject;
   definition: StackDefinition;
   normalized: unknown;
-  definitionReadable: boolean;
   externallyManaged: boolean;
   context: StackContextResponse;
   entriesByService: Map<string, RegistryEntry>;
@@ -211,7 +210,7 @@ export function stackState(services: readonly StackServiceSnapshot[]): StackCont
 
 export async function prepareStack(
   project: StackResolvedProject,
-  options: { mutating: boolean; action: string; actor: string | null; tolerateUnreadableDefinition?: boolean; runtimeAction?: boolean; onDelegation?: (reason: string) => void },
+  options: { mutating: boolean; action: string; actor: string | null; runtimeAction?: boolean; onDelegation?: (reason: string) => void },
   readConfig: typeof composeConfig = composeConfig
 ): Promise<PreparedStack> {
   if (options.mutating) {
@@ -227,21 +226,18 @@ export async function prepareStack(
   const externallyManaged = registry.isExternallyManaged(project.anchorEntry.containerId) ||
     [...entriesByService.values()].some((entry) => registry.isExternallyManaged(entry.containerId)) ||
     [...current.values()].some((entry) => entry.externallyManaged);
-  let normalized: unknown = null;
-  let definition: StackDefinition | null = null;
+  let normalized: unknown;
+  let definition: StackDefinition;
   try {
     normalized = await readConfig(project);
-    definition = stackDefinitionFromConfig(normalized);
-    if (!definition) throw new StackEndpointError(409, "compose-services-missing");
+    const parsed = stackDefinitionFromConfig(normalized);
+    if (!parsed) throw new StackEndpointError(409, "compose-services-missing");
+    definition = parsed;
   } catch (error) {
     if (options.runtimeAction) throw error;
-    if (!options.tolerateUnreadableDefinition) {
-      if (error instanceof StackEndpointError) throw error;
-      throw new StackEndpointError(409, "compose-config-failed");
-    }
+    if (error instanceof StackEndpointError) throw error;
+    throw new StackEndpointError(409, "compose-config-failed");
   }
-  const definitionReadable = definition !== null;
-  definition ??= { services: [...current.keys()].sort(), couplings: [] };
 
   // Gate every container reachable by the project command, including orphans.
   // Omitting an unauthorized neighbour cannot widen the caller’s permissions.
@@ -321,7 +317,7 @@ export async function prepareStack(
     missingServices,
     runningServices
   };
-  return { project, definition, normalized, definitionReadable, externallyManaged, context, entriesByService };
+  return { project, definition, normalized, externallyManaged, context, entriesByService };
 }
 
 export function ensureCreateScopeAllowlisted(prepared: PreparedStack): void {
