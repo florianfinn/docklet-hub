@@ -17,13 +17,13 @@ test("error reporting retains safe causes and throttles matching failures", () =
   report("reconcile", new SyntaxError("synthetic-private-record"));
   report("monitor", new AgentError("synthetic-response-body", 403));
   assert.deepEqual(errors, [
-    { operation: "monitor", reason: "agent-error", code: "ECONNREFUSED", suppressed: 0 },
-    { operation: "reconcile", reason: "SyntaxError", suppressed: 0 },
-    { operation: "monitor", reason: "agent-error", status: 403, suppressed: 0 }
+    { hostId: null, operation: "monitor", reason: "agent-error", code: "ECONNREFUSED", suppressed: 0 },
+    { hostId: null, operation: "reconcile", reason: "SyntaxError", suppressed: 0 },
+    { hostId: null, operation: "monitor", reason: "agent-error", status: 403, suppressed: 0 }
   ]);
   now++;
   report("monitor", transport);
-  assert.deepEqual(errors.at(-1), { operation: "monitor", reason: "agent-error", code: "ECONNREFUSED", suppressed: 2 });
+  assert.deepEqual(errors.at(-1), { hostId: null, operation: "monitor", reason: "agent-error", code: "ECONNREFUSED", suppressed: 2 });
   assert.equal(JSON.stringify(errors).includes("synthetic"), false);
 });
 
@@ -34,7 +34,18 @@ test("unknown names, codes, thrown values and cyclic causes cannot expose remote
   error.cause = error;
   report("reconcile", error);
   report("reconcile", "synthetic-secret");
-  assert.deepEqual(errors, [{ operation: "reconcile", reason: "unknown-error", suppressed: 0 }]);
+  assert.deepEqual(errors, [{ hostId: null, operation: "reconcile", reason: "unknown-error", suppressed: 0 }]);
   report("monitor", new Error("host-resync-failed"));
   assert.equal(errors.at(-1)?.reason, "host-resync-failed");
+});
+
+
+test("equal monitor failures are throttled independently for each host", () => {
+  const errors: LiveRuntimeError[] = [];
+  const report = createLiveErrorReporter((error) => errors.push(error), () => 0);
+  const error = new AgentError("synthetic-secret", 503);
+  report("monitor", error, "first"); report("monitor", error, "first");
+  report("monitor", error, "second");
+  assert.deepEqual(errors.map((entry) => entry.hostId), ["first", "second"]);
+  assert.equal(JSON.stringify(errors).includes("synthetic-secret"), false);
 });

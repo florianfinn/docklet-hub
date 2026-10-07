@@ -56,7 +56,7 @@ liest `GET /containers` einmal je erfolgreichem Verbindungsaufbau. Die vorhanden
 erreichbaren Hosts mit dem begrenzten Backoff aus [self-healing.md](self-healing.md); eine weitere Verbindungserkennung ist nicht erforderlich. Ereignisse
 währenddessen liegen nur im begrenzten Transportpuffer. Es gibt keine Ereignis-
 Historie, Cursor oder Rücklaufparameter. Neue Web-Verbindungen erhalten eine
-Momentaufnahme der Monitorzustände und lesen betroffene Hosts gezielt neu.
+Momentaufnahme der Monitorzustände und lesen verbundene Hosts gezielt neu. Im Sitzungscache registrierte Hosts, die in dieser Momentaufnahme fehlen, werden ebenfalls gezielt neu gelesen. Erst ein 404 dieses Abrufs entfernt sie; eine fehlende Monitorverbindung allein löscht keinen Host. Ausstehende Registrierungen werden dadurch nicht abgefragt.
 Ein Heartbeat alle 15 Sekunden hält den Web-Strom beobachtbar; nach 45 Sekunden
 ohne gültigen Umschlag bricht das Web ab und verbindet erneut.
 
@@ -121,10 +121,10 @@ Parallele Bestandsleser desselben Hosts teilen eine laufende Abfrage. Ein
 Aktions-Refresh wartet zunächst auf einen schon begonnenen Leser und startet
 seine eigene Abfrage erst danach; er übernimmt keinen Stand von vor der Aktion.
 Fehler im Hostlisten-Abgleich oder Monitor werden mit lokalen Fehlerkategorien,
-HTTP-Status und bekannten Transportcodes protokolliert. Freie Fehlermeldungen,
-Antworttexte und Zugangsdaten werden nicht übernommen. Gleichartige Fehler
+Host-ID, HTTP-Status und bekannten Transportcodes protokolliert. Beim globalen Hostlisten-Abgleich ohne bestimmbaren Host ist die Host-ID `null`. Freie Fehlermeldungen,
+Antworttexte und Zugangsdaten werden nicht übernommen. Gleichartige Fehler desselben Hosts
 erscheinen höchstens alle 30 Sekunden; die nächste Meldung zählt unterdrückte
-Wiederholungen mit. Die Drossel hält höchstens 32 Kategorien.
+Wiederholungen mit. Die Drossel hält höchstens 32 Kombinationen aus Host-ID und Fehlerkategorie.
 
 ## Prüfgrenzen
 

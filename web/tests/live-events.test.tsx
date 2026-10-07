@@ -11,6 +11,7 @@ import { readLiveEvents } from "../src/features/live-events/api.js";
 import { retainHostContainers, retainHostOverview, LiveStatusLabel, MeasurementStale, type LiveState } from "../src/domain/hosts/index.js";
 import { RowUsage } from "../src/features/metrics/RowUsage.js";
 import { AppLanguageProvider } from "../src/app/i18n/AppLanguageProvider.js";
+import { ApiError } from "../src/platform/http/transport.js";
 import { onUnauthorized } from "../src/platform/http/session-expiry.js";
 
 const STATS: ContainerStats = { sampledAt: "2026-01-01T00:00:00.000Z", cpuPercent: 23, memUsageBytes: 1024, memLimitBytes: 4096, samples: [] };
@@ -55,7 +56,7 @@ test("events refresh only the affected host and metric keys, coalescing a burst"
   } finally { stop(); client.clear(); }
 });
 
-test("web reconnect preserves hosts absent from a monitor snapshot and removes only explicit deletions", async () => {
+test("web reconnect rereads hosts absent from a monitor snapshot and preserves existing hosts", async () => {
   const client = createQueryClient(); const stream = streamDouble(); const calls: string[] = [];
   client.setQueryData(queryKeys.containers.overview(), [overview("first"), overview("removed")]);
   client.setQueryData(queryKeys.hosts.list(), [overview("first").host, overview("removed").host]);
@@ -66,7 +67,8 @@ test("web reconnect preserves hosts absent from a monitor snapshot and removes o
     stream.end(); await waitFor(() => stream.signals.length === 2);
     assert.equal(client.getQueryData<LiveState>(queryKeys.hosts.live())?.transport, false);
     stream.send({ kind: "snapshot", hosts: [{ hostId: "first", status: "connected" }] });
-    await waitFor(() => calls.length === 1);
+    await waitFor(() => calls.length === 2);
+    assert.deepEqual(calls.sort(), ["first", "removed"]);
     assert.deepEqual(client.getQueryData<HostOverview[]>(queryKeys.containers.overview())?.map((entry) => entry.host.id), ["first", "removed"]);
     assert.deepEqual(client.getQueryData<HostOverview["host"][]>(queryKeys.hosts.list())?.map((host) => host.id), ["first", "removed"]);
     assert.deepEqual(client.getQueryData(queryKeys.hosts.containers("removed")), { cached: true });
@@ -147,5 +149,26 @@ test("a hint during the initial full overview is reread after that request finis
     client.setQueryData(queryKeys.containers.overview(), [overview("first")]);
     await waitFor(() => calls.length === 1);
     assert.deepEqual(calls, ["first"]);
+  } finally { stop(); client.clear(); }
+});
+
+
+test("snapshot omission rereads registered hosts and removes them on 404 without reading pending hosts", async () => {
+  const client = createQueryClient(); const stream = streamDouble(); const calls: string[] = [];
+  const pending = overview("pending"); pending.host.state = "pending";
+  client.setQueryData(queryKeys.containers.overview(), [overview("first"), overview("gone"), pending]);
+  client.setQueryData(queryKeys.hosts.list(), [overview("first").host, overview("gone").host, pending.host]);
+  client.setQueryData(queryKeys.hosts.containers("gone"), { cached: true });
+  const stop = connectLiveEvents(client, { read: stream.read, overview: async (id) => {
+    calls.push(id); if (id === "gone") throw new ApiError(404, "host-unknown"); return overview(id);
+  } });
+  try {
+    stream.send({ kind: "snapshot", hosts: [{ hostId: "first", status: "disconnected" }] });
+    await waitFor(() => client.getQueryData<HostOverview[]>(queryKeys.containers.overview())?.length === 2);
+    assert.deepEqual(calls, ["gone"]);
+    assert.deepEqual(client.getQueryData<HostOverview[]>(queryKeys.containers.overview())?.map((entry) => entry.host.id), ["first", "pending"]);
+    assert.deepEqual(client.getQueryData<HostOverview["host"][]>(queryKeys.hosts.list())?.map((entry) => entry.id), ["first", "pending"]);
+    assert.equal(client.getQueryData(queryKeys.hosts.containers("gone")), undefined);
+    assert.equal(client.getQueryState(queryKeys.containers.overview())?.isInvalidated, false);
   } finally { stop(); client.clear(); }
 });

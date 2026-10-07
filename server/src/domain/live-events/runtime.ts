@@ -15,7 +15,7 @@ export function startLiveEvents(options: {
 }): RunningLiveEvents {
   const report = createLiveErrorReporter(options.onError);
   const live = createLiveEvents({
-    onError: (error) => report("monitor", error),
+    onError: (error, hostId) => report("monitor", error, hostId),
     open: async (host, signal) => {
       const record = await options.hosts.find(host.id);
       if (!record) throw new Error("host-unknown");
@@ -45,7 +45,7 @@ export function startLiveEvents(options: {
         await Promise.all(hosts.filter((host) => host.state === "registered").map(async (host) => {
           const health = await probeAgent(host.agentUrl, { timeoutMs: 3_000, fetchImpl: options.fetchImpl });
           if (!health.reachable) live.disconnectHost(host.id);
-          else await options.onHostReachable?.(host).catch((error: unknown) => report("reconcile", error));
+          else await options.onHostReachable?.(host).catch((error: unknown) => report("reconcile", error, host.id));
         }));
       }
     }

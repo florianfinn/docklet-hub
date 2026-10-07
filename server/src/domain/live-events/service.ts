@@ -16,7 +16,7 @@ export type LiveEventsDeps = {
   open: (host: LiveHost, signal: AbortSignal) => Promise<Response>;
   read: (hostId: string) => Promise<ContainerEntry[]>;
   resync: (hostId: string) => Promise<void>;
-  onError?: (error: unknown) => void;
+  onError?: (error: unknown, hostId: string) => void;
   onConnected?: (hostId: string) => Promise<void>;
   wait?: (ms: number, signal: AbortSignal) => Promise<void>;
   now?: () => number;
@@ -94,7 +94,7 @@ export function createLiveEvents(deps: LiveEventsDeps): LiveEvents {
           if (active(entry)) emit({ kind: "changed", hostId: entry.host.id, containerIds: [], action: "recreate" });
         },
         onError: (error) => {
-          if (active(entry) && !attempt.signal.aborted) { deps.onError?.(error); attempt.abort(); }
+          if (active(entry) && !attempt.signal.aborted) { deps.onError?.(error, entry.host.id); attempt.abort(); }
         }
       });
       try {
@@ -122,7 +122,7 @@ export function createLiveEvents(deps: LiveEventsDeps): LiveEvents {
         });
         if (active(entry) && !attempt.signal.aborted) throw new Error("monitor-stream-ended");
       } catch (error) {
-        if (active(entry) && !attempt.signal.aborted) deps.onError?.(error);
+        if (active(entry) && !attempt.signal.aborted) deps.onError?.(error, entry.host.id);
       } finally {
         attempt.abort();
         await recreate.settled();

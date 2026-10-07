@@ -1,6 +1,6 @@
 # Bedienvertrag für Start, Stopp und Neustart
 
-Dieser Vertrag legt fest, wie die Oberfläche die Lifecycle-Aktionen anbietet (#86). Er beschreibt nur die Bedienung. Semantik, Ergebnisse und Fehlerschlüssel der Laufzeitaktionen stehen in [container-lifecycle.md](container-lifecycle.md) (#97) und kommen aus der technischen Umsetzung (#98), damit UI und API denselben Vertrag umsetzen; fehlt dort etwas, wird es dort ergänzt und nicht in der Oberfläche nachgebaut. Die Grenzen für fremdverwaltete Container folgen #5.
+Dieser Vertrag legt fest, wie die Oberfläche die Lifecycle-Aktionen anbietet (#86). Er beschreibt nur die Bedienung. Semantik, Ergebnisse und Fehlerschlüssel der Laufzeitaktionen stehen in [container-lifecycle.md](container-lifecycle.md) (#97) und kommen aus der technischen Umsetzung (#98), damit UI und API denselben Vertrag umsetzen; fehlt dort etwas, wird es dort ergänzt und nicht in der Oberfläche nachgebaut. Die Grenzen für fremdverwaltete Container stehen in [phase-5-write-access.md](phase-5-write-access.md).
 
 ## Zustände und Aktionen
 
@@ -13,7 +13,7 @@ Ein Ziel ist ein einzelner Container, auch ein Service eines Stacks, oder ein ga
 | im Übergang | gesperrt, Fortschritt sichtbar | gesperrt, Fortschritt je Service |
 | unbekannt oder offline | gesperrt mit Grund | gesperrt mit Grund |
 
-Im Übergang ist ein Ziel nur, solange ein Vorgang des Hubs darauf läuft. Meldet Docker `restarting`, zählt der Container als laufend und zeigt, dass er wiederholt neu startet; gerade bei einem Absturz-Loop braucht der Nutzer Stopp und Neustart. `paused` zählt ebenfalls als laufend, `created` und `exited` als gestoppt. `dead`, `removing` und unbekannte Zustände sperren die Aktionen mit Grund. Ein Stack mit laufenden und gestoppten Services bietet alle drei Aktionen an, weil jede davon eine sinnvolle Absicht ausdrückt. Ein Service, der als Einmalauftrag mit Exit-Code 0 beendet ist, gilt dabei als erledigt und hält den Start nicht dauerhaft angeboten.
+Im Übergang ist ein Ziel nur, solange ein Vorgang des Hubs darauf läuft. Meldet Docker `restarting`, zählt der Container als laufend und zeigt, dass er wiederholt neu startet; gerade bei einem Absturz-Loop braucht der Nutzer Stopp und Neustart. `paused` zählt ebenfalls als laufend, `created` und `exited` als gestoppt. `dead`, `removing` und unbekannte Zustände sperren die Aktionen mit Grund. Ein Stack mit laufenden und gestoppten Services bietet alle drei Aktionen an, weil jede davon eine sinnvolle Absicht ausdrückt. Ein mit Exit-Code 0 beendeter Einmalauftrag gilt als erledigt; er hält das Startangebot des Stacks nicht dauerhaft offen.
 
 Die Aktionen stehen direkt in der Zeile jedes Containers und Stacks und in der Detailansicht, nicht nur im Kontextmenü. Auf schmalen Ansichten bleiben sie als Schaltflächen mit ausreichender Trefferfläche erreichbar; nichts hängt allein an Hover oder Rechtsklick. Jede Schaltfläche ist per Tastatur erreichbar und trägt ihren Namen auch für Screenreader.
 
@@ -32,7 +32,7 @@ Start, Stopp und Neustart eines einzelnen Containers laufen ohne Rückfrage, wei
 - Stopp und Neustart eines ganzen Stacks nennen die betroffenen Services.
 - „Neustart · neu erstellen“ nennt die betroffenen Services und dass Volumes und Bind-Mounts erhalten bleiben.
 
-„Start · Definition anwenden“ fragt nicht: Er ersetzt nur Container, deren Definition sich geändert hat, und genau das ist die gewählte Einstellung. Welche Services ersetzt wurden, nennt das Ergebnis.
+„Start · Definition anwenden“ fragt nicht: Er ersetzt nur Container, deren Definition sich geändert hat, und genau das ist die gewählte Einstellung. „Neustart · neu erstellen“ ersetzt dagegen alle betroffenen Container und fragt deshalb nach. Welche Services ersetzt wurden, nennt das Ergebnis.
 
 Rückfragen vor jeder Aktion würden zum Wegklicken erziehen und die wenigen wichtigen Rückfragen entwerten.
 
@@ -55,4 +55,4 @@ Ein gestoppter Container mit Stopp-Absicht zeigt „manuell gestoppt“ mit Zeit
 
 ## Update, Recreate und Entfernen
 
-Diese Aktionen folgen denselben Zuständen, Sperrgründen und Fortschrittsregeln, verändern aber Container oder Definitionen und fragen deshalb immer. Die Rückfrage nennt das Ziel, die betroffenen Services, was mit Daten geschieht und den Rückweg: Ein Update fällt beim Fehlschlag auf das vorherige Image mit der vorherigen Definition zurück ([update-and-rollback.md](update-and-rollback.md)), und Entfernen erhält Daten im Standardweg. Bei fremdverwalteten Containern sind sie gesperrt und nennen den zuständigen Verwalter. Vorschau, Ablauf und Rückweg im Einzelnen bedient #88; die Erfolgskriterien eines Updates entscheidet #13.
+Diese Aktionen folgen denselben Zuständen, Sperrgründen und Fortschrittsregeln, verändern aber Container oder Definitionen und fragen deshalb immer. Die Rückfrage nennt das Ziel, die betroffenen Services, was mit Daten geschieht und den Rückweg: Ein Update fällt beim Fehlschlag auf das vorherige Image mit der vorherigen Definition zurück ([update-and-rollback.md](update-and-rollback.md)), und Entfernen erhält Daten im Standardweg. Bei fremdverwalteten Containern sind sie gesperrt und nennen den zuständigen Verwalter. Vorschau, Ablauf und Rückweg im Einzelnen beschreibt [update-and-rollback.md](update-and-rollback.md); die Erfolgskriterien eines Updates entscheidet #13.
