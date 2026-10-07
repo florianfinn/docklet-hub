@@ -6,7 +6,6 @@ import { formatDateTime } from "../../platform/i18n/time-format";
 import { Button } from "../../platform/ui/shadcn/button";
 import { intentTarget, maintenanceTarget, sameTarget, targetContainers, controlsBlocker, type LifecycleTarget } from "./lifecycle-state";
 import { BLOCKER_MESSAGES } from "./lifecycle-messages";
-import { useLifecycleNow } from "./LifecycleProvider";
 import { useLifecycleState } from "./use-lifecycle";
 import { useLifecycleWrite } from "./use-lifecycle-write";
 import { acknowledgeIncident } from "./api";
@@ -16,11 +15,9 @@ export function LifecycleStatus({ target, reload }: { target: LifecycleTarget; r
   const t = useTranslations();
   const { language } = useLanguage();
   const { host } = useLifecycleState(target);
-  const now = useLifecycleNow();
   const snapshot = host?.lifecycle;
   const maintenance = snapshot?.selfHealing?.maintenance.filter((entry) => (sameTarget(entry.target, maintenanceTarget(target)) ||
-    target.kind === "container" && target.container.compose && entry.target.kind === "stack" && entry.target.projectName === target.container.compose.project) &&
-    (entry.expiresAt === null || Date.parse(entry.expiresAt) > now)) ?? [];
+    target.kind === "container" && target.container.compose && entry.target.kind === "stack" && entry.target.projectName === target.container.compose.project)) ?? [];
   const time = (value: string) => formatDateTime(language, new Date(value));
   return <div className="space-y-1 text-xs break-words">
     {!snapshot?.stopIntents?.observing ? <p>{t("lifecycleObservationUnknown")}</p> : null}
@@ -32,12 +29,16 @@ export function LifecycleStatus({ target, reload }: { target: LifecycleTarget; r
     {targetContainers(target).map((container) => {
       const intent = snapshot?.stopIntents?.observing ? snapshot.stopIntents.intents.find((entry) => sameTarget(entry.target, intentTarget(container))) : undefined;
       const stopped = container.status === "exited" || container.status === "created";
+      const budget = snapshot?.selfHealing?.budgets.find((entry) => sameTarget(entry.target, intentTarget(container)));
       const incident = snapshot?.selfHealing?.incidents.find((entry) => entry.closedAt === null && sameTarget(entry.target, intentTarget(container)));
       return <div key={container.name}>
         {container.status === "restarting" ? <p>{container.name} · {t("lifecycleRestarting")}</p> : null}
         {stopped && intent ? <p>{container.name} · {t("lifecycleManualStop", { time: time(intent.stoppedAt), actor: intent.actor ?? t("lifecycleActorUnknown") })}</p>
           : stopped && snapshot?.stopIntents?.observing && container.exitCode !== undefined && container.exitCode !== null && container.exitCode !== 0
             ? <p>{container.name} · {t("lifecycleCrashed", { code: container.exitCode })}</p> : null}
+        {budget ? <p>{container.name} · {t("lifecycleBudget", { used: budget.usedAttempts, remaining: budget.remainingAttempts })}</p> : null}
+        {budget?.nextAttemptAt && snapshot?.selfHealing?.observing ? <p>{t("lifecycleNextAttempt", { time: time(budget.nextAttemptAt) })}</p> : null}
+        {budget?.runningSince && snapshot?.selfHealing?.observing ? <p>{t("lifecycleStableSince", { time: time(budget.runningSince) })}</p> : null}
         {incident ? <IncidentView hostId={target.hostId} container={container} incident={incident} reload={reload} /> : null}
       </div>;
     })}

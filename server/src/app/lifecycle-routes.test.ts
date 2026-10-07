@@ -20,9 +20,7 @@ for (const [method, path] of [["PUT", "/self-healing/maintenance"], ["DELETE", "
   });
   test(`${method} ${path} immediately rejects offline hosts, invalid input and outdated agents`, async (t) => {
     const f = await lifecycleFixture(); t.after(f.close);
-    f.state.disconnected = true;
-    assert.equal((await f.call(method, path, { target })).body.error, "runtime-host-offline"); assert.equal(f.probes, 0);
-    f.state.disconnected = false; f.state.health = { reachable: false, error: "private diagnostic" };
+    f.state.health = { reachable: false, error: "private diagnostic" };
     assert.equal((await f.call(method, path, { target })).body.error, "runtime-host-offline");
     f.state.health = { reachable: true, version: "0.1.0", contractVersion: 1, readOnly: false, entries: 1 };
     assert.equal((await f.call(method, path, { target })).body.error, "agent-outdated");

@@ -15,14 +15,15 @@ export async function readStopIntents(target: AgentTarget, options: RequestOptio
 }
 export async function readSelfHealing(target: AgentTarget, options: RequestOptions): Promise<SelfHealingStatusResponse> {
   let raw: unknown;
+  let unavailable = false;
   try { raw = await agentGet(target, "/self-healing/status", options); }
   catch (error) {
     if (!(error instanceof AgentError) || error.status !== 503) throw error;
-    raw = error.detail;
+    unavailable = true; raw = error.detail;
   }
   const parsed = selfHealingStatusResponseSchema.safeParse(raw);
   if (!parsed.success) invalid();
-  return parsed.data;
+  return { ...parsed.data, observing: !unavailable && parsed.data.observing };
 }
 export async function writeLifecycle(target: AgentTarget, operation: "maintenance-on" | "maintenance-off" | "acknowledge",
   body: unknown, options: RequestOptions): Promise<{ ok: true }> {

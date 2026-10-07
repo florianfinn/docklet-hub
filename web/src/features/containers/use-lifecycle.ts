@@ -1,12 +1,12 @@
 import { useState, useSyncExternalStore, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { hubContainerRuntimeResultSchema, hubStackRuntimeResultSchema,
+import { hubStackRuntimeResultSchema,
   type HostOverview, type HubRuntimeContext, type RuntimeAction } from "contract";
 import { retainHostOverview, type LiveState } from "../../domain/hosts";
 import { queryKeys } from "../../platform/query/query-keys";
 import { ApiError, errorCode } from "../../platform/http/transport";
 import { useLifecycleSession } from "./LifecycleProvider";
-import { fetchLifecycleHost, fetchRuntimeContext, runContainerAction, runStackAction } from "./api";
+import { fetchLifecycleHost, fetchRuntimeContext, runContainerAction, runStackAction, runtimeActionResultOf } from "./api";
 import { targetKey, targetContainers, requiresConfirmation, type LifecycleTarget } from "./lifecycle-state";
 import type { OperationResult } from "./lifecycle-operations";
 
@@ -56,7 +56,7 @@ export function useLifecycleAction(target: LifecycleTarget) {
   const failure = (next: LifecycleTarget, error: unknown, timedOut = false) => {
     const code = errorCode(error);
     operations.update(next, { phase: "done", error: code ?? undefined,
-      message: timedOut || code === "runtime-action-timeout" ? "timeout" : !code || ["runtime-agent-unreachable", "runtime-stream-broken", "action-caller-disconnected"].includes(code) ? "unknown" : "failed" });
+      message: timedOut ? "timeout" : !code || ["runtime-outcome-unknown", "runtime-stream-broken", "action-caller-disconnected"].includes(code) ? "unknown" : "failed" });
   };
   async function execute(request: LifecycleQuestion) {
     if (sending.current) return;
@@ -67,7 +67,7 @@ export function useLifecycleAction(target: LifecycleTarget) {
     let timedOut = false;
     let reconfirm = false;
     const timer = setTimeout(() => { timedOut = true; controller.abort(); }, LIFECYCLE_TIMEOUT_MS);
-    operations.update(next, { phase: "waiting" });
+    operations.update(next, { phase: "running" });
     try {
       signal.throwIfAborted();
       if (next.kind === "container") {
@@ -76,6 +76,7 @@ export function useLifecycleAction(target: LifecycleTarget) {
       } else {
         const value = request.context!;
         await runStackAction(next.hostId, next.stack.containers[0].id, request.action, value.expectedStack, (event) => {
+          if (event.kind === "queued") operations.update(next, { phase: "waiting" });
           if (event.kind === "start") operations.update(next, { phase: "running" });
           if (event.kind === "progress") {
             const previous = operations.snapshot().get(targetKey(next))?.progress ?? [];
@@ -100,11 +101,11 @@ export function useLifecycleAction(target: LifecycleTarget) {
           operations.update(next, { busy: true }); reconfirm = true;
         } catch (readError) { failure(next, readError); }
       } else {
-        let parsed: OperationResult | null = null;
-        if (error instanceof ApiError) {
+        let parsed: OperationResult | null = next.kind === "container" ? runtimeActionResultOf(error) : null;
+        if (next.kind === "stack" && error instanceof ApiError) {
           try {
             const body: unknown = JSON.parse(error.message);
-            const result = (next.kind === "stack" ? hubStackRuntimeResultSchema : hubContainerRuntimeResultSchema).safeParse(body);
+            const result = hubStackRuntimeResultSchema.safeParse(body);
             if (result.success) parsed = result.data;
           } catch { parsed = null; }
         }

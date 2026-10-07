@@ -10,12 +10,11 @@ function reject(status: number, error: string): never {
 }
 export function createLifecycleService(deps: {
   openHost: (ref: HostRouteRequest, writing: "reads" | "writes") => Promise<HostRouteAccessResult>;
-  liveEvents?: Pick<LiveEvents, "refresh" | "hostStatus">;
+  liveEvents?: Pick<LiveEvents, "refresh">;
   agent?: { readStopIntents: typeof readStopIntents; readSelfHealing: typeof readSelfHealing; writeLifecycle: typeof writeLifecycle };
 }) {
   const agent = deps.agent ?? { readStopIntents, readSelfHealing, writeLifecycle };
   async function access(ref: HostRouteRequest, writing: "reads" | "writes") {
-    if (deps.liveEvents?.hostStatus(ref.hostId) === "disconnected") reject(503, "runtime-host-offline");
     const opened = await deps.openHost(ref, writing);
     if (!opened.ok) {
       if (opened.failure.kind === "agent-error") throw opened.failure.error;

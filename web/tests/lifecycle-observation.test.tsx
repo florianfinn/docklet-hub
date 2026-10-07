@@ -84,10 +84,47 @@ for (const available of [true, false]) test(`incident ${available ? "with logs" 
     assert.equal(f.calls.some((call) => call.path.endsWith("/overview")), true);
   } finally { await f.close(); }
 });
-test("expired maintenance and closed incidents are not shown as active", async () => {
-  const current = host(); current.lifecycle!.selfHealing!.maintenance = [{ target, actor: null, startedAt: "2020-01-01T00:00:00Z", expiresAt: "2020-01-01T01:00:00Z" }];
+test("agent-removed maintenance and closed incidents are not shown as active", async () => {
+  const current = host(); current.lifecycle!.selfHealing!.maintenance = [];
   current.lifecycle!.selfHealing!.incidents = [{ ...incident, closedAt: "2026-10-07T01:35:00Z", closedReason: "acknowledged" }];
   const f = await fixture({ current, detail: true });
   try { assert.equal(document.body.textContent?.includes("Wartung bis"), false); assert.equal(document.querySelector('details') === null, true); }
   finally { await f.close(); }
+});
+
+test("agent budgets and pending times are shown without reconstructing healing decisions", async () => {
+  const current = host([container("exited", { exitCode: 1 })]);
+  current.lifecycle!.selfHealing!.budgets = [{ target, containerId: "demo-web-id", usedAttempts: 2, remainingAttempts: 1,
+    attempts: incident.attempts, nextAttemptAt: "2099-10-07T02:00:00Z", runningSince: null }];
+  current.lifecycle!.selfHealing!.incidents = [incident];
+  const f = await fixture({ current });
+  try {
+    assert.equal(document.body.textContent?.includes("Selbstheilungsbudget: 2 verbraucht · 1 verbleibend"), true);
+    assert.equal(document.body.textContent?.includes("Nächster Heilungsversuch:"), true);
+    const unavailable = structuredClone(current);
+    unavailable.lifecycle!.selfHealing!.observing = false;
+    unavailable.lifecycle!.stopIntents = null;
+    await f.update(unavailable);
+    assert.equal(document.body.textContent?.includes("Selbstheilung unbekannt"), true);
+    assert.equal(document.body.textContent?.includes("Stopp-Absicht unbekannt"), true);
+    assert.equal(document.body.textContent?.includes("Nächster Heilungsversuch:"), false);
+    assert.equal(document.body.textContent?.includes("abgestürzt"), false);
+    assert.equal(document.body.textContent?.includes("Selbstheilungsbudget: 2 verbraucht · 1 verbleibend"), true);
+    assert.equal(document.body.textContent?.includes("Offener Selbstheilungsvorfall"), true);
+    assert.equal(f.calls.some((call) => call.path.endsWith("/start")), false);
+  } finally { await f.close(); }
+});
+test("maintenance follows the agent status despite a past wall-clock expiry", async () => {
+  const current = host();
+  current.lifecycle!.selfHealing!.maintenance = [{ target, actor: null, startedAt: "2020-01-01T00:00:00Z", expiresAt: "2020-01-01T01:00:00Z" }];
+  const f = await fixture({ current, detail: true });
+  try {
+    assert.equal(document.body.textContent?.includes("Wartung bis"), true);
+    assert.equal(textButton("Wartung ausschalten").getAttribute("aria-disabled"), "false");
+    const expired = structuredClone(current);
+    expired.lifecycle!.selfHealing!.maintenance = [];
+    await f.update(expired);
+    assert.equal(document.body.textContent?.includes("Wartung bis"), false);
+    assert.equal(textButton("Wartung einschalten").getAttribute("aria-disabled"), "false");
+  } finally { await f.close(); }
 });

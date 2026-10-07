@@ -8,7 +8,6 @@ import { Label } from "../../platform/ui/shadcn/label";
 import { controlsBlocker, maintenanceTarget, sameTarget, targetName, type LifecycleTarget } from "./lifecycle-state";
 import { BLOCKER_MESSAGES } from "./lifecycle-messages";
 import { useLifecycleState } from "./use-lifecycle";
-import { useLifecycleNow } from "./LifecycleProvider";
 import { useLifecycleWrite } from "./use-lifecycle-write";
 import { setMaintenance, clearMaintenance } from "./api";
 
@@ -18,11 +17,9 @@ export function MaintenanceControls({ target, detail, reload }: { target: Lifecy
   const [open, setOpen] = useState(false);
   const [duration, setDuration] = useState("default");
   const { host, role, busy } = useLifecycleState(target);
-  const now = useLifecycleNow();
   const write = useLifecycleWrite(target, reload);
   const reason = controlsBlocker(host, role, busy);
-  const own = host?.lifecycle?.selfHealing?.maintenance.find((entry) => sameTarget(entry.target, maintenanceTarget(target)) &&
-    (entry.expiresAt === null || Date.parse(entry.expiresAt) > now));
+  const own = host?.lifecycle?.selfHealing?.maintenance.find((entry) => sameTarget(entry.target, maintenanceTarget(target)));
   const seconds = duration === "default" ? host?.lifecycle?.maintenanceDurationSeconds ??
     (host?.lifecycle?.maintenanceDurationSeconds === null ? null : 3600) : duration === "unlimited" ? null : Number(duration);
   const defaultSeconds = host?.lifecycle?.maintenanceDurationSeconds;

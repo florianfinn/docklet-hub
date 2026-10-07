@@ -19,7 +19,6 @@ function rejected(status: number, error: string): never {
 export function createRuntimeActionsService(deps: RuntimeActionsDeps) {
   const agent = deps.agent ?? agentClient;
   async function context(ref: ContainerAccessRequest) {
-    if (deps.liveEvents?.hostStatus(ref.hostId) === "disconnected") rejected(503, "runtime-host-offline");
     const opened = await deps.openContainer(ref, "reads");
     if (!opened.ok) {
       if (opened.failure.kind === "agent-error") throw opened.failure.error;

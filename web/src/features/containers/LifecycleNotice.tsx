@@ -26,7 +26,7 @@ export function LifecycleNotice({ operation, dismiss, reload }: {
   return <div role={operation.message && !transient ? "alert" : "status"} aria-live="polite" className="space-y-1 text-xs break-words">
     {operation.busy ? <p>{t(operation.phase === "preparing" ? "lifecyclePreparing" : operation.phase === "waiting" ? "lifecycleWaiting" : "lifecycleRunning")}</p> : null}
     {operation.message ? <p>{t(RESULT_MESSAGES[operation.message])}</p> : null}
-    {errorKey ? (<p>{t(errorKey)}</p>) : operation.error ? (<p>{t("lifecycleErrorGeneric")} {t("lifecycleErrorCode", { code: operation.error })}</p>) : null}
+    {errorKey ? (<p>{t(errorKey)}</p>) : operation.error ? (<p>{operation.message === "failed" ? t("lifecycleErrorGeneric") : null} {t("lifecycleErrorCode", { code: operation.error })}</p>) : null}
     {services.length > 0 ? <ul className="space-y-1">
       {services.map((service) => <li key={service.serviceName}>
         <span>{t("lifecycleServiceState", { service: service.serviceName, status: service.status })}</span>

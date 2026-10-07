@@ -61,10 +61,14 @@ test("double clicks and a second rendering of the same target share an immediate
     await React.act(async () => { button("stop").click(); button("stop").click(); button("restart", 1).click(); }); await settle();
     assert.equal(f.calls.filter((call) => call.method === "POST").length, 1);
     assert.equal(button("restart", 1).getAttribute("aria-disabled"), "true");
-    assert.equal(document.body.textContent?.includes("wartet auf laufenden Vorgang"), true);
+    assert.equal(document.body.textContent?.includes("Vorgang läuft"), true);
+    assert.equal(document.body.textContent?.includes("wartet auf laufenden Vorgang"), false);
     resolve(Response.json({ ok: true, action: "stop", outcome: "ok", state: { containerId: "demo-web-id", status: "exited", startedAt: null, exitCode: 0, health: null } }));
     await waitFor(() => f.calls.some((call) => call.path.endsWith("/overview")));
-  } finally { await f.close(); }
+  } finally {
+    resolve(Response.json({ error: "runtime-outcome-unknown" }, { status: 502 }));
+    await f.close();
+  }
 });
 for (const mode of [true, false]) for (const owned of [true, false]) test(`stack mode ${mode}, ownership ${owned}: labels reflect only the effective stack mode`, async () => {
   const current = host([container("running"), container("exited", { id: "db-id", name: "demo-db", compose: { project: "demo", service: "db" }, exitCode: 1 })]);

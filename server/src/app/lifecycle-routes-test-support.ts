@@ -10,8 +10,8 @@ import { listenOnFetchablePort } from "../platform/testing/port-test-support.js"
 import { createApiRouter } from "./router.js";
 
 export async function lifecycleFixture() {
-  const state: { role: string | null; disconnected: boolean; health: AgentHealth; status: number; body: unknown } = {
-    role: "admin", disconnected: false,
+  const state: { role: string | null; health: AgentHealth; status: number; body: unknown } = {
+    role: "admin",
     health: { reachable: true, version: "0.32.0", contractVersion: CONTRACT_VERSION, readOnly: false, entries: 1 },
     status: 200, body: { ok: true }
   };
@@ -34,8 +34,7 @@ export async function lifecycleFixture() {
     config: { wireguardEndpoint: "hub.example.org", wireguardPort: 51821 },
     auth: { api: { getSession: async () => state.role ? { user: { id: "demo-human", role: state.role } } : null } } as unknown as Auth,
     probeHost: async () => { probes++; return state.health; },
-    liveEvents: { hostStatus: () => state.disconnected ? "disconnected" : "connected",
-      refresh: async (_id: string, target: RefreshTarget) => { refreshes.push(target); return []; } } as unknown as LiveEvents
+    liveEvents: { refresh: async (_id: string, target: RefreshTarget) => { refreshes.push(target); return []; } } as unknown as LiveEvents
   }));
   const server = http.createServer(app); await listenOnFetchablePort(server);
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/hosts/demo-host`;

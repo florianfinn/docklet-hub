@@ -183,7 +183,7 @@ for (const failure of [Object.assign(new Error("inspect failed"), { status: 500 
     assert.equal(f.watcher.isObserving(), false);
     assert.deepEqual(f.store.list(), []);
     await until(() => f.subscriptions() === 2 && f.watcher.isObserving());
-    const lateEvents: DockerMonitorEvent[] = [];
+    const lateEvents: Parameters<Parameters<DockerEventWatcher["subscribe"]>[0]>[0][] = [];
     f.watcher.subscribe((event) => lateEvents.push(event));
     f.emit("die");
     await until(() => lateEvents.length === 1);
@@ -211,7 +211,7 @@ test("all live monitor actions fan out unchanged over the single background subs
 
 test("since excludes old Docker replay from stop intent and monitor readers", async (t) => {
   const f = fixture(t);
-  const events: DockerMonitorEvent[] = [];
+  const events: Parameters<Parameters<DockerEventWatcher["subscribe"]>[0]>[0][] = [];
   f.watcher.subscribe((event) => events.push(event));
   f.watcher.start();
   await until(() => f.watcher.isObserving());

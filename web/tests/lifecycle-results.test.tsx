@@ -41,8 +41,8 @@ test("an HTTP failure result retains every service and never shows free diagnost
   } finally { await f.close(); }
 });
 for (const [error, message] of [
-  ["runtime-action-timeout", "Zeitgrenze überschritten"], ["action-queue-timeout", "keine neue Aktion gestartet"],
-  ["runtime-agent-unreachable", "Ergebnis unbekannt"], ["runtime-stream-broken", "Ergebnis unbekannt"]
+  ["runtime-outcome-unknown", "Ergebnis unbekannt"], ["action-queue-timeout", "keine neue Aktion gestartet"],
+  ["runtime-agent-unreachable", "Aktion fehlgeschlagen"], ["runtime-stream-broken", "Ergebnis unbekannt"]
 ]) test(`${error}: persistent notice and actual state reread`, async () => {
   const f = await fixture({ action: () => Response.json({ error }, { status: 502 }) });
   try {
@@ -75,4 +75,52 @@ test("completion keeps the target locked until its actual state has been read", 
     await React.act(async () => { finish(); });
     assert.equal(await waitFor(() => button("restart").getAttribute("aria-disabled") === "false"), true);
   } finally { finish(); await f.close(); }
+});
+
+test("a stack only reports waiting after queued, and start resumes service progress", async () => {
+  let stream!: ReadableStreamDefaultController<Uint8Array>;
+  const f = await fixture({ kind: "stack", current: host([container("created")]), action: () => new Response(new ReadableStream({
+    start: (controller) => { stream = controller; }
+  }), { headers: { "content-type": "application/x-ndjson" } }) });
+  const send = (line: unknown) => stream.enqueue(new TextEncoder().encode(JSON.stringify(line) + "\n"));
+  try {
+    await click(button("start")); assert.equal(await waitFor(() => Boolean(stream)), true);
+    assert.equal(document.body.textContent?.includes("Vorgang läuft"), true);
+    assert.equal(document.body.textContent?.includes("wartet auf laufenden Vorgang"), false);
+    await React.act(async () => { send({ kind: "queued" }); });
+    assert.equal(await waitFor(() => document.body.textContent?.includes("wartet auf laufenden Vorgang") === true), true);
+    assert.equal(button("start").getAttribute("aria-disabled"), "true");
+    await React.act(async () => { send({ kind: "start", action: "start", projectName: "demo", applyDefinition: true }); });
+    assert.equal(await waitFor(() => document.body.textContent?.includes("Vorgang läuft") === true), true);
+    assert.equal(document.body.textContent?.includes("wartet auf laufenden Vorgang"), false);
+    await React.act(async () => { send({ kind: "result", status: 200, body: { ok: true, action: "start", outcome: "ok",
+      applyDefinition: true, services: [service("web", "ok")], containerIds: { web: "web-id" } } }); stream.close(); });
+    assert.equal(await waitFor(() => f.calls.some((call) => call.path.endsWith("/overview"))), true);
+  } finally { await f.close(); }
+});
+test("synchronous container progress never claims queue state and retains sanitized 502 state", async () => {
+  let answer!: (response: Response) => void;
+  const f = await fixture({ action: () => new Promise<Response>((resolve) => { answer = resolve; }) });
+  try {
+    await click(button("stop"));
+    assert.equal(document.body.textContent?.includes("Vorgang läuft"), true);
+    assert.equal(document.body.textContent?.includes("wartet auf laufenden Vorgang"), false);
+    await React.act(async () => { answer(Response.json({ ok: false, action: "stop", outcome: "failed",
+      error: "runtime-target-not-reached", state: { containerId: "demo-web-id", status: "restarting", startedAt: null,
+        exitCode: null, health: null }, stderr: "synthetic-private-detail" }, { status: 502 })); });
+    assert.equal(await waitFor(() => f.calls.some((call) => call.path.endsWith("/overview"))), true);
+    assert.equal(document.body.textContent?.includes("demo-web: restarting"), true);
+    assert.equal(document.body.textContent?.includes("synthetic-private-detail"), false);
+  } finally { await f.close(); }
+});
+test("a sent request with unknown outcome reads state and never repeats automatically", async () => {
+  const f = await fixture({ action: () => Response.json({ error: "runtime-outcome-unknown" }, { status: 502 }) });
+  try {
+    await click(button("restart"));
+    assert.equal(await waitFor(() => f.calls.some((call) => call.path.endsWith("/overview"))), true);
+    assert.equal(document.body.textContent?.includes("Ergebnis unbekannt, Vorgang kann auf dem Host weiterlaufen"), true);
+    assert.equal(document.body.textContent?.includes("Aktion fehlgeschlagen"), false);
+    assert.equal(document.body.textContent?.includes("Die Aktion wurde abgelehnt"), false);
+    assert.equal(f.calls.filter((call) => call.method === "POST").length, 1);
+  } finally { await f.close(); }
 });
