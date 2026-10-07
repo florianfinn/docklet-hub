@@ -33,7 +33,7 @@ function fixture(external = false, missing = false) {
     project: { projectName: "app", projectDir: "/srv/apps/app", composeFileName: "compose.yaml", anchorEntry: entry, anchorServiceName: "web" },
     context, definition: { services: ["web"], couplings: [] },
     normalized: { services: { web: { image: "example/app:1.0", stop_grace_period: "2m" } } },
-    definitionReadable: true, externallyManaged: external, entriesByService: new Map([["web", entry]])
+    externallyManaged: external, entriesByService: new Map([["web", entry]])
   };
   const calls: Array<{ name: string; args?: unknown }> = [];
   let after: StackContextResponse = { ...context, services: [{ ...service, missing: false, containerId: "new", status: "running", startedAt: "later", exitCode: 0 }] };
@@ -97,15 +97,6 @@ test("foreign stacks report missing services as partial without creation", async
   assert.equal(result.body.error, "runtime-target-not-reached");
   assert.equal(result.body.services[1].outcome, "not-created-externally-managed");
   assert.equal(f.calls.some((call) => call.name === "up"), false);
-});
-
-test("unreadable foreign definition uses only the existing services", async () => {
-  const f = fixture(true);
-  f.prepared.definitionReadable = false;
-  f.prepared.normalized = null;
-  const result = await stackResult(f.ops, "start", f.body);
-  assert.equal(result.body.services.length, 1);
-  assert.equal(f.calls.some((call) => call.name === "start"), true);
 });
 
 for (const action of ["start", "restart"] as const) for (const error of ["runtime-image-missing", "stack-service-not-allowlisted", "externally-managed"]) {

@@ -52,19 +52,6 @@ test("unknown foreign labels lock creation even when the registry has not marked
   assert.throws(() => ensureCreateScopeNotExternallyManaged(prepared), (error: unknown) => error instanceof StackEndpointError && error.code === "externally-managed");
 });
 
-test("unreadable foreign definitions retain exactly the current service inventory", async (t) => {
-  mockEngine(t);
-  registry.replaceAll([{ ...entry, externallyManaged: true }]);
-  const prepared = await prepareStack(stackProjectFromRegistry("old"), { mutating: true, action: "start", actor: null, tolerateUnreadableDefinition: true },
-    async () => { throw new Error("unreadable"); });
-  assert.equal(prepared.definitionReadable, false);
-  assert.equal(prepared.context.services.length, 1);
-  assert.equal(prepared.context.services[0].exitCode, 0);
-  assert.equal(prepared.context.services[0].health, "unhealthy");
-  assert.equal(prepared.context.services[0].stopTimeoutSeconds, 90);
-  assert.deepEqual(prepared.context.missingServices, []);
-});
-
 test("an unauthorized project neighbour still blocks the entire runtime action", async (t) => {
   mockEngine(t);
   t.mock.method(engine, "listWithComposeLabels", async () => [

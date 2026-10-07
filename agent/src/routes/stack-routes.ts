@@ -508,7 +508,14 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
   let releaseStream: (() => void) | null = null;
   let mutationStarted = false;
   const delegation = new Set<string>();
-  const auditReason = (reason: string) => [...delegation, reason].join("; ");
+  const auditReason = (reason: string, key = reason) => {
+    if (!delegation.size && reason.startsWith(key)) return reason;
+    const rules = [...new Set([...delegation].flatMap((note) =>
+      note.replace(/^delegation-lock-allowed: /, "").split(",")))].sort().join(",");
+    // Reserve the audit prefix for the failure key and delegation evidence before diagnostics.
+    const evidence = rules ? `delegation-lock-allowed: ${rules.length > 120 ? `${rules.slice(0, 120)}…` : rules}` : null;
+    return [key, ...(evidence ? [evidence] : []), ...(reason === key ? [] : [reason])].join("; ");
+  };
   const streaming = streamSuffix || request.headers.accept?.includes("application/x-ndjson") === true;
   try {
     const project = stackProjectFromRegistry(anchorContainerId);
@@ -629,7 +636,7 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
     audit.write({
       action: `stack-${action}`, containerId: anchorContainerId, containerName: null, actor,
       outcome: mutationStarted || failure.body.error === "compose-stack-action-failed" ? "error" : "denied",
-      reason: auditReason(failure.auditReason)
+      reason: auditReason(failure.auditReason, String(failure.body.error))
     });
     if (!response.destroyed && !response.writableEnded) {
       if (response.headersSent) {

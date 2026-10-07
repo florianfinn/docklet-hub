@@ -173,6 +173,27 @@ test("fail schedules monotonic recovery after 1, 2, 4, 8, 16 and at most 30 seco
   f.advance(1); await f.controller.tick(); assert.equal(f.controller.isAvailable(), true);
 });
 
+test("successful recovery without observation resets the next failure delay to one second", async (t) => {
+  const f = healingFixture(t);
+  f.controller.setObserving(false);
+  let writes = 0;
+  const mock = t.mock.method(fs, "renameSync", () => {
+    writes++; throw new Error("synthetic recovery failure");
+  });
+  f.controller.fail();
+  f.advance(1000); await assert.rejects(f.controller.tick(), /synthetic recovery failure/);
+  f.advance(2000); await assert.rejects(f.controller.tick(), /synthetic recovery failure/);
+  assert.equal(writes, 2);
+  mock.mock.restore();
+  f.advance(3999); await f.controller.tick(); assert.equal(f.controller.isAvailable(), false);
+  f.advance(1); await f.controller.tick(); assert.equal(f.controller.isAvailable(), true);
+  assert.equal(f.starts(), 0);
+  f.controller.fail();
+  f.advance(999); await f.controller.tick(); assert.equal(f.controller.isAvailable(), false);
+  f.advance(1); await f.controller.tick(); assert.equal(f.controller.isAvailable(), true);
+  assert.equal(f.starts(), 0);
+});
+
 test("failed observation cleanup is retried before recovery can heal stale evidence", async (t) => {
   const f = healingFixture(t); f.crash();
   const mock = t.mock.method(fs, "renameSync", () => { throw new Error("synthetic cleanup failure"); });
