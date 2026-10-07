@@ -78,7 +78,11 @@ export async function runContainerAction(
             try { await engine.stop(inspect.Id, inspect.Config?.StopTimeout ?? null); }
             finally { finish(); }
           }
-          else await engine.restart(inspect.Id, inspect.Config?.StopTimeout ?? null);
+          else {
+            const finish = stopIntents.beginHubRestart([inspect]);
+            try { await engine.restart(inspect.Id, inspect.Config?.StopTimeout ?? null); }
+            finally { finish(); }
+          }
         }
       }, action, expected, before, signal);
     }, { waitMs: ACTION_QUEUE_WAIT_MS, signal });

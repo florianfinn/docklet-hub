@@ -11,7 +11,7 @@ const LINUX_SIGRTMIN = 34;
 const LINUX_SIGRTMAX = 64;
 const RECENT_EXIT_LIMIT = 256;
 export const STOP_INTENT_LIMIT = 256;
-type PendingKill = { target: StopIntentTarget; containerId: string; atMs: number; windowMs: number; actor: string | null };
+type PendingKill = { target: StopIntentTarget; containerId: string; atMs: number; windowMs: number; actor: string | null; restart?: boolean };
 type HubStop = { actor: string | null; startedAt: number; finishedAt: number };
 
 export function stopIntentTarget(container: RawInspect): StopIntentTarget | null {
@@ -51,11 +51,18 @@ function signalNumber(signal: string | undefined): number | null {
   return constants.signals[name as keyof typeof constants.signals] ?? null;
 }
 
+export function isStopSignal(container: RawInspect, value: string | undefined): boolean {
+  const signal = signalNumber(value);
+  return signal !== null && (signal === signalNumber(container.Config?.StopSignal || "SIGTERM")
+    || signal === constants.signals.SIGKILL);
+}
+
 export class StopIntentStore {
   private generation: string | null = null;
   private intents = new Map<string, StopIntent>();
   private kills = new Map<string, PendingKill>();
   private hubStops = new Map<string, HubStop>();
+  private hubRestarts = new Map<string, HubStop>();
   private exits: ContainerExit[] = [];
 
   constructor(
@@ -96,7 +103,8 @@ export class StopIntentStore {
       stopIntentTargetSchema.parse(kill.target);
       if (typeof kill.containerId !== "string" || !Number.isFinite(kill.atMs)
         || !(Number.isFinite(kill.windowMs) && kill.windowMs >= 0)
-        || !(kill.actor === null || typeof kill.actor === "string")) throw new Error("Invalid pending stop intent");
+        || !(kill.actor === null || typeof kill.actor === "string")
+        || !(kill.restart === undefined || typeof kill.restart === "boolean")) throw new Error("Invalid pending stop intent");
       this.kills.set(kill.containerId, kill);
     }
     this.limitEntries();
@@ -108,6 +116,7 @@ export class StopIntentStore {
     this.intents.clear();
     this.kills.clear();
     this.hubStops.clear();
+    this.hubRestarts.clear();
     this.exits = [];
     this.persist();
   }
@@ -117,6 +126,7 @@ export class StopIntentStore {
     this.intents.clear();
     this.kills.clear();
     this.hubStops.clear();
+    this.hubRestarts.clear();
     this.exits = [];
     this.persist();
   }
@@ -124,8 +134,43 @@ export class StopIntentStore {
   // Stop routes annotate the request; only Docker's kill/die confirms intent.
   beginHubStop(containerIds: readonly string[], actor: string | null): () => void {
     const annotation: HubStop = { actor, startedAt: this.now(), finishedAt: Infinity };
-    for (const id of containerIds) this.hubStops.set(id, annotation);
+    for (const id of containerIds) {
+      this.hubStops.set(id, annotation);
+      this.hubRestarts.delete(id);
+      if (this.kills.get(id)?.restart) this.kills.delete(id);
+    }
     return () => { annotation.finishedAt = this.now(); };
+  }
+
+  // A restart asks for a running result even if its start subsequently fails.
+  beginHubRestart(containers: readonly RawInspect[]): () => void {
+    const previous = { intents: new Map(this.intents), kills: new Map(this.kills), restarts: new Map(this.hubRestarts) };
+    const annotation: HubStop = { actor: null, startedAt: this.now(), finishedAt: Infinity };
+    for (const container of containers) {
+      this.hubRestarts.set(container.Id, annotation);
+      this.kills.delete(container.Id);
+      const target = stopIntentTarget(container);
+      if (target) this.intents.delete(targetKey(target));
+    }
+    try { this.persist(); }
+    catch (error) {
+      this.intents = previous.intents; this.kills = previous.kills; this.hubRestarts = previous.restarts;
+      throw error;
+    }
+    return () => { annotation.finishedAt = this.now(); };
+  }
+
+  isHubRestartActive(containerId: string): boolean {
+    return this.hubRestarts.get(containerId)?.finishedAt === Infinity;
+  }
+
+  restartRequested(event: DockerMonitorEvent): boolean {
+    if (event.action === "restart") return true;
+    const atMs = event.atMs ?? this.now();
+    const annotation = this.hubRestarts.get(event.containerId);
+    const kill = this.kills.get(event.containerId);
+    return Boolean(annotation && atMs >= annotation.startedAt && atMs <= annotation.finishedAt)
+      || Boolean(event.action !== "kill" && kill?.restart && atMs >= kill.atMs && atMs - kill.atMs <= kill.windowMs);
   }
 
   observe(event: DockerMonitorEvent, container: RawInspect): ContainerExit["kind"] | null {
@@ -135,21 +180,38 @@ export class StopIntentStore {
     for (const [id, annotation] of this.hubStops) {
       if (annotation.finishedAt < atMs - STOP_INTENT_BUFFER_MS) this.hubStops.delete(id);
     }
+    for (const [id, annotation] of this.hubRestarts) {
+      if (annotation.finishedAt < atMs - STOP_INTENT_BUFFER_MS) this.hubRestarts.delete(id);
+    }
     for (const [id, kill] of this.kills) {
       if (atMs - kill.atMs > kill.windowMs) this.kills.delete(id);
     }
     if (event.action === "kill") {
-      const signal = signalNumber(event.signal);
-      if (signal === null || (signal !== signalNumber(container.Config?.StopSignal || "SIGTERM")
-        && signal !== constants.signals.SIGKILL)) return null;
+      if (!isStopSignal(container, event.signal)) return null;
       const annotation = this.hubStops.get(event.containerId);
       const actor = annotation && atMs >= annotation.startedAt && atMs <= annotation.finishedAt
         ? annotation.actor : null;
-      this.kills.set(event.containerId, { target, containerId: event.containerId, atMs, windowMs: stopIntentWindow(container), actor });
+      this.kills.set(event.containerId, { target, containerId: event.containerId, atMs, windowMs: stopIntentWindow(container), actor,
+        ...(this.restartRequested(event) ? { restart: true } : {}) });
       this.persist();
       return null;
     }
+    if (event.action === "restart") {
+      const intent = this.intents.get(targetKey(target));
+      const exit = [...this.exits].reverse().find((item) => item.containerId === event.containerId
+        && item.kind === "manual-stop" && item.occurredAt === intent?.stoppedAt && Date.parse(item.occurredAt) <= atMs);
+      this.kills.delete(event.containerId);
+      this.intents.delete(targetKey(target));
+      if (exit) {
+        exit.kind = "unexpected";
+        this.kills.set(event.containerId, { target, containerId: event.containerId, atMs,
+          windowMs: stopIntentWindow(container), actor: null, restart: true });
+      }
+      this.persist();
+      return exit ? "unexpected" : null;
+    }
     if (event.action === "start") {
+      if (!this.isHubRestartActive(event.containerId)) this.hubRestarts.delete(event.containerId);
       this.kills.delete(event.containerId);
       this.hubStops.delete(event.containerId);
       this.intents.delete(targetKey(target));
@@ -158,8 +220,9 @@ export class StopIntentStore {
     }
     if (event.action !== "die") return null;
     const kill = this.kills.get(event.containerId);
-    const manual = Boolean(kill && atMs >= kill.atMs && atMs - kill.atMs <= kill.windowMs);
-    this.kills.delete(event.containerId);
+    const manual = Boolean(kill && !kill.restart && atMs >= kill.atMs && atMs - kill.atMs <= kill.windowMs);
+    // Docker's trailing stop can arrive after the restart command has returned.
+    if (!kill?.restart) this.kills.delete(event.containerId);
     this.hubStops.delete(event.containerId);
     const kind = manual ? "manual-stop" : "unexpected";
     if (manual) this.intents.set(targetKey(target), {

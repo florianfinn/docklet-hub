@@ -27,6 +27,7 @@ export function healingFixture(t: TestContext, policy = "no", maximum = 0) {
   let controller: SelfHealingController;
   const ports: HealingPorts = {
     config: () => structuredClone(config),
+    restartInProgress: (id) => intents.isHubRestartActive(id),
     check: async () => blocked ? null : structuredClone(current),
     inspect: async () => structuredClone(current),
     start: async (_id, expected, _signal, reserve) => {
@@ -44,7 +45,8 @@ export function healingFixture(t: TestContext, policy = "no", maximum = 0) {
   };
   const emit = (action: DockerMonitorEvent["action"], exitCode?: number) => {
     const event: DockerMonitorEvent = { action, containerId: current.Id, atMs: now, ...(action === "kill" ? { signal: "15" } : {}), ...(exitCode === undefined ? {} : { exitCode }) };
-    controller.observe(event, structuredClone(current), intents.observe(event, current));
+    const restarting = intents.restartRequested(event);
+    controller.observe(event, structuredClone(current), intents.observe(event, current), restarting);
   };
   const setup = () => {
     controller = new SelfHealingController(store, ports, () => now);
@@ -56,6 +58,7 @@ export function healingFixture(t: TestContext, policy = "no", maximum = 0) {
     file, directory, ports, get controller() { return controller; }, get store() { return store; },
     get current() { return current; }, set current(value: RawInspect) { current = value; },
     get config() { return config; }, set config(value: SelfHealingConfig) { config = value; },
+    get intents() { return intents; },
     target: () => stopIntentTarget(current)!, now: () => now,
     advance: (ms: number) => { now += ms; },
     emit, crash: (exitCode = 1) => {

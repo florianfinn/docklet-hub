@@ -8,7 +8,7 @@ type WatcherDependencies = { wait?: (delayMs: number, signal: AbortSignal) => Pr
 type EventEngine = Pick<DockerEngine, "inspect" | "listContainerIds" | "monitorEvents">;
 export type LifecycleObserver = {
   reconcile: (container: RawInspect) => void;
-  observe: (event: DockerMonitorEvent, container: RawInspect, classification: "manual-stop" | "unexpected" | null) => void;
+  observe: (event: DockerMonitorEvent, container: RawInspect, classification: "manual-stop" | "unexpected" | null, restartRequested: boolean) => void;
   setObserving: (observing: boolean) => void;
   fail: () => void;
 };
@@ -93,7 +93,7 @@ export class DockerEventWatcher {
         await this.engine.monitorEvents((event) => {
           queue = queue.then(async () => {
             if (connection.signal.aborted || (event.atMs !== undefined && event.atMs < since * 1_000)) return;
-            if (event.action === "kill" || event.action === "die" || event.action === "start") {
+            if (event.action === "kill" || event.action === "die" || event.action === "start" || event.action === "restart" || event.action === "stop" || event.action === "destroy") {
               let container: RawInspect;
               try {
                 container = await this.engine.inspect(event.containerId);
@@ -109,9 +109,10 @@ export class DockerEventWatcher {
                   } : {} }
                 };
               }
-              const classification = this.intents.observe(event, container);
               if (connection.signal.aborted) return;
-              this.updateLifecycle((observer) => observer.observe(event, container, classification));
+              const restarting = this.intents.restartRequested(event);
+              const classification = this.intents.observe(event, container);
+              this.updateLifecycle((observer) => observer.observe(event, container, classification, restarting));
               if (event.action === "die") containers.delete(event.containerId);
             }
             // kill is local evidence; the existing monitor stream keeps its shape.

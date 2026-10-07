@@ -4,11 +4,12 @@ import { runContainerAction } from "../container-action.js";
 import { healingEvidence } from "../self-healing-evidence.js";
 import { actionFailureOf } from "../action-failure.js";
 import { EngineError } from "../engine.js";
-import { selfHealingState, selfHealingConfig, engine, registry, config, audit, dockerEvents } from "./state.js";
+import { selfHealingState, selfHealingConfig, engine, registry, config, audit, dockerEvents, stopIntents } from "./state.js";
 import { gate } from "./gate.js";
 
 export const selfHealing = new SelfHealingController(selfHealingState, {
   config: () => selfHealingConfig.read(),
+  restartInProgress: (id) => stopIntents.isHubRestartActive(id),
   async check(id) {
     try {
       // Eligibility is observation; any later action gathers its own delegation evidence once.

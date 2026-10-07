@@ -2,6 +2,17 @@
 
 ## Unveröffentlicht
 
+- Hub-Neustarts für Container und Stacks löschen die Stopp-Absicht und
+  klassifizieren den Stoppteil als unerwartet. Die Heilung wartet bis zum Ende
+  der Aktion und kann einen gescheiterten Start auch nach Exit-Code 0 beheben.
+  Erkannte CLI-Neustartereignisse löschen die Absicht; ein nicht erkennbarer
+  gescheiterter CLI-Neustart bleibt ein manueller Stopp. Tests sichern die
+  Richtung von Echtzeitsignal-Versätzen bei `SIGRTMIN` und `SIGRTMAX` (#19).
+- Ein Verlust der Docker-Beobachtung verwirft vorgemerkte Heilungen und
+  unterbricht das Stabilitätsfenster. Nach Wiederverbindung gleicht der Watcher
+  das Inventar ab, bevor neue Ausfälle heilen können; injizierter Backoff und
+  Signalprüfung bleiben erhalten (#20).
+
 - Begrenzte Selbstheilung startet bestehende erlaubte Container nach unerwartetem
   `die` mit Exit-Code ungleich 0. Die Neustartregel `no` gibt den Agent frei;
   `on-failure:N` erst nach ausgeschöpften Docker-Wiederholungen im gestoppten

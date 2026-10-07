@@ -6,11 +6,12 @@ import {
 import type { DockerMonitorEvent, RawInspect } from "./engine-model.js";
 import { expectedContainerMatches, runtimeStateOf } from "./runtime-actions.js";
 import { StackEndpointError } from "./stack-control.js";
-import { stopIntentTarget, targetKey } from "./stop-intent.js";
+import { isStopSignal, stopIntentTarget, targetKey } from "./stop-intent.js";
 import { SelfHealingStore, type HealingEntry } from "./self-healing-store.js";
 
 export type HealingPorts = {
   config: () => SelfHealingConfig;
+  restartInProgress?: (id: string) => boolean;
   check: (id: string) => Promise<RawInspect | null>;
   inspect: (id: string) => Promise<RawInspect | null>;
   start: (id: string, expected: ExpectedContainer, signal: AbortSignal, reserve: (container: RawInspect) => void)
@@ -50,7 +51,8 @@ export class SelfHealingController {
       }
     });
   }
-  fail(): void { this.available = false; this.setObserving(false); }
+  // Internal failures retain reservations; watcher disconnects cancel pending retries separately.
+  fail(): void { this.available = false; this.abort.abort(); }
 
   reconcile(container: RawInspect): void {
     const target = stopIntentTarget(container);
@@ -75,22 +77,25 @@ export class SelfHealingController {
     }
   }
 
-  observe(event: DockerMonitorEvent, container: RawInspect, classification: "manual-stop" | "unexpected" | null): void {
+  observe(event: DockerMonitorEvent, container: RawInspect, classification: "manual-stop" | "unexpected" | null, restartRequested = false): void {
     const target = stopIntentTarget(container);
     if (!target) return;
     const at = event.atMs ?? this.now();
     if (event.action === "start") { this.started(container, at); return; }
     const entry = this.store.get(target) ?? { target, containerId: container.Id, attempts: [],
       pending: null, healingStart: null, lastStart: null, runningSince: null };
-    if (event.action === "kill" || event.action === "destroy" || event.action === "stop") {
+    if ((event.action === "kill" && isStopSignal(container, event.signal)) || event.action === "destroy"
+      || (event.action === "stop" && !restartRequested)) {
       entry.pending = null; entry.runningSince = null; this.store.put(entry); return;
     }
-    if (event.action !== "die") return;
+    if (event.action !== "die" && event.action !== "restart") return;
+    if (event.action === "restart" && (classification !== "unexpected" || container.State?.Running
+      || container.State?.Status !== "exited")) return;
     entry.runningSince = null;
     entry.pending = null;
     const exitCode = event.exitCode ?? container.State?.ExitCode;
     const config = this.ports.config();
-    if (classification === "unexpected" && typeof exitCode === "number" && exitCode !== 0 && config.enabled
+    if (classification === "unexpected" && typeof exitCode === "number" && (exitCode !== 0 || restartRequested) && config.enabled
       && retryPolicy(container) !== "observe" && !this.store.maintained(target, this.now()) && !this.store.hasIncident(target)) {
       entry.pending = { id: randomUUID(), expected: expectedOf(container), occurredAt: at,
         dueAt: config.retryDelaysSeconds[entry.attempts.length] === undefined ? null
@@ -155,6 +160,7 @@ export class SelfHealingController {
       entry.pending = null; this.store.put(entry); return;
     }
     const pending = entry.pending;
+    if (this.ports.restartInProgress?.(entry.containerId)) return;
     const current = await this.ports.check(entry.containerId);
     entry = this.store.get(snapshot.target)!;
     if (!entry.pending || entry.pending.id !== pending.id) return;
@@ -192,7 +198,7 @@ export class SelfHealingController {
     let reservationAt: string | null = null;
     const result = await this.ports.start(current.Id, expected, this.abort.signal, (before) => {
       const latest = this.store.get(entry.target)!;
-      if (!this.available || !this.observing || !this.ports.config().enabled || number > this.ports.config().attempts
+      if (!this.available || !this.observing || this.ports.restartInProgress?.(before.Id) || !this.ports.config().enabled || number > this.ports.config().attempts
         || this.store.maintained(entry.target, this.now()) || !latest.pending || latest.pending.id !== pending.id || latest.attempts.length !== number - 1
         || !expectedContainerMatches(expected, runtimeStateOf(before)) || before.State?.Running || retryPolicy(before) !== "heal") {
         throw new StackEndpointError(409, "state-changed");

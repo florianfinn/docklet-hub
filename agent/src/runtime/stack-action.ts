@@ -26,6 +26,13 @@ export async function runStackRuntimeAction(
     let stopped = false;
     let observationFailure: ActionFailure | undefined;
     let stopContainerIds: string[] = [];
+    const withRestartIntent = async (operation: () => Promise<unknown>) => {
+      if (action !== "restart") return operation();
+      const containers = await Promise.all(stopContainerIds.map((id) => engine.inspect(id)));
+      const finish = stopIntents.beginHubRestart(containers);
+      try { return await operation(); }
+      finally { finish(); }
+    };
     const seen = new Map<string, string>();
     const progress = (service: RuntimeServiceResult) => {
       const value = JSON.stringify(service);
@@ -62,19 +69,19 @@ export async function runStackRuntimeAction(
           ensureCreateScopeNotExternallyManaged(prepared);
         },
         imageId: (ref) => engine.imageId(ref),
-        up: ({ applyDefinition, forceRecreate, timeoutMs }) => composeUp(project, {
+        up: ({ applyDefinition, forceRecreate, timeoutMs }) => withRestartIntent(() => composeUp(project, {
           removeOrphans: false, pullNever: true, wait: false,
           forceRecreate, noRecreate: !applyDefinition, timeoutMs
-        }),
+        })),
         start: (timeoutMs) => composeStart(project, timeoutMs),
         stop: async (timeoutMs) => {
           const finish = stopIntents.beginHubStop(stopContainerIds, actor);
           try { await composeStop(project, timeoutMs); }
           finally { finish(); }
         },
-        restart: (timeoutMs, startWithUp) => composeDependencySafeRestart(project, timeoutMs, undefined, startWithUp ? {
+        restart: (timeoutMs, startWithUp) => withRestartIntent(() => composeDependencySafeRestart(project, timeoutMs, undefined, startWithUp ? {
           removeOrphans: false, pullNever: true, wait: false, noRecreate: true, forceRecreate: false
-        } : undefined),
+        } : undefined)),
         refresh: async (prepared) => {
           stopped = true;
           if (timer) clearInterval(timer);

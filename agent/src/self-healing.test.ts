@@ -202,3 +202,43 @@ test("observation loss restarts the stability window without refilling used budg
   f.advance(9999); await f.controller.tick(); assert.equal(f.status().budgets[0].usedAttempts, 1);
   f.advance(1); await f.controller.tick(); assert.equal(f.status().budgets[0].usedAttempts, 0);
 });
+
+
+for (const exitCode of [0, 1]) test(`a failed Hub restart heals its stopped result without competing with the restart: exitCode=${exitCode}`, async (t) => {
+  const f = healingFixture(t);
+  const finish = f.intents.beginHubRestart([f.current]);
+  f.emit("kill"); f.crash(exitCode); f.emit("stop");
+  assert.deepEqual(f.intents.list(), []);
+  f.advance(1000); await f.controller.tick(); assert.equal(f.starts(), 0);
+  finish(); await f.controller.tick(); assert.equal(f.starts(), 1);
+  assert.equal(f.status().budgets[0].usedAttempts, 1);
+});
+
+for (const exitCode of [0, 1]) test(`CLI restart evidence heals a stopped result but kill/die alone remains manual: exitCode=${exitCode}`, async (t) => {
+  const f = healingFixture(t); f.emit("kill"); f.crash(exitCode);
+  f.advance(1000); await f.controller.tick(); assert.equal(f.starts(), 0);
+  f.emit("restart"); f.advance(1000); await f.controller.tick(); assert.equal(f.starts(), 1);
+  assert.deepEqual(f.intents.list(), []);
+});
+
+for (const action of ["hub", "cli"] as const) test(`a successful ${action} restart cancels healing of its stop phase`, async (t) => {
+  const f = healingFixture(t);
+  const finish = action === "hub" ? f.intents.beginHubRestart([f.current]) : () => {};
+  f.emit("kill"); f.crash(1); f.manualStart();
+  if (action === "cli") f.emit("restart");
+  finish(); f.advance(100_000); await f.controller.tick();
+  assert.equal(f.starts(), 0); assert.deepEqual(f.intents.list(), []);
+});
+
+test("a reload signal does not cancel an eligible unexpected failure", async (t) => {
+  const f = healingFixture(t); f.crash();
+  f.controller.observe({ action: "kill", signal: "SIGHUP", containerId: f.current.Id }, f.current, null);
+  f.advance(1000); await f.controller.tick(); assert.equal(f.starts(), 1);
+});
+
+
+test("a CLI restart completing a successful zero-exit job does not create a new failure", async (t) => {
+  const f = healingFixture(t); f.emit("kill"); f.crash(1); f.manualStart(); f.crash(0); f.emit("restart");
+  f.advance(100_000); await f.controller.tick(); assert.equal(f.starts(), 0);
+  assert.equal(f.status().budgets[0].usedAttempts, 0);
+});

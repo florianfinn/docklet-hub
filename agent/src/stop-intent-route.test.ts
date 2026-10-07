@@ -86,7 +86,7 @@ const projectDir = "/srv/apps/demo";
 const scenarios = ["confirmed", "failed", "failed-after-events", "already-stopped", "state-changed"] as const;
 type Scenario = typeof scenarios[number];
 
-function fixture(t: TestContext, stack: boolean, scenario: Scenario, external = false) {
+function fixture(t: TestContext, stack: boolean, scenario: Scenario, external = false, restart = false) {
   stopIntents.daemonDisconnected();
   stopIntents.setDaemonGeneration("boot-a:socket-a");
   const ids = stack ? [id, workerId] : [id];
@@ -131,6 +131,11 @@ function fixture(t: TestContext, stack: boolean, scenario: Scenario, external = 
     }
     if (scenario === "failed" || scenario === "failed-after-events") throw new EngineError("synthetic stop refused", 503);
   };
+  t.mock.method(engine, "restart", async (containerId: string, timeout: number | null) => {
+    assert.equal(containerId, id); assert.equal(timeout, 30);
+    mutate();
+  });
+  t.mock.method(engine, "imageId", async () => "sha256:synthetic");
   t.mock.method(engine, "stop", async (containerId: string, timeout: number | null) => {
     assert.equal(containerId, id);
     assert.equal(timeout, 30);
@@ -139,8 +144,15 @@ function fixture(t: TestContext, stack: boolean, scenario: Scenario, external = 
   if (stack) {
     t.mock.method(childProcess, "execFile", (_file: string, args: string[], _options: unknown,
       callback: (error: Error | null, stdout: string, stderr: string) => void) => {
-      if (args.includes("config")) callback(null, JSON.stringify({ services: { web: {}, worker: {} } }), "");
+      if (args.includes("config")) callback(null, JSON.stringify({ services: { web: { image: "example/app:1.0" }, worker: { image: "example/app:1.0" } } }), "");
       else {
+        if (restart && (args.at(-1) === "start" || args.includes("up"))) {
+          if (!stopped) {
+            try { mutate(); } catch { /* The start failure is reported by the Compose callback. */ }
+          }
+          callback(new Error("synthetic start refused"), "", "synthetic start refused");
+          return {} as childProcess.ChildProcess;
+        }
         assert.equal(args.at(-1), "stop");
         try { mutate(); callback(null, "", ""); }
         catch (error) { callback(error as Error, "", "synthetic stop refused"); }
@@ -154,7 +166,7 @@ function fixture(t: TestContext, stack: boolean, scenario: Scenario, external = 
   const body = stack ? { expectedStack: { projectName: "demo", projectDir, composeFileName: "compose.yaml",
     services: ids.map((containerId, index) => ({ serviceName: index ? "worker" : "web", containerId, status, startedAt: "seen" })) } }
     : { expectedContainer: { containerId: id, status, startedAt: "seen" } };
-  return { ids, records, annotations, body, finishes: () => finishes, mutations: () => mutations };
+  return { ids, records, annotations, body, stopped: () => stopped, finishes: () => finishes, mutations: () => mutations };
 }
 
 function verify(f: ReturnType<typeof fixture>, scenario: Scenario, response: Response, stack: boolean) {
@@ -196,4 +208,29 @@ for (const external of [false, true]) for (const transport of ["sync", "suffix",
     assert.equal(response.headers["content-type"], transport === "sync" || scenario === "state-changed"
       ? "application/json; charset=utf-8" : "application/x-ndjson; charset=utf-8");
   });
+}
+
+
+for (const stack of [false, true]) for (const external of stack ? [false, true] : [false]) {
+  for (const applyDefinition of stack && !external ? [false, true] : [false]) {
+    for (const transport of stack ? ["sync", "suffix", "accept"] : ["sync"]) {
+      test(`restart handler leaves no manual intent after its start fails: stack=${stack} external=${external} apply=${applyDefinition} transport=${transport}`, async (t) => {
+        const f = fixture(t, stack, "failed-after-events", external, true);
+        const url = stack ? `/stacks/${id}/actions/restart${transport === "suffix" ? "-stream" : ""}` : `/containers/${id}/restart`;
+        const response = await request(url, { body: stack ? { ...f.body, applyDefinition } : f.body,
+          ...(transport === "accept" ? { accept: "application/x-ndjson" } : {}) });
+        assert.equal(f.stopped(), true);
+        assert.deepEqual(f.annotations, []);
+        assert.deepEqual(stopIntents.list(), []);
+        assert.equal(stopIntents.isHubRestartActive(id), false);
+        assert.deepEqual(stopIntents.recentExits().map((exit) => exit.kind), f.ids.map(() => "unexpected"));
+        assert.equal(f.records.length, 1); assert.equal(f.records[0].outcome, "error");
+        assert.equal(f.records[0].action, stack ? "stack-restart" : "restart");
+        if (response.headers["content-type"] === "application/x-ndjson; charset=utf-8") {
+          const result = stackActionStreamLineSchema.parse(JSON.parse(response.chunks.at(-1)!));
+          assert.equal("status" in result ? result.status : undefined, 502);
+        } else assert.equal(response.status, stack ? 502 : 503);
+      });
+    }
+  }
 }

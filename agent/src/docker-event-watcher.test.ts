@@ -8,6 +8,7 @@ import type { DockerEngine } from "./engine.js";
 import type { DockerMonitorEvent, RawInspect } from "./engine-model.js";
 import { DockerEventWatcher } from "./docker-event-watcher.js";
 import { StopIntentStore } from "./stop-intent.js";
+import { healingFixture } from "./self-healing-test-support.js";
 
 const id = "a".repeat(64);
 const container: RawInspect = { Id: id, Name: "/demo-web", Config: { StopTimeout: 30 }, State: { Running: false } };
@@ -353,5 +354,30 @@ test("healing is suspended on disconnect and reconciled from fresh inventory bef
   f.watcher.subscribe((event) => received.push(event.action));
   await until(() => received.includes("stop"));
   assert.deepEqual(sequence, ["inventory:initial", "observing:true", "die", "observing:false",
-    "inventory:offline-start", "observing:true"]);
+    "inventory:offline-start", "observing:true", "stop"]);
+});
+
+
+for (const source of ["hub", "cli"] as const) test(`the single watcher forwards failed ${source} restart evidence to real healing`, async (t) => {
+  const f = fixture(t); const healing = healingFixture(t);
+  f.setContainer(healing.current);
+  healing.ports.restartInProgress = (containerId) => f.store.isHubRestartActive(containerId);
+  f.watcher.attachLifecycle(healing.controller);
+  f.watcher.start(); await until(() => f.watcher.isObserving());
+  const finish = source === "hub" ? f.store.beginHubRestart([healing.current]) : () => {};
+  healing.current.State = { ...healing.current.State, Running: false, Status: "exited", ExitCode: 0 };
+  f.setContainer(healing.current);
+  f.emit("kill"); f.emit("die");
+  await until(() => f.store.recentExits().length === 1);
+  if (source === "cli") {
+    assert.equal(f.store.list().length, 1);
+    f.emit("restart");
+  } else f.emit("stop");
+  await until(() => healing.store.entries()[0].pending !== null);
+  finish();
+  const received: string[] = [];
+  f.watcher.subscribe((event) => received.push(event.action));
+  f.emit("stop"); await until(() => received.includes("stop"));
+  healing.advance(1000); await healing.controller.tick();
+  assert.equal(healing.starts(), 1); assert.deepEqual(f.store.list(), []);
 });
