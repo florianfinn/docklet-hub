@@ -110,24 +110,26 @@ export type EngineInfo = {
 };
 
 export type DockerMonitorEvent = {
-  action: "die" | "start" | "stop" | "restart" | "create" | "destroy" | "health_status" | "oom";
+  action: "die" | "start" | "stop" | "restart" | "create" | "destroy" | "health_status" | "oom" | "kill";
+  atMs?: number;
+  signal?: string;
+  composeProject?: string;
+  composeService?: string;
   containerId: string;
-  // Stays inside the agent and only serves to assign a freshly created
-  // container to its stable monitor already on the first event. The name is
-  // not emitted via /monitor-events.
+  // Metadata stays local; monitor responses expose only action and ID.
   containerName?: string;
 };
 
-// Pure allowlist for the events the monitor logic actually evaluates. Docker
-// otherwise delivers, among others, network, image and daemon events, which
-// are to get neither a second source nor a data channel here.
+// Keep container lifecycle evidence only; other Docker event types stay out.
 export function monitorEventOf(value: unknown): DockerMonitorEvent | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const raw = value as {
     Type?: unknown;
     Action?: unknown;
     id?: unknown;
-    Actor?: { ID?: unknown; Attributes?: { name?: unknown } };
+    time?: unknown;
+    timeNano?: unknown;
+    Actor?: { ID?: unknown; Attributes?: Record<string, unknown> };
   };
   if (raw.Type !== "container") return null;
   const containerId = typeof raw.Actor?.ID === "string" ? raw.Actor.ID : typeof raw.id === "string" ? raw.id : null;
@@ -136,9 +138,21 @@ export function monitorEventOf(value: unknown): DockerMonitorEvent | null {
     typeof raw.Actor?.Attributes?.name === "string" && raw.Actor.Attributes.name.trim()
       ? raw.Actor.Attributes.name.trim().replace(/^\/+/, "")
       : undefined;
+  const nanos = typeof raw.timeNano === "number" ? raw.timeNano / 1_000_000 : undefined;
+  const millis = nanos ?? (typeof raw.time === "number" ? raw.time * 1_000 : undefined);
+  const project = raw.Actor?.Attributes?.["com.docker.compose.project"];
+  const service = raw.Actor?.Attributes?.["com.docker.compose.service"];
+  const metadata = {
+    ...(containerName ? { containerName } : {}),
+    ...(millis !== undefined && Number.isFinite(millis) ? { atMs: millis } : {}),
+    ...(typeof project === "string" && project ? { composeProject: project } : {}),
+    ...(typeof service === "string" && service ? { composeService: service } : {})
+  };
+  const signal = raw.Actor?.Attributes?.signal;
   const action = raw.Action;
-  if (action === "die" || action === "start" || action === "stop" || action === "restart" || action === "create" || action === "destroy" || action === "oom") {
-    return { action, containerId, ...(containerName ? { containerName } : {}) };
+  if (action === "die" || action === "start" || action === "stop" || action === "restart" || action === "create" || action === "destroy" || action === "oom" || action === "kill") {
+    return { action, containerId, ...metadata,
+      ...(action === "kill" && typeof signal === "string" ? { signal } : {}) };
   }
   if (typeof action === "string" && action.startsWith("health_status:")) {
     return { action: "health_status", containerId, ...(containerName ? { containerName } : {}) };
@@ -153,6 +167,7 @@ export type RawInspect = {
   Config?: {
     Image?: string;
     StopTimeout?: number | null;
+    StopSignal?: string;
     Env?: string[] | null;
     Labels?: Record<string, string> | null;
     // For the derived configuration information (S5b, §16.3): the container

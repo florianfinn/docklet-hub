@@ -5,11 +5,11 @@ import {
 } from "../compose-cli.js";
 import { executeStackRuntimeAction, runtimeServices } from "../stack-runtime-action.js";
 import { ACTION_QUEUE_WAIT_MS, runtimeStateOf } from "../runtime-actions.js";
-import { config, engine, registry, stackLocks } from "./state.js";
+import { config, engine, registry, stackLocks, stopIntents } from "./state.js";
 import {
   StackEndpointError, prepareStack, currentStackContainers, reanchorStackRegistry,
   ensureCreateScopeAllowlisted, ensureCreateScopeNotExternallyManaged,
-  registryEntriesByService, type StackResolvedProject, type PreparedStack
+  registryEntriesByService, containerIdsOf, type StackResolvedProject, type PreparedStack
 } from "./stack.js";
 
 export async function runStackRuntimeAction(
@@ -25,6 +25,7 @@ export async function runStackRuntimeAction(
     let observing: Promise<void> | undefined;
     let stopped = false;
     let observationFailure: ActionFailure | undefined;
+    let stopContainerIds: string[] = [];
     const seen = new Map<string, string>();
     const progress = (service: RuntimeServiceResult) => {
       const value = JSON.stringify(service);
@@ -66,7 +67,11 @@ export async function runStackRuntimeAction(
           forceRecreate, noRecreate: !applyDefinition, timeoutMs
         }),
         start: (timeoutMs) => composeStart(project, timeoutMs),
-        stop: (timeoutMs) => composeStop(project, timeoutMs),
+        stop: async (timeoutMs) => {
+          const finish = stopIntents.beginHubStop(stopContainerIds, actor);
+          try { await composeStop(project, timeoutMs); }
+          finally { finish(); }
+        },
         restart: (timeoutMs, startWithUp) => composeDependencySafeRestart(project, timeoutMs, undefined, startWithUp ? {
           removeOrphans: false, pullNever: true, wait: false, noRecreate: true, forceRecreate: false
         } : undefined),
@@ -80,6 +85,7 @@ export async function runStackRuntimeAction(
       }, action, body, {
         signal,
         onStart: (applyDefinition, prepared) => {
+          stopContainerIds = Object.values(containerIdsOf(prepared.context));
           callbacks.onStart?.(applyDefinition);
           if (callbacks.onProgress) timer = setInterval(() => {
             if (!observing) {

@@ -432,3 +432,7 @@ export {
   selfHealingSettingsRequestSchema
 } from "./api/settings.js";
 export type { RuntimeSettings, SelfHealingSettings, SelfHealingDelivery } from "./api/settings.js";
+export {
+  stopIntentTargetSchema, stopIntentSchema, containerExitSchema, stopIntentsResponseSchema,
+  type StopIntentTarget, type StopIntent, type ContainerExit, type StopIntentsResponse
+} from "./agent/stop-intents.js";

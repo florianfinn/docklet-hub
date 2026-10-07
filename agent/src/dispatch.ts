@@ -1,3 +1,4 @@
+import { handleStopIntents } from "./routes/stop-intent-routes.js";
 import type http from "node:http";
 import { handleSelfHealingConfig } from "./routes/self-healing-routes.js";
 import { CONTRACT_HEADERS, CONTRACT_VERSION } from "./contract.js";
@@ -290,6 +291,11 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
 
     if (request.method === "GET" && url.pathname === "/monitor-events") {
       await handleMonitorEvents(ctx);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/stop-intents") {
+      await handleStopIntents(ctx);
       return;
     }
 

@@ -28,7 +28,7 @@ import {
   specViolatesHardening,
   checkSpec
 } from "../spec.js";
-import { config, engine, registry, audit, stackLocks } from "../runtime/state.js";
+import { config, engine, registry, audit, stackLocks, stopIntents } from "../runtime/state.js";
 import { composeBasePath } from "../runtime/containers.js";
 import { applyOps } from "../runtime/raw-ops.js";
 import { send, readJsonBody, parseRequest, rejectRequest, ContainerRouteContext } from "../runtime/http.js";
@@ -432,7 +432,11 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
           if (access !== "allowed") throw new StackEndpointError(403, access);
           mutationStarted = true;
           if (action === "start") await engine.start(inspect.Id);
-          else if (action === "stop") await engine.stop(inspect.Id, inspect.Config?.StopTimeout ?? null);
+          else if (action === "stop") {
+            const finish = stopIntents.beginHubStop([inspect.Id], actor);
+            try { await engine.stop(inspect.Id, inspect.Config?.StopTimeout ?? null); }
+            finally { finish(); }
+          }
           else await engine.restart(inspect.Id, inspect.Config?.StopTimeout ?? null);
         }
       }, action as RuntimeAction, parsed.value.expectedContainer, before, connection.signal);

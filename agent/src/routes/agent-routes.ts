@@ -6,7 +6,6 @@ import {
 } from "contract";
 import { AGENT_CONTRACT } from "../contract.js";
 import {
-  EngineAbortError,
   EngineError
 } from "../engine.js";
 import {
@@ -19,7 +18,7 @@ import { mapLimit } from "../concurrency.js";
 import { fromLegacyForms } from "../registry.js";
 import { toMonitorStatus } from "../monitor.js";
 import { sendLine } from "../ndjson-line.js";
-import { config, engine, registry, monitors, audit, statsHistory, monitorStreams } from "../runtime/state.js";
+import { config, engine, registry, monitors, audit, statsHistory, monitorStreams, dockerEvents } from "../runtime/state.js";
 import { hardeningOptionsFor, imageManagerLabelOf, volumeBindsOf } from "../runtime/containers.js";
 import { send, readJsonBody, parseRequest, rejectRequest, RouteContext } from "../runtime/http.js";
 
@@ -151,9 +150,13 @@ export async function handleHostInfo(ctx: RouteContext): Promise<void> {
 // event material (names, labels, attributes) never leaves the agent.
 export async function handleMonitorEvents(ctx: RouteContext): Promise<void> {
   const { response, actor } = ctx;
-  // R3: a cap of its own, so that a stuck predecessor does not lock out its
-  // successor, while a caller in a reconnect loop still cannot hold an
-  // arbitrary number of long-lived streams open.
+  if (!dockerEvents.isObserving()) {
+    audit.write({ action: "monitor-events", containerId: null, containerName: null,
+      actor, outcome: "error", reason: "events-unavailable" });
+    send(response, 503, { error: "events-unavailable" });
+    return;
+  }
+  // Bound concurrent readers while allowing a reconnecting successor.
   const releaseMonitorSlot = monitorStreams.tryAcquire();
   if (!releaseMonitorSlot) {
     audit.write({
@@ -175,23 +178,18 @@ export async function handleMonitorEvents(ctx: RouteContext): Promise<void> {
     "cache-control": "no-store, no-transform",
     "x-accel-buffering": "no"
   });
-  const streamAbort = new AbortController();
-  const onClose = () => streamAbort.abort();
-  response.on("close", onClose);
-  try {
-    await engine.monitorEvents((event) => {
+  await new Promise<void>((resolve) => {
+    const unsubscribe = dockerEvents.subscribe((event) => {
       if (registry.isAllowed(event.containerId) || monitors.has(event.containerId, event.containerName)) {
         // Names/labels still stay on the agent host. The name is only used
         // locally for recreate matching.
         sendLine(response, { action: event.action, containerId: event.containerId } satisfies MonitorEventLine);
       }
-    }, streamAbort.signal);
-  } catch (error) {
-    if (!(error instanceof EngineAbortError)) console.error("[agent] monitor-events:", error);
-  } finally {
-    releaseMonitorSlot();
-    response.off("close", onClose);
-  }
+    }, () => { response.end(); });
+    if (response.destroyed) { unsubscribe(); resolve(); }
+    else response.once("close", () => { unsubscribe(); resolve(); });
+  });
+  releaseMonitorSlot();
   response.end();
   return;
 }

@@ -134,6 +134,7 @@ export const ROUTES: readonly Route[] = [
   // everything else. It is thus more powerful than any single action it
   // authorizes.
   { methods: ["PUT"], pattern: "/registry", mutating: true, audit: "registry-sync" },
+  { methods: ["GET"], pattern: "/stop-intents", mutating: false, audit: "stop-intents" },
   { methods: ["GET"], pattern: "/monitors", mutating: false, audit: "monitor-list" },
   { methods: ["PUT"], pattern: "/monitors", mutating: true, audit: "monitor-sync" },
   { methods: ["GET"], pattern: "/host-containers", mutating: false, audit: "host-discovery" },
@@ -142,9 +143,7 @@ export const ROUTES: readonly Route[] = [
   // Like `/host-containers` it names containers outside the allowlist. Read
   // only.
   { methods: ["GET"], pattern: "/resources", mutating: false, audit: "resources" },
-  // The monitor's continuous stream. Additionally bound to the one caller that
-  // runs it — a second reader would siphon off events without anyone
-  // noticing, because ndjson lines are not delivered twice.
+  // Hub monitor readers share the local watcher; this system actor owns them.
   { methods: ["GET"], pattern: "/monitor-events", mutating: false, audit: "monitor-events", onlyActor: "system:monitor" },
 
   // --- Audit archive (#30) ------------------------------------------------
