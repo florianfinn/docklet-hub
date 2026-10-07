@@ -175,10 +175,3 @@ test("missing services satisfy stop but unreadable states do not", () => {
     assert.equal(serviceResult("stop", "job", runtimeStateOf(null, true), external).outcome, "failed");
   }
 });
-
-test("shared hub and browser deadlines cover queue and maximum action with delivery reserves", async () => {
-  const { HUB_RUNTIME_TIMEOUT_MS, LIFECYCLE_TIMEOUT_MS } = await import("contract");
-  const { ACTION_QUEUE_WAIT_MS, MAX_STACK_ACTION_MS } = await import("./runtime-actions.js");
-  assert.equal(HUB_RUNTIME_TIMEOUT_MS, ACTION_QUEUE_WAIT_MS + MAX_STACK_ACTION_MS + 30_000);
-  assert.equal(LIFECYCLE_TIMEOUT_MS, HUB_RUNTIME_TIMEOUT_MS + 10_000);
-});

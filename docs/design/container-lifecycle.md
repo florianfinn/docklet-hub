@@ -71,7 +71,7 @@ damit zuerst die nachgeordneten Diagnosen, nicht Schlüssel oder Regeln.
 
 Vorgänge auf denselben Container oder dasselbe Projekt laufen nacheinander. Ein wartender Vorgang wartet begrenzt und entfällt, wenn sein Aufrufer die Verbindung getrennt hat. Er läuft nur, wenn der Ist-Stand noch dem entspricht, den der Aufrufer gesehen hat; sonst antwortet der Agent mit `state-changed`. Eine unbegrenzte Warteschlange würde Aufträge ausführen, deren Absender nicht mehr wartet oder einen längst überholten Stand gesehen hat, und das Ergebnis hinge von der Reihenfolge ab. Sofortiges Ablehnen würde dagegen jeden Doppelklick und jedes zweite Gerät zum Fehler machen.
 
-Ein Stopp wartet so lange, wie Docker dem Container zum Beenden gibt (`StopTimeout` bzw. `stop_grace_period`), zuzüglich eines Puffers. Eine feste Zeitgrenze darunter würde einen korrekt laufenden Stopp als gescheitert melden. Stack-Zeitgrenzen leiten sich aus der längsten dieser Fristen ab und sind nach oben begrenzt. Ist ein Host nicht erreichbar, lehnt der Hub die Aktion sofort ab und merkt sie nicht vor.
+Ein Stopp leitet seine Wartefrist aus der Docker-Grace-Period (`StopTimeout` bzw. `stop_grace_period`) zuzüglich eines Puffers ab. Für die Container-HTTP-Frist berücksichtigt der Agent höchstens 600 Sekunden Grace-Period; Stack-Zeitgrenzen sind für den gesamten Compose-Vorgang begrenzt. Die Docker-Konfiguration wird dadurch nicht verkürzt. Nach Ablauf der Agent-Frist kann die Engine-Aktion weiterlaufen; erst das Nachlesen bestimmt den gemeldeten Zustand. Ist ein Host nicht erreichbar, lehnt der Hub die Aktion sofort ab und merkt sie nicht vor.
 
 Einen manuellen Stopp erkennt der Agent als Absicht für die Selbstheilung (siehe [self-healing.md](self-healing.md)).
 
@@ -79,9 +79,10 @@ Der Agent begrenzt die Wartezeit auf eine Vorgangssperre auf 60 Sekunden. Contai
 
 Ein nie gestarteter Container im Zustand `created` gilt beim Stopp bereits als gestoppt; die idempotente Engine-Antwort 304 bleibt erfolgreich.
 
-Die HTTP-Frist für einen Container-Stopp beträgt `StopTimeout` plus 10 Sekunden.
+Die HTTP-Frist für einen Container-Stopp beträgt höchstens 600 Sekunden
+berücksichtigte Grace-Period plus 10 Sekunden Puffer.
 Ein Container-Neustart erhält zusätzlich 30 Sekunden für den Start, also
-`StopTimeout` plus 40 Sekunden. Docker führt beide Phasen im selben
+höchstens 600 Sekunden Grace-Period plus 40 Sekunden. Docker führt beide Phasen im selben
 `restart`-Aufruf aus; eine eigene Stoppfrist innerhalb dieses Aufrufs kann der
 Agent nicht setzen. Die zusätzliche Reserve entspricht der Frist eines reinen
 Starts und bleibt auch bei `StopTimeout: 0` vollständig erhalten. Ohne gesetzten Wert gelten Dockers 10 Sekunden. Ein explizit unbegrenzter Docker-Stopp (`StopTimeout: -1`) erhält beim Stopp eine Agent-Frist von 610 Sekunden, beim Neustart 640 Sekunden. Die Stack-Frist beträgt die längste konfigurierte oder nachgelesene Stoppfrist plus 30 Sekunden, mindestens 60 Sekunden. Beim Neustart wird dieser Wert für die beiden Phasen verdoppelt; der gesamte Compose-Vorgang ist auf 600 Sekunden begrenzt. Beide Neustartphasen teilen diese Frist, auch beim bestmöglichen Start nach einem fehlgeschlagenen Stopp. Der Stopp erhält höchstens die Gesamtfrist abzüglich 30 Sekunden; dieser feste Anteil bleibt für den Start reserviert. Er entspricht dem Stack-Puffer und verhindert, dass ein ausgeschöpfter Stopp dem Wiederanlauf nur eine praktisch unbrauchbare Restfrist lässt.
@@ -109,8 +110,21 @@ Fristablauf oder Verbindungsabriss nach dem Versand ergibt `runtime-outcome-unkn
 weil die Aktion auf dem Host bereits laufen kann. Unlesbare Ergebnisse ergeben
 `runtime-invalid-response`, ein abgerissener oder unvollständiger Stack-Strom
 `runtime-stream-broken`. Synchrone Laufzeitaufrufe verwenden denselben HTTP-Transport
-ohne implizite Kopfzeilenfrist wie die Ströme; ihre Gesamtfrist beträgt 690 Sekunden
-für Warteschlange, Agent-Aktion und Transportreserve.
+ohne implizite Kopfzeilenfrist wie die Ströme; ihre Gesamtfrist beträgt 760 Sekunden.
+
+Alle Fristen und Berechnungen stehen gemeinsam in
+`contract/src/agent/runtime-deadlines.ts`. Die Hub-Frist summiert 60 Sekunden
+Warteschlange, die längste Agent-Aktion (Maximum aus 640 Sekunden
+Container-Neustart einschließlich Startreserve und 600 Sekunden Stack-Aktion),
+30 Sekunden Nachlesereserve und 30 Sekunden Transportreserve. Die Browserfrist
+`LIFECYCLE_TIMEOUT_MS` beträgt 770 Sekunden und lässt weitere 10 Sekunden für
+die Zustellung der Hub-Antwort. Nachlese- und Transportreserven sind Budgets;
+sie ersetzen keine eigene Gesamtfrist für beliebig große Stack-Vorprüfungen.
+Die Prüfmatrix vergleicht alle sechs Aktionen mit maximalen, unbegrenzten und
+überlangen Grace-Periods gegen diese Budgets. Virtuelle Hub-Transporttests
+prüfen nach 59 Sekunden Warteschlange die maximale Aktion einschließlich beider
+Reserven: beim Container-Neustart kommt das Ergebnis nach 759 Sekunden an,
+vor Ablauf der 760 Sekunden Hub-Frist.
 
 Die gemeinsame Erreichbarkeitsprüfung bestimmt, ob ein Host Aktionen annehmen
 kann; ein als offline erkannter Host erhält `503 runtime-host-offline` ohne
