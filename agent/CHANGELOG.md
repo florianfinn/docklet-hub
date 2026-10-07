@@ -37,6 +37,12 @@
   `logs-unavailable`. Geschlossene Vorfälle tragen Abschlusszeit und Grund.
   Es bleiben alle offenen und die letzten 256 geschlossenen Vorfälle gespeichert.
 
+- Der Stack-Aktionsstrom meldet `{ kind: "queued" }`, sobald die Aktion hinter
+  einem laufenden Projektvorgang warten muss. Danach folgen `start` und Fortschritt
+  oder ein terminaler Fehler mit Status und bereinigtem Ergebnis. Der Hub reicht
+  das Wartesignal weiter. Die neue NDJSON-Art gehört zur unveröffentlichten
+  Vertragsversion 12; `CONTRACT_VERSION` bleibt 12 und der Fingerabdruck ändert sich (#98).
+
 - `PUT /self-healing/config` übernimmt die globale Selbstheilungskonfiguration,
   gebunden an `system:hub`. Alle fünf Konfigurationsfelder sind Pflichtwerte;
   der gemeinsame Vertrag prüft Grenzen und einen Abstand je Versuch.

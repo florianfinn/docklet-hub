@@ -72,3 +72,40 @@ Der Agent begrenzt die Wartezeit auf eine Vorgangssperre auf 60 Sekunden. Contai
 Ein nie gestarteter Container im Zustand `created` gilt beim Stopp bereits als gestoppt; die idempotente Engine-Antwort 304 bleibt erfolgreich.
 
 Die HTTP-Frist für einen Container-Stopp oder -Neustart beträgt `StopTimeout` plus 10 Sekunden. Ohne gesetzten Wert gelten Dockers 10 Sekunden. Ein explizit unbegrenzter Docker-Stopp (`StopTimeout: -1`) erhält eine Agent-Frist von 610 Sekunden. Die Stack-Frist beträgt die längste konfigurierte oder nachgelesene Stoppfrist plus 30 Sekunden, mindestens 60 Sekunden. Beim Neustart wird dieser Wert für die beiden Phasen verdoppelt; der gesamte Compose-Vorgang ist auf 600 Sekunden begrenzt. Beide Neustartphasen teilen diese Frist, auch beim bestmöglichen Start nach einem fehlgeschlagenen Stopp. Der Stopp erhält höchstens die Gesamtfrist abzüglich 30 Sekunden; dieser feste Anteil bleibt für den Start reserviert. Er entspricht dem Stack-Puffer und verhindert, dass ein ausgeschöpfter Stopp dem Wiederanlauf nur eine praktisch unbrauchbare Restfrist lässt.
+
+### Hub-API und Offline-Ablehnung
+
+Der Hub bietet `POST /api/hosts/:hostId/containers/:containerId/:action` und
+`POST /api/hosts/:hostId/stacks/:containerId/actions/:action` für `start`, `stop`
+und `restart`. Beide Wege verlangen Adminrechte und bestehen die gemeinsame
+Herkunftsprüfung. Der Containerpfad antwortet synchron; der Stackpfad liefert
+NDJSON und verpackt einen synchronen Agent-Rückfall als Abschlusszeile.
+`expectedContainer` beziehungsweise `expectedStack` kommen vom Client und
+werden unverändert durchgereicht. Stack-Start und -Neustart erhalten zusätzlich
+`applyDefinition` aus den gespeicherten Hub-Einstellungen; die Fremdverwaltung
+beurteilt ausschließlich der Agent.
+
+Der Hub übernimmt die Service-Zustände und Ergebnisse nach Schema. Fehler
+tragen eigene stabile Schlüssel aus `contract/src/api/runtime-actions.ts`,
+insbesondere `state-changed`, `action-queue-timeout`, `action-caller-disconnected`,
+`runtime-target-not-reached` und `scaled-service-unsupported`. Diagnosetexte,
+Engine-Meldungen und zusätzliche Agent-Felder gelangen nicht ins Web.
+Unbekannte Agent-Schlüssel ergeben `runtime-agent-failed`. Ein sicher vor dem
+Versand gescheiterter Verbindungsaufbau ergibt `runtime-agent-unreachable`;
+Fristablauf oder Verbindungsabriss nach dem Versand ergibt `runtime-outcome-unknown`,
+weil die Aktion auf dem Host bereits laufen kann. Unlesbare Ergebnisse ergeben
+`runtime-invalid-response`, ein abgerissener oder unvollständiger Stack-Strom
+`runtime-stream-broken`. Synchrone Laufzeitaufrufe verwenden denselben HTTP-Transport
+ohne implizite Kopfzeilenfrist wie die Ströme; ihre Gesamtfrist beträgt 690 Sekunden
+für Warteschlange, Agent-Aktion und Transportreserve.
+
+Die gemeinsame Erreichbarkeitsprüfung bestimmt, ob ein Host Aktionen annehmen
+kann; ein als offline erkannter Host erhält `503 runtime-host-offline` ohne
+Vormerkung. Der Live-Stand beschreibt dagegen die Beobachtung: `/monitor-events`
+kann wegen fehlender Docker-Beobachtung mit `503` antworten, während `/health`
+erreichbar bleibt. Ein solcher Host darf Aktionen ausführen. Die erwarteten
+Zustände werden weiterhin vom Agent geprüft; ein veralteter Client-Stand kann
+deshalb mit `state-changed` abgelehnt werden.
+Nach Erfolg, Teilfehler, Fehler oder Browserabbruch löst der Hub einen gezielten
+Live-Refresh aus; dessen Fehlschlag oder Dauer überdeckt das Aktionsergebnis
+nicht. Der Browserabbruch beendet auch den Agentkontakt im synchronen Rückfall.

@@ -53,7 +53,7 @@ test("live connections redeliver configuration and the existing probe retries fa
   const connected = () => events.filter((event) => event?.kind === "status" && event.status === "connected").length;
   try {
     live.start();
-    await until(() => connected() === 1 && deliveries.length >= 2);
+    await until(() => connected() === 1 && deliveries.length === 1);
     const registry = order.indexOf("registry");
     assert.ok(registry > order.indexOf("monitor"));
     assert.equal(order.slice(registry, order.indexOf("inventory") + 1).includes("configuration"), true);
@@ -64,14 +64,20 @@ test("live connections redeliver configuration and the existing probe retries fa
       t.mock.timers.tick(5_000);
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
+    await until(() => probes === 2);
+    assert.equal(deliveries.length, 1);
+    for (let i = 0; i < 3; i++) {
+      t.mock.timers.tick(5_000);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
     await until(() => deliveries.includes("synced"));
-    assert.equal(probes, 2);
+    assert.equal(probes, 3);
     const delivered = deliveries.length;
     for (let i = 0; i < 3; i++) {
       t.mock.timers.tick(5_000);
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
-    await until(() => probes === 3);
+    await until(() => probes === 4);
     assert.equal(deliveries.length, delivered);
     live.disconnectHost(host.id);
     await until(() => events.some((event) => event?.kind === "status" && event.status === "disconnected"));

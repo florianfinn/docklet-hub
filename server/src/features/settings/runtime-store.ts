@@ -52,7 +52,7 @@ export async function readSelfHealingDeliveries(pool: Pool, revision: number): P
       FROM docker_host h LEFT JOIN self_healing_delivery d ON d.host_id = h.id ORDER BY h.name, h.id`);
   return rows.map((row) => ({
     hostId: row.host_id, hostName: row.name,
-    status: row.status === "failed" ? "failed" : row.applied_revision === revision ? "synced" : "pending",
+    status: row.applied_revision === revision ? "synced" : row.status === "failed" ? "failed" : "pending",
     appliedRevision: row.applied_revision, updatedAt: row.updated_at?.toISOString() ?? null
   }));
 }

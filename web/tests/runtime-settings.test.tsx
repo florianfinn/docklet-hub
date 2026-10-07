@@ -34,7 +34,7 @@ function stub(failed = false) {
     }
     return new Response(JSON.stringify(result), { status, headers: { "content-type": "application/json" } });
   };
-  return { calls, restore: () => { globalThis.fetch = original; } };
+  return { calls, settings, restore: () => { globalThis.fetch = original; } };
 }
 function input(id: string): HTMLInputElement {
   const node = document.getElementById(id); assert.ok(node instanceof HTMLInputElement); return node;
@@ -158,5 +158,21 @@ test("unbegrenzte Wartung lässt sich speichern, neu laden und auf eine Stunde z
     await submit(document.querySelectorAll("form")[1]);
     assert.equal((server.calls.filter((call) => call.path.endsWith("/self-healing") && call.method === "PUT").at(-1)?.body as
       typeof sent).selfHealing.config.maintenanceDurationSeconds, 3600);
+  } finally { await cleanup(mounted); server.restore(); }
+});
+
+for (const [role, status, interval] of [
+  ["user", "pending", false], ["admin", "synced", false], ["admin", "pending", 5000], ["admin", "failed", 5000]
+] as const) test(`settings polling for ${role} with ${status} deliveries is ${interval}`, async () => {
+  const server = stub();
+  server.settings.selfHealing.hosts[0].status = status;
+  const mounted = await renderInDom(<AppLanguageProvider><RuntimeSettingsPanel role={role} /></AppLanguageProvider>);
+  try {
+    await settleQueries(mounted.queryClient);
+    const query = mounted.queryClient.getQueryCache().find({ queryKey: ["runtime-settings"] });
+    const observer = query?.getObserversCount();
+    assert.equal(observer, 1);
+    const configured = query?.options as { refetchInterval?: (state: unknown) => number | false };
+    assert.equal(configured.refetchInterval?.(query), interval);
   } finally { await cleanup(mounted); server.restore(); }
 });

@@ -2,7 +2,7 @@ import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 import { RuntimeActionFailure } from "./action-failure.js";
 import { ActionQueueError } from "./concurrency.js";
-import type { RuntimeAction, RuntimeServiceResult } from "contract";
+import { stackActionStreamLineSchema, type RuntimeAction, type RuntimeServiceResult } from "contract";
 import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 import type http from "node:http";
@@ -289,6 +289,49 @@ function stackRequest(action: string, body: Record<string, unknown>, accept?: st
   req.context.url = new URL(`http://agent.invalid/stacks/old/actions/${action}`);
   return req;
 }
+
+for (const stale of [false, true]) test(`queued stack route emits waiting before ${stale ? "a preflight refusal" : "starting"}`, { timeout: 5000 }, async (t) => {
+  mockEngine(t);
+  mockCompose(t);
+  let release!: () => void;
+  const active = stackLocks.runExclusive("app", () => new Promise<void>((resolve) => { release = resolve; }));
+  t.after(async () => { release(); await active; });
+  const stack = expectedStack();
+  if (stale) stack.services[0].status = "running";
+  const req = stackRequest("stop-stream", { expectedStack: stack });
+  let queued!: () => void;
+  const waiting = new Promise<void>((resolve) => { queued = resolve; });
+  const lines: unknown[] = [];
+  const response = Object.assign(req.response, {
+    headersSent: false, writableEnded: false, writableLength: 0, status: 0, headers: {} as Record<string, string>,
+    writeHead(code: number, headers: Record<string, string>) {
+      assert.equal(this.headersSent, false);
+      this.status = code; this.headers = headers; this.headersSent = true;
+    },
+    write(chunk: string) {
+      const line = stackActionStreamLineSchema.parse(JSON.parse(chunk));
+      lines.push(line);
+      if (line.kind === "queued") queued();
+      return true;
+    },
+    end() { this.writableEnded = true; }
+  });
+  req.context.response = response as unknown as http.ServerResponse;
+  const pending = handleStackAction(req.context, req.context.url.pathname.match(/^\/stacks\/([^/]+)\/actions\/([^/]+)$/)!);
+  await waiting;
+  assert.deepEqual(lines, [{ kind: "queued" }]);
+  release();
+  await Promise.all([active, pending]);
+  const terminal = stackActionStreamLineSchema.parse(lines.at(-1));
+  if (stale) {
+    assert.equal(terminal.kind, "error");
+    assert.equal(terminal.kind === "error" && terminal.reason, "state-changed");
+    assert.equal(terminal.kind === "error" && terminal.status, 409);
+  } else {
+    assert.equal(lines.some((line) => stackActionStreamLineSchema.parse(line).kind === "start"), true);
+    assert.equal(terminal.kind, "result");
+  }
+});
 
 for (const action of ["apply", "down", "stop"]) {
   test(`stack ${action} accepts a request without applyDefinition and responds synchronously to NDJSON accept`, async (t) => {

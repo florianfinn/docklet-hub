@@ -253,3 +253,15 @@ test("a failed asynchronous recreate sync reports its cause and disconnects the 
     assert.equal(h.events.some((event) => event?.kind === "status" && event.status === "disconnected"), true);
   } finally { await h.live.stop(); }
 });
+
+test("probe disconnect and host removal are observable through live events", async () => {
+  const h = harness();
+  try {
+    await h.live.reconcile([HOST]);
+    await until(() => h.events.some((event) => event?.kind === "status" && event.status === "connected"));
+    h.live.disconnectHost(HOST.id);
+    await until(() => h.events.some((event) => event?.kind === "status" && event.status === "disconnected"));
+    h.live.removeHost(HOST.id);
+    assert.deepEqual(h.events.at(-1), { kind: "removed", hostId: HOST.id });
+  } finally { await h.live.stop(); }
+});

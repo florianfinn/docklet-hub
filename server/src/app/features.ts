@@ -13,7 +13,8 @@ import { readHostDecoration, registerMarkRoutes } from "../features/marks/index.
 import { hostLoad, registerMetricsRoutes } from "../features/metrics/index.js";
 import { registerLiveEventRoutes } from "../features/live-events/index.js";
 import { registerResourcesRoutes } from "../features/resources/index.js";
-import { readRuntimeSettings, readSelfHealingSettings, registerSettingsRoutes } from "../features/settings/index.js";
+import { readApplyComposeDefinition, readRuntimeSettings, readSelfHealingSettings, registerSettingsRoutes } from "../features/settings/index.js";
+import { registerRuntimeActionsRoutes } from "../features/runtime-actions/index.js";
 import { registerShellRoutes } from "../features/shell/index.js";
 
 // The static feature list of the server (docs/design/feature-architecture.md,
@@ -84,6 +85,10 @@ export const FEATURES: readonly RegisterFeature[] = [
   // `createApiRouter`, so the register lives exactly as long as the router;
   // `features/shell/routes.ts` says why.
   registerShellRoutes,
+  (router, options) => registerRuntimeActionsRoutes(router, {
+    ...options, readApplyDefinition: () => readApplyComposeDefinition(options.pool)
+  }),
+
   // The feature `containers`: the page after sign-in (`GET /overview`) and the
   // write of the container view (`PUT /settings/containers`). It took the place
   // of the group `overview-routes` and of the group `container-view-routes`

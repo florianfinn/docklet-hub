@@ -31,6 +31,8 @@ export class SelfHealingConfigStore {
         fs.fsyncSync(fd);
       } finally { fs.closeSync(fd); }
       fs.renameSync(temporary, this.file);
+      const directoryFd = fs.openSync(directory, "r");
+      try { fs.fsyncSync(directoryFd); } finally { fs.closeSync(directoryFd); }
       this.config = value;
       return this.read();
     } finally { fs.rmSync(temporary, { force: true }); }

@@ -63,6 +63,8 @@ const EXPECTED_LAYERS = [
   "POST /hosts/:hostId/containers/:containerId/exec/:session/input",
   "POST /hosts/:hostId/containers/:containerId/exec/:session/size",
   "POST /hosts/:hostId/containers/:containerId/exec/:session/close",
+  "POST /hosts/:hostId/containers/:containerId/:action",
+  "POST /hosts/:hostId/stacks/:containerId/actions/:action",
   "GET /overview",
   "GET /hosts/:hostId/overview",
   // Moved up from behind `PUT /settings/network` with the feature `containers`

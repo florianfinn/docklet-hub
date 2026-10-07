@@ -448,3 +448,11 @@ export type {
   SelfHealingMaintenanceTarget, SelfHealingMaintenance, SelfHealingAttempt, SelfHealingCause,
   SelfHealingLog, SelfHealingIncident, SelfHealingStatusResponse
 } from "./agent/self-healing-status.js";
+
+export {
+  HUB_RUNTIME_ERRORS, hubRuntimeErrorSchema, hubRuntimeFailureSchema,
+  hubContainerActionRequestSchema, hubStackActionRequestSchema,
+  hubContainerRuntimeResultSchema, hubStackRuntimeResultSchema, hubStackActionStreamLineSchema
+} from "./api/runtime-actions.js";
+export type { HubRuntimeError, HubContainerRuntimeResult, HubStackRuntimeResult,
+  HubStackActionStreamLine } from "./api/runtime-actions.js";

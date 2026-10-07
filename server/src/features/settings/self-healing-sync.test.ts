@@ -10,12 +10,13 @@ function fixture() {
   const sent: { hostId: string; config: SelfHealingConfig }[] = [];
   const recorded: { hostId: string; revision: number; status: string }[] = [];
   let offline = false;
-  const sync = createSelfHealingSync({ read: async () => latest,
+  let time = 0;
+  const sync = createSelfHealingSync({ now: () => time, read: async () => latest,
     listHosts: async () => [host, { ...host, id: "pending", state: "pending" }],
     send: async (record, config) => { if (offline) throw new Error("offline"); sent.push({ hostId: record.id, config }); },
     record: async (hostId, revision, status) => { recorded.push({ hostId, revision, status }); }
   });
-  return { sync, sent, recorded, change: () => { latest = { config: { ...latest.config, enabled: false }, revision: 2 }; },
+  return { sync, sent, recorded, advance: (ms: number) => { time += ms; }, change: () => { latest = { config: { ...latest.config, enabled: false }, revision: 2 }; },
     offline: (value: boolean) => { offline = value; } };
 }
 
@@ -48,6 +49,7 @@ test("fehlgeschlagene Übertragung wird protokolliert und bei nächster erfolgre
   await f.sync.syncHost(host);
   assert.equal(f.recorded[0].status, "failed");
   f.offline(false);
+  f.advance(30_000);
   await f.sync.syncHost(host);
   assert.equal(f.recorded[1].status, "synced");
   assert.equal(f.sent.length, 1);
@@ -85,4 +87,24 @@ test("überlappende Änderungen senden die aktuelle Revision nacheinander je Hos
   await Promise.all([first, second]);
   assert.deepEqual(sent, [true, false]);
   assert.deepEqual(recorded, [1, 2]);
+});
+
+ test("failed probes back off to five minutes, while a new revision and reconnect retry immediately", async () => {
+  const f = fixture();
+  f.offline(true);
+  await f.sync.syncHost(host);
+  for (const delay of [30_000, 60_000, 120_000, 240_000, 300_000, 300_000]) {
+    const count = f.recorded.length;
+    f.advance(delay - 15_000);
+    await f.sync.syncHost(host);
+    assert.equal(f.recorded.length, count);
+    f.advance(15_000);
+    await f.sync.syncHost(host);
+    assert.equal(f.recorded.length, count + 1);
+  }
+  const count = f.recorded.length;
+  f.change();
+  await f.sync.syncHost(host);
+  await f.sync.syncHost(host, true);
+  assert.equal(f.recorded.length, count + 2);
 });

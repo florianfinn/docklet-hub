@@ -38,14 +38,14 @@ Rückfragen vor jeder Aktion würden zum Wegklicken erziehen und die wenigen wic
 
 ## Fortschritt, gleichzeitige Vorgänge und Ergebnis
 
-Nach dem Klick sperrt die Oberfläche das Ziel sofort, damit ein Doppelklick keinen zweiten Vorgang auslöst. Wartet der Vorgang auf einen anderen auf demselben Ziel, zeigt sie „wartet auf laufenden Vorgang“. Antwortet der Agent mit `state-changed`, liest sie den Stand neu, nennt die Änderung und fragt erneut, statt automatisch zu wiederholen; der Nutzer hat einen anderen Stand gesehen als den, auf den die Aktion jetzt träfe.
+Nach dem Klick sperrt die Oberfläche das Ziel sofort, damit ein Doppelklick keinen zweiten Vorgang auslöst. Wartet eine Stack-Aktion auf einen anderen Vorgang auf demselben Projekt, zeigt sie nach der Stromzeile `{ kind: "queued" }` „wartet auf laufenden Vorgang“. Synchrone Containeraktionen liefern kein Wartesignal; dort zeigt die Oberfläche während der gesamten Anfrage nur allgemeinen Fortschritt. Antwortet der Agent mit `state-changed`, liest sie den Stand neu, nennt die Änderung und fragt erneut, statt automatisch zu wiederholen; der Nutzer hat einen anderen Stand gesehen als den, auf den die Aktion jetzt träfe.
 
 Stack-Aktionen zeigen den Fortschritt je Service aus dem Strom. Das Ergebnis erscheint so:
 
 - `ok`: kurzer Erfolgshinweis, der von selbst verschwindet.
 - `partial` und `failed`: bleibende Meldung mit jedem Service und seinem Zustand. „Nicht erzeugt (fremdverwaltet)“ ist ein eigener, erklärter Teilstatus und kein Fehler.
 - Zeitgrenze überschritten: Der Vorgang kann auf dem Host weiterlaufen; die Meldung sagt das, und die Oberfläche liest den Stand neu.
-- Verbindungsverlust während des Vorgangs: Das Ergebnis ist unbekannt, nicht gescheitert; die Oberfläche liest den Stand nach der Wiederverbindung neu.
+- Fristablauf oder Verbindungsverlust nach dem Versand: `runtime-outcome-unknown` bei synchronen Antworten beziehungsweise `runtime-stream-broken` bei geöffneten Stack-Strömen. Das Ergebnis ist unbekannt, nicht gescheitert; die Oberfläche liest den Stand nach der Wiederverbindung neu.
 
 Nach jedem Vorgang zeigt die Oberfläche den tatsächlichen Stand aus dem Live-Stand, nicht den erwarteten.
 

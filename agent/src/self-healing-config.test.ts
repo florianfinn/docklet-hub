@@ -68,3 +68,21 @@ test("eine beschädigte gespeicherte Konfiguration fällt beim Laden statt Selbs
     assert.throws(() => new SelfHealingConfigStore(f.file));
   } finally { f.close(); }
 });
+
+test("atomic replacement fsyncs the containing directory before acknowledging", (t) => {
+  const f = fixture();
+  try {
+    const store = new SelfHealingConfigStore(f.file);
+    const originalSync = fs.fsyncSync;
+    const originalRename = fs.renameSync;
+    const operations: string[] = [];
+    t.mock.method(fs, "renameSync", (...args: Parameters<typeof fs.renameSync>) => {
+      originalRename(...args); operations.push("rename");
+    });
+    t.mock.method(fs, "fsyncSync", (fd: number) => {
+      operations.push(fs.fstatSync(fd).isDirectory() ? "directory" : "file"); originalSync(fd);
+    });
+    store.write(DEFAULT_SELF_HEALING_CONFIG);
+    assert.deepEqual(operations, ["file", "rename", "directory"]);
+  } finally { f.close(); }
+});

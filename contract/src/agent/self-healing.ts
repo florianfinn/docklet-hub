@@ -14,7 +14,7 @@ const integer = (limits: { min: number; max: number }) =>
 export const selfHealingConfigSchema = z.strictObject({
   enabled: z.boolean(),
   attempts: integer(SELF_HEALING_LIMITS.attempts),
-  retryDelaysSeconds: z.array(integer(SELF_HEALING_LIMITS.retryDelaySeconds)).check(z.minLength(1), z.maxLength(10)),
+  retryDelaysSeconds: z.array(integer(SELF_HEALING_LIMITS.retryDelaySeconds)).check(z.minLength(1), z.maxLength(SELF_HEALING_LIMITS.attempts.max)),
   stabilityWindowSeconds: integer(SELF_HEALING_LIMITS.stabilityWindowSeconds),
   maintenanceDurationSeconds: z.nullable(integer(SELF_HEALING_LIMITS.maintenanceDurationSeconds))
 }).check(z.refine((value) => value.retryDelaysSeconds.length === value.attempts, {

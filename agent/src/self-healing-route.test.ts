@@ -85,11 +85,12 @@ for (const [name, failure, status, error] of [
   assert.equal(JSON.stringify(result.body).includes("private diagnostic"), false);
 });
 
-test("failed atomic file replacement is audited once and retains the stored configuration", async () => {
+test("failed atomic file replacement is audited once and retains the stored configuration", async (t) => {
   const previous = selfHealingConfig.read();
   const file = path.join(path.dirname(config.auditFile), "self-healing-config.json");
-  fs.rmSync(file);
+  fs.rmSync(file, { force: true });
   fs.mkdirSync(file);
+  t.after(() => { fs.rmSync(file, { recursive: true, force: true }); selfHealingConfig.write(previous); });
   const result = await call(JSON.stringify({ ...DEFAULT_SELF_HEALING_CONFIG, enabled: false }));
   assert.equal(result.status, 500);
   assert.deepEqual(result.body, { error: "internal-error" });

@@ -16,7 +16,7 @@ import {
 export async function runStackRuntimeAction(
   project: StackResolvedProject, anchor: string, action: RuntimeAction, body: StackActionRequest,
   actor: string | null, signal: AbortSignal,
-  callbacks: { onStart?: (applyDefinition: boolean) => void; onProgress?: (service: RuntimeServiceResult) => void; onMutation?: () => void; onDelegation?: (reason: string) => void } = {}
+  callbacks: { onQueued?: () => void; onStart?: (applyDefinition: boolean) => void; onProgress?: (service: RuntimeServiceResult) => void; onMutation?: () => void; onDelegation?: (reason: string) => void } = {}
 ) {
   return stackLocks.runExclusive(project.projectName, async () => {
     if (!registry.isAllowed(anchor) && ![...registryEntriesByService(project).values()].some((entry) => registry.isAllowed(entry.containerId))) {
@@ -119,5 +119,5 @@ export async function runStackRuntimeAction(
       if (timer) clearInterval(timer);
       await observing;
     }
-  }, { waitMs: ACTION_QUEUE_WAIT_MS, signal });
+  }, { waitMs: ACTION_QUEUE_WAIT_MS, signal, onQueued: callbacks.onQueued });
 }
