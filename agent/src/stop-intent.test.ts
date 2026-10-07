@@ -418,6 +418,7 @@ for (const [stopSignal, signal] of [
   ["SIGRTMIN+3", "38"], ["37", "SIGRTMAX-26"],
   ["SIGRTMIN+31", "65"], ["33", "SIGRTMAX-31"],
   ["SIGRTMIN-1", "33"], ["65", "SIGRTMAX+1"],
+  ["SIGRTMIN-1", "35"], ["35", "SIGRTMIN-1"], ["SIGRTMAX+1", "63"], ["63", "SIGRTMAX+1"],
   ["SIGRTMIN+", "34"], ["64", "SIGRTMAX-"], ["SIGRTMIN+1.5", "35"],
   ["SIGRTMIN+9007199254740993", "34"], ["SIGRTMIN+3", "SIGRTMIN+invalid"]
 ]) {
@@ -429,3 +430,84 @@ for (const [stopSignal, signal] of [
     assert.deepEqual(store.list(), []);
   });
 }
+
+
+for (const queued of [false, true]) test(`a Hub restart whose start fails never leaves manual stop intent: queued=${queued}`, (t) => {
+  const { store, file, setNow } = fixture(t);
+  store.observe(event("kill"), standalone); store.observe(event("die", 1), standalone);
+  setNow(epoch + 2);
+  const finish = store.beginHubRestart([standalone]);
+  assert.deepEqual(store.list(), []);
+  assert.equal(store.isHubRestartActive(id), true);
+  if (queued) { setNow(epoch + 5); finish(); }
+  store.observe(event("kill", 3), standalone);
+  assert.equal(store.restartRequested(event("die", 4)), true);
+  assert.equal(store.observe(event("die", 4), standalone), "unexpected");
+  if (!queued) { setNow(epoch + 5); finish(); }
+  assert.equal(store.isHubRestartActive(id), false);
+  assert.deepEqual(store.list(), []);
+  assert.deepEqual(new StopIntentStore(file).list(), []);
+  store.observe(event("kill", 6), standalone);
+  assert.equal(store.observe(event("die", 7), standalone), "manual-stop");
+});
+
+test("a restart annotation survives Agent restart once its stop signal is observed", (t) => {
+  const { store, file } = fixture(t);
+  store.beginHubRestart([standalone]); store.observe(event("kill", 1), standalone);
+  const reloaded = new StopIntentStore(file, () => epoch + 2);
+  assert.equal(reloaded.restartRequested(event("die", 2)), true);
+  assert.equal(reloaded.observe(event("die", 2), standalone), "unexpected");
+  assert.deepEqual(reloaded.list(), []);
+});
+
+test("CLI restart reclassifies its observed exit and clears stop intent without start", (t) => {
+  const { store, file } = fixture(t);
+  store.observe(event("kill"), standalone); store.observe(event("die", 1), standalone);
+  assert.equal(store.list().length, 1);
+  assert.equal(store.observe(event("restart", 2), standalone), "unexpected");
+  assert.deepEqual(store.list(), []);
+  assert.deepEqual(new StopIntentStore(file).list(), []);
+  assert.equal(store.recentExits()[0].kind, "unexpected");
+});
+
+test("a successful CLI restart does not turn a later manual stop into restart evidence", (t) => {
+  const { store } = fixture(t);
+  store.observe(event("kill"), standalone); store.observe(event("die", 1), standalone);
+  store.observe(event("start", 2), standalone); store.observe(event("restart", 3), standalone);
+  store.observe(event("kill", 4), standalone);
+  assert.equal(store.observe(event("die", 5), standalone), "manual-stop");
+});
+
+
+test("the trailing stop remains restart evidence after the Hub request has finished", (t) => {
+  const { store, setNow } = fixture(t);
+  const finish = store.beginHubRestart([standalone]);
+  store.observe(event("kill", 1), standalone);
+  assert.equal(store.observe(event("die", 2), standalone), "unexpected");
+  setNow(epoch + 3); finish();
+  assert.equal(store.restartRequested(event("stop", 4)), true);
+  store.observe(event("start", 5), standalone);
+  assert.equal(store.restartRequested(event("stop", 6)), false);
+});
+
+
+test("an explicit Hub stop overrides restart evidence even in the same clock millisecond", (t) => {
+  const { store } = fixture(t);
+  const finish = store.beginHubRestart([standalone]);
+  store.observe(event("kill"), standalone); store.observe(event("die"), standalone); finish();
+  store.beginHubStop([id], "demo-operator");
+  store.observe(event("kill"), standalone);
+  assert.equal(store.observe(event("die", 1), standalone), "manual-stop");
+  assert.equal(store.list()[0].actor, "demo-operator");
+});
+
+
+test("a failed restart annotation preserves stop intent and cannot leave a restart active", (t) => {
+  const { store } = fixture(t);
+  store.observe(event("kill"), standalone); store.observe(event("die", 1), standalone);
+  const intents = store.list();
+  t.mock.method(fs, "openSync", () => { throw new Error("synthetic storage failure"); });
+  assert.throws(() => store.beginHubRestart([standalone]), /synthetic storage failure/);
+  assert.deepEqual(store.list(), intents);
+  assert.equal(store.isHubRestartActive(id), false);
+});

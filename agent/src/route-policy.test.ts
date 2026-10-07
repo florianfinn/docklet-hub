@@ -134,11 +134,11 @@ test("monitor-events is bound to its one caller", () => {
   });
 });
 
-test("only rows with onlyActor reject a caller at the route level", () => {
+test("actor-bound routes reject missing or incompatible attribution", () => {
   const bound = ROUTES.filter((route) => route.onlyActor !== undefined).map((route) => route.pattern);
   assert.deepEqual(bound, ["/self-healing/config", "/monitor-events"]);
   for (const route of ROUTES) {
-    if (route.onlyActor !== undefined) continue;
+    if (route.onlyActor !== undefined || route.hubActor) continue;
     for (const method of route.methods) {
       const pathname = examplePath(route.pattern);
       assert.deepEqual(checkRoute(method, pathname, "wer"), { ok: true }, `${method} ${pathname}`);
@@ -305,5 +305,14 @@ test("every variant of a definition action is locked on externally managed conta
       "externally-managed",
       route.pattern
     );
+  }
+});
+
+
+test("maintenance and acknowledgement accept hub or humans and reject other system actors", () => {
+  for (const [method, pathname] of [["PUT", "/self-healing/maintenance"], ["DELETE", "/self-healing/maintenance"],
+    ["POST", "/self-healing/incidents/acknowledge"]]) {
+    for (const actor of ["system:hub", "demo-operator", "user:demo"]) assert.equal(checkRoute(method, pathname, actor).ok, true);
+    for (const actor of [null, "", " ", "system:monitor", "system:self-healing", " system:monitor"]) assert.equal(checkRoute(method, pathname, actor).ok, false);
   }
 });

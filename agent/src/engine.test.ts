@@ -483,3 +483,11 @@ test("kill evidence keeps Docker time and Compose metadata only inside the agent
     } } }), { action: "kill", containerId: "a".repeat(64), containerName: "demo-web", atMs,
     composeProject: "demo", composeService: "web", signal: "15" });
 });
+
+test("die event exit code remains local evidence even after a newer inspect resets it", () => {
+  const event = monitorEventOf({ Type: "container", Action: "die", Actor: { ID: "a".repeat(64), Attributes: { exitCode: "137" } } });
+  assert.equal(event?.exitCode, 137);
+  for (const exitCode of ["", "unknown", "1.5", "Infinity"]) {
+    assert.equal(monitorEventOf({ Type: "container", Action: "die", Actor: { ID: "a".repeat(64), Attributes: { exitCode } } })?.exitCode, undefined);
+  }
+});

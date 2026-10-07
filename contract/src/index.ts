@@ -438,6 +438,18 @@ export {
 } from "./agent/stop-intents.js";
 
 export {
+  SELF_HEALING_SYSTEM_ACTOR, SELF_HEALING_RECOMMENDATION,
+  selfHealingMaintenanceTargetSchema, selfHealingMaintenanceRequestSchema,
+  selfHealingTargetRequestSchema, selfHealingMaintenanceDeleteSchema, selfHealingMaintenanceSchema,
+  selfHealingAttemptSchema, selfHealingCauseSchema, selfHealingLogSchema, selfHealingIncidentSchema,
+  selfHealingBudgetSchema, selfHealingStatusResponseSchema
+} from "./agent/self-healing-status.js";
+export type {
+  SelfHealingMaintenanceTarget, SelfHealingMaintenance, SelfHealingAttempt, SelfHealingCause,
+  SelfHealingLog, SelfHealingIncident, SelfHealingStatusResponse
+} from "./agent/self-healing-status.js";
+
+export {
   HUB_RUNTIME_ERRORS, hubRuntimeErrorSchema, hubRuntimeFailureSchema,
   hubContainerActionRequestSchema, hubStackActionRequestSchema,
   hubContainerRuntimeResultSchema, hubStackRuntimeResultSchema, hubStackActionStreamLineSchema

@@ -1,3 +1,4 @@
+import { SelfHealingStore } from "../self-healing-store.js";
 import { StopIntentStore } from "../stop-intent.js";
 import { DockerEventWatcher } from "../docker-event-watcher.js";
 import { daemonGeneration } from "../daemon-generation.js";
@@ -31,6 +32,7 @@ import { SelfHealingConfigStore } from "../self-healing-config.js";
 
 export const config = loadConfig();
 export const selfHealingConfig = new SelfHealingConfigStore(path.join(path.dirname(config.registryFile), "self-healing-config.json"));
+export const selfHealingState = new SelfHealingStore(path.join(path.dirname(config.registryFile), "self-healing-state.json"));
 export const engine = new DockerEngine({ socketPath: config.socketPath });
 export const stopIntents = new StopIntentStore(path.join(path.dirname(config.registryFile), "stop-intents.json"));
 export const dockerEvents = new DockerEventWatcher(engine, stopIntents, () => daemonGeneration(config.socketPath));

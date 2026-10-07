@@ -2,6 +2,57 @@
 
 ## Unveröffentlicht
 
+- Hub-Neustarts für Container und Stacks löschen die Stopp-Absicht und
+  klassifizieren den Stoppteil als unerwartet. Die Heilung wartet bis zum Ende
+  der Aktion und kann einen gescheiterten Start auch nach Exit-Code 0 beheben.
+  Erkannte CLI-Neustartereignisse löschen die Absicht; ein nicht erkennbarer
+  gescheiterter CLI-Neustart bleibt ein manueller Stopp. Tests sichern die
+  Richtung von Echtzeitsignal-Versätzen bei `SIGRTMIN` und `SIGRTMAX` (#19).
+- Ein Verlust der Docker-Beobachtung verwirft vorgemerkte Heilungen und
+  unterbricht das Stabilitätsfenster. Nach Wiederverbindung gleicht der Watcher
+  das Inventar ab, bevor neue Ausfälle heilen können; injizierter Backoff und
+  Signalprüfung bleiben erhalten (#20).
+
+- Begrenzte Selbstheilung startet bestehende erlaubte Container nach unerwartetem
+  `die` mit Exit-Code ungleich 0. Die Neustartregel `no` gibt den Agent frei;
+  `on-failure:N` erst nach ausgeschöpften Docker-Wiederholungen im gestoppten
+  Zustand. Unbegrenztes `on-failure`, `always` und `unless-stopped` werden beobachtet.
+  Manuelle Aktionen und Heilung teilen Prüfkette, Zustandsprüfung, Warteschlange
+  und genau einen Aktionsaudit mit `system:self-healing`.
+- `self-healing-state.json` speichert Budget, absolute Abstände, Startkennzeichnung,
+  Stabilitätsfenster, Wartungen und Vorfälle atomar mit Modus 0600 sowie Datei-
+  und Verzeichnissynchronisierung. `RestartCount` wird relativ zum letzten
+  beobachteten Start ausgewertet. Unsichere reservierte Versuche nach einem
+  Agent-Abbruch bleiben verbraucht. Manuelle Starts und Quittieren füllen auf;
+  Docker-Wiederholungen und Heilungsstarts füllen nicht auf.
+- Budgetzustände bleiben auf 256 Ziele begrenzt. Der Inventarabgleich entfernt
+  verschwundene unbelastete Ziele; bei Überlauf werden zuerst die ältesten
+  unbelasteten Einträge verdrängt. Verbrauchte Versuche, ausstehende Heilungen,
+  Startkennzeichnungen und offene Vorfälle schützen einen Eintrag. Sind alle
+  256 Plätze geschützt, nimmt der Heiler keine neuen Ziele auf und startet sie
+  nicht, bis durch Auffüllen und Bereinigen oder Verdrängen wieder Platz entsteht.
+- Versuchspausen, Stabilitätsfenster, Wartungsablauf und Wiederanlauf nach
+  internen Fehlern verwenden im laufenden Prozess monotone Fristen. Uhrsprünge
+  ändern diese Abstände nicht; nach einem Agent-Neustart wird die Restdauer aus
+  den gespeicherten Wanduhrwerten übernommen. Der Wiederanlauf wartet 1, 2, 4,
+  8, 16 und höchstens 30 Sekunden; ein erfolgreicher Takt setzt ihn zurück.
+  Beim kontrollierten Agent-Ende bleiben ausstehende Heilungen und Budgets
+  erhalten. Der nächste Inventarabgleich verwirft inzwischen überholte Heilungen.
+- Vertragsversion 12 erhält `GET /self-healing/status`,
+  `PUT`/`DELETE /self-healing/maintenance` und
+  `POST /self-healing/incidents/acknowledge`. Die Schreibwege benötigen
+  `system:hub` oder einen menschlichen Akteur. Wartung gilt für ein Containerziel
+  oder alle aktuellen und späteren Services eines Projekts. Ihr Ende startet
+  nichts. Der Status liefert ohne Beobachtung `503`.
+- Ein Vorfall am Budget-Ende enthält stabile ID, Ursache, Versuchsergebnisse,
+  Handlungsschlüssel und höchstens 50 bereinigte Logzeilen mit jeweils höchstens
+  500 Unicode-Zeichen und insgesamt höchstens 16 KiB UTF-8 einschließlich
+  Zeilentrennern. Die neuesten Zeilen haben Vorrang; die Kürzung nach der
+  Bereinigung trennt keine Unicode-Zeichen. Ohne Bereinigung
+  fehlt der Auszug mit `redaction-unavailable`; ohne lesbare Logs mit
+  `logs-unavailable`. Geschlossene Vorfälle tragen Abschlusszeit und Grund.
+  Es bleiben alle offenen und die letzten 256 geschlossenen Vorfälle gespeichert.
+
 - Der Stack-Aktionsstrom meldet `{ kind: "queued" }`, sobald die Aktion hinter
   einem laufenden Projektvorgang warten muss. Danach folgen `start` und Fortschritt
   oder ein terminaler Fehler mit Status und bereinigtem Ergebnis. Der Hub reicht

@@ -1,5 +1,6 @@
 import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
+import { RuntimeActionFailure } from "./action-failure.js";
 import { ActionQueueError } from "./concurrency.js";
 import { stackActionStreamLineSchema, type RuntimeAction, type RuntimeServiceResult } from "contract";
 import { EventEmitter } from "node:events";
@@ -532,3 +533,24 @@ for (const action of ["start", "stop", "restart"] as const) {
     assert.equal("mutationStarted" in req.response.body, false);
   });
 }
+
+for (const status of [404, 500]) test(`stack restart annotation handles disappearing container inspect ${status}`, async (t) => {
+  mockEngine(t);
+  registry.replaceAll([{ ...entry, externallyManaged: true }]);
+  const commands: string[][] = [];
+  mockCompose(t, (args, done) => { commands.push(args); done(); });
+  const operation = runStackRuntimeAction(stackProjectFromRegistry("old"), "old", "restart",
+    { expectedStack: expectedStack(), applyDefinition: false }, null, new AbortController().signal,
+    { onStart: () => {
+      let first = true;
+      t.mock.method(engine, "inspect", async () => {
+        if (first) { first = false; throw new EngineError("synthetic vanished container", status); }
+        return { ...inspect(), State: { ...inspect().State, Running: true, Status: "running" } };
+      });
+    } });
+  if (status === 404) assert.equal((await operation).status, 200);
+  else await assert.rejects(operation, (error: unknown) => error instanceof RuntimeActionFailure
+    && error.failure.body.error === "engine-action-failed" && error.failure.status === 500);
+  const mutations = commands.filter((args) => args.includes("stop") || args.includes("start"));
+  assert.equal(mutations.length, status === 404 ? 2 : 0);
+});

@@ -113,6 +113,7 @@ export type DockerMonitorEvent = {
   action: "die" | "start" | "stop" | "restart" | "create" | "destroy" | "health_status" | "oom" | "kill";
   atMs?: number;
   signal?: string;
+  exitCode?: number;
   composeProject?: string;
   composeService?: string;
   containerId: string;
@@ -142,7 +143,10 @@ export function monitorEventOf(value: unknown): DockerMonitorEvent | null {
   const millis = nanos ?? (typeof raw.time === "number" ? raw.time * 1_000 : undefined);
   const project = raw.Actor?.Attributes?.["com.docker.compose.project"];
   const service = raw.Actor?.Attributes?.["com.docker.compose.service"];
+  const exitValue = raw.Actor?.Attributes?.exitCode;
+  const exitCode = typeof exitValue === "string" && /^-?\d+$/.test(exitValue) ? Number(exitValue) : undefined;
   const metadata = {
+    ...(exitCode !== undefined && Number.isSafeInteger(exitCode) ? { exitCode } : {}),
     ...(containerName ? { containerName } : {}),
     ...(millis !== undefined && Number.isFinite(millis) ? { atMs: millis } : {}),
     ...(typeof project === "string" && project ? { composeProject: project } : {}),
@@ -184,6 +188,7 @@ export type RawInspect = {
     Tty?: boolean;
   };
   Image?: string;
+  RestartCount?: number;
   State?: {
     Status?: string;
     Running?: boolean;
@@ -192,6 +197,7 @@ export type RawInspect = {
     // looks like a successful start.
     Restarting?: boolean;
     ExitCode?: number;
+    Error?: string;
     StartedAt?: string;
     Health?: { Status?: string };
   };
