@@ -273,6 +273,14 @@ export class SelfHealingController {
       }
       return;
     }
+    if (!result.mutationStarted) {
+      // Persisted reservations count only once the engine call has begun.
+      latest.attempts = latest.attempts.filter((item) => item !== attempt);
+      latest.healingStart = entry.healingStart;
+      if (latest.pending?.id === pending.id) latest.pending = pending;
+      this.store.put(latest);
+      return;
+    }
     attempt.finishedAt = new Date(this.now()).toISOString();
     attempt.result = result.status === 200 ? "ok" : "failed";
     attempt.error = result.status === 200 ? null : String(result.body.error ?? "internal-error");

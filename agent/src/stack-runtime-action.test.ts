@@ -46,10 +46,10 @@ function fixture(external = false, missing = false) {
     checkRuntimeScope: () => {},
     checkCreateScope: () => { calls.push({ name: "scope" }); },
     imageId: async (ref) => { calls.push({ name: "image", args: ref }); return "image-id"; },
-    up: async (args) => { calls.push({ name: "up", args }); },
-    start: async (timeoutMs) => { calls.push({ name: "start", args: timeoutMs }); },
-    stop: async (timeoutMs) => { calls.push({ name: "stop", args: timeoutMs }); },
-    restart: async (timeoutMs, startWithUp) => { calls.push({ name: startWithUp ? "stop-up" : "stop-start", args: timeoutMs }); },
+    up: async (args, onMutation) => { onMutation(); calls.push({ name: "up", args }); },
+    start: async (timeoutMs, onMutation) => { onMutation(); calls.push({ name: "start", args: timeoutMs }); },
+    stop: async (timeoutMs, onMutation) => { onMutation(); calls.push({ name: "stop", args: timeoutMs }); },
+    restart: async (timeoutMs, startWithUp, onMutation) => { onMutation(); calls.push({ name: startWithUp ? "stop-up" : "stop-start", args: timeoutMs }); },
     refresh: async () => { calls.push({ name: "reanchor-read" }); return after; }
   };
   const body: StackActionRequest = { applyDefinition: false, expectedStack: {
@@ -135,7 +135,7 @@ for (const change of ["id", "status", "startedAt"]) {
 
 test("a CLI failure returns replacement ids and the actual per-service states", async () => {
   const f = fixture();
-  f.ops.up = async () => { throw new Error("failed after replacement"); };
+  f.ops.up = async (_options, onMutation) => { onMutation(); throw new Error("failed after replacement"); };
   f.setAfter({ ...f.prepared.context, services: [{ ...f.prepared.context.services[0], containerId: "replaced", status: "exited", exitCode: 2, health: "unhealthy" }] });
   const result = await stackResult(f.ops, "start", f.body);
   assert.equal(result.body.containerIds.web, "replaced");
@@ -216,7 +216,7 @@ test("a queued stack request sees the predecessor's completed state and refuses 
   let starts = 0;
   let enter!: () => void;
   const entered = new Promise<void>((resolve) => { enter = resolve; });
-  f.ops.start = async () => { starts++; enter(); await new Promise<void>((resolve) => { release = resolve; }); };
+  f.ops.start = async (_timeout, onMutation) => { onMutation(); starts++; enter(); await new Promise<void>((resolve) => { release = resolve; }); };
   const originalRefresh = f.ops.refresh;
   f.ops.refresh = async (prepared) => {
     const after = await originalRefresh(prepared);

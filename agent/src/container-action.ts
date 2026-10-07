@@ -82,12 +82,12 @@ export async function runContainerAction(
           else if (action === "stop") {
             const finish = stopIntents.beginHubStop([inspect.Id], actor);
             try { await budget.run((options) => { mutationStarted = true; return engine.stop(inspect.Id, inspect.Config?.StopTimeout ?? null, options); }); }
-            finally { finish(); }
+            finally { finish(mutationStarted); }
           }
           else {
             const finish = stopIntents.beginHubRestart([inspect]);
             try { await budget.run((options) => { mutationStarted = true; return engine.restart(inspect.Id, inspect.Config?.StopTimeout ?? null, options); }); }
-            finally { finish(); }
+            finally { finish(mutationStarted); }
           }
         }
       }, action, expected, before, signal);

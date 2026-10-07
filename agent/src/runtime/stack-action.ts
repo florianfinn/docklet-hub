@@ -1,4 +1,4 @@
-import { RuntimeBudget } from "../runtime-budget.js";
+import { RuntimeBudget, type RuntimeCallOptions } from "../runtime-budget.js";
 import { RuntimeActionFailure } from "../action-failure.js";
 import type { RawInspect } from "../engine.js";
 import { EngineError } from "../engine.js";
@@ -49,11 +49,18 @@ export async function runStackRuntimeAction(
       }));
       restartContainers = inspected.filter((container) => container !== null);
     };
-    const withRestartIntent = async (operation: () => Promise<unknown>) => {
-      if (action !== "restart") return operation();
-      const finish = stopIntents.beginHubRestart(restartContainers);
-      try { return await operation(); }
-      finally { finish(); }
+    const mutate = async (operation: (options: Required<RuntimeCallOptions>) => Promise<unknown>, onMutation: () => void) => {
+      budget.remaining();
+      const finish = action === "restart" ? stopIntents.beginHubRestart(restartContainers)
+        : action === "stop" ? stopIntents.beginHubStop(stopContainerIds, actor) : () => {};
+      let mutationStarted = false;
+      try {
+        return await budget.run((options) => {
+          mutationStarted = true;
+          onMutation();
+          return operation(options);
+        });
+      } finally { finish(mutationStarted); }
     };
     const seen = new Map<string, string>();
     const progress = (service: RuntimeServiceResult) => {
@@ -96,19 +103,15 @@ export async function runStackRuntimeAction(
         lastKnownContext: (prepared) => ({ ...prepared.context, services: prepared.context.services.map((service) => ({
           ...service, ...lastStates.get(service.serviceName)
         })) }),
-        up: ({ applyDefinition, forceRecreate, timeoutMs }) => withRestartIntent(() => budget.run((options) => composeUp(project, {
+        up: ({ applyDefinition, forceRecreate, timeoutMs }, onMutation) => mutate((options) => composeUp(project, {
           removeOrphans: false, pullNever: true, wait: false,
           forceRecreate, noRecreate: !applyDefinition, timeoutMs: Math.min(timeoutMs, options.timeoutMs), signal: options.signal
-        }))),
-        start: (timeoutMs) => budget.run((options) => composeStart(project, Math.min(timeoutMs, options.timeoutMs), options.signal)),
-        stop: async (timeoutMs) => {
-          const finish = stopIntents.beginHubStop(stopContainerIds, actor);
-          try { await budget.run((options) => composeStop(project, Math.min(timeoutMs, options.timeoutMs), options.signal)); }
-          finally { finish(); }
-        },
-        restart: (timeoutMs, startWithUp) => withRestartIntent(() => budget.run((options) => composeDependencySafeRestart(project, Math.min(timeoutMs, options.timeoutMs), undefined, startWithUp ? {
+        }), onMutation),
+        start: (timeoutMs, onMutation) => mutate((options) => composeStart(project, Math.min(timeoutMs, options.timeoutMs), options.signal), onMutation),
+        stop: (timeoutMs, onMutation) => mutate((options) => composeStop(project, Math.min(timeoutMs, options.timeoutMs), options.signal), onMutation),
+        restart: (timeoutMs, startWithUp, onMutation) => mutate((options) => composeDependencySafeRestart(project, Math.min(timeoutMs, options.timeoutMs), undefined, startWithUp ? {
           removeOrphans: false, pullNever: true, wait: false, noRecreate: true, forceRecreate: false
-        } : undefined, options.signal))),
+        } : undefined, options.signal), onMutation),
         refresh: async (prepared) => {
           stopped = true;
           if (timer) clearInterval(timer);

@@ -137,6 +137,12 @@ Weitere Phasen beginnen dann nicht. Ein Abbruch des Enginekontakts beweist
 keinen Abbruch einer bereits angenommenen Mutation. Der genau eine Aktionsaudit
 trägt vor Mutationsbeginn `denied`, danach `error`; die Antwort behauptet
 keinen unveränderten oder garantiert nicht ausgeführten Vorgang.
+Mutationsbeginn ist der Engine- oder Compose-Aufruf unmittelbar nach der letzten
+Budgetprüfung. Läuft die Frist beim Speichern einer Neustartmarkierung ab,
+nimmt der Agent diese zurück und stellt die vorherigen Stop-Absichten wieder her.
+Das Web behandelt auch strukturierte Fristergebnisse mit `ok: false` als
+„Ergebnis unbekannt, Vorgang kann auf dem Host weiterlaufen“ und liest den
+aktuellen Zustand neu. Fehlerdiagnosen erscheinen dabei nicht im Web.
 Selbstheilungsstarts verwenden dieselbe endliche Frist von 730 Sekunden ohne
 Hub-Aufrufer: Große Volumenprüfungen bleiben möglich, während ein Heilungsstart
 den gemeinsamen Projekt-Lock nicht unbegrenzt belegt.

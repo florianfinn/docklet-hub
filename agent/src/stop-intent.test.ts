@@ -511,3 +511,32 @@ test("a failed restart annotation preserves stop intent and cannot leave a resta
   assert.deepEqual(store.list(), intents);
   assert.equal(store.isHubRestartActive(id), false);
 });
+
+for (const action of ["stop", "restart"] as const) test(`cancelled hub ${action} restores its target without reverting another restart`, (t) => {
+  const { store, file } = fixture(t);
+  store.observe(event("kill"), standalone); store.observe(event("die", 1), standalone);
+  const before = store.list();
+  const finish = action === "restart" ? store.beginHubRestart([standalone]) : store.beginHubStop([id], "demo-operator");
+  const peer = { ...standalone, Id: "b".repeat(64), Name: "/demo-worker" };
+  const finishPeer = store.beginHubRestart([peer]);
+  finish(false);
+  assert.equal(store.isHubRestartActive(id), false);
+  assert.equal(store.restartRequested(event("kill", 2)), false);
+  assert.equal(store.isHubRestartActive(peer.Id), true);
+  assert.deepEqual(store.list(), before);
+  assert.deepEqual(new StopIntentStore(file).list(), before);
+  finishPeer();
+});
+
+test("cancelled hub stop restores a preceding restart and its persistent kill annotation", (t) => {
+  const { store, file } = fixture(t);
+  const restart = store.beginHubRestart([standalone]);
+  store.observe(event("kill"), standalone);
+  const stop = store.beginHubStop([id], "demo-operator");
+  stop(false);
+  assert.equal(store.isHubRestartActive(id), true);
+  assert.equal(store.restartRequested(event("kill", 1)), true);
+  const reopened = new StopIntentStore(file, () => epoch);
+  assert.equal(reopened.restartRequested(event("die", 1)), true);
+  restart();
+});

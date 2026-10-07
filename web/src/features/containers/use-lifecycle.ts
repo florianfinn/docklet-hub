@@ -11,6 +11,9 @@ import { targetKey, targetContainers, requiresConfirmation, type LifecycleTarget
 import type { OperationResult } from "./lifecycle-operations";
 
 export type LifecycleQuestion = { action: RuntimeAction; target: LifecycleTarget; context?: HubRuntimeContext; changed: boolean };
+const unknownOutcome = (code?: string | null) => !code || [
+  "runtime-deadline-exceeded", "runtime-outcome-unknown", "runtime-stream-broken", "action-caller-disconnected"
+].includes(code);
 export { LIFECYCLE_TIMEOUT_MS } from "contract";
 export function useLifecycleState(target: LifecycleTarget) {
   const session = useLifecycleSession();
@@ -51,12 +54,13 @@ export function useLifecycleAction(target: LifecycleTarget) {
     return container ? { ...target, container } : null;
   };
   const finish = (next: LifecycleTarget, result: OperationResult) => operations.update(next,
-    { result, progress: "services" in result ? result.services : [], message: result.ok ? result.outcome : result.outcome === "ok" ? "failed" : result.outcome,
+    { result, progress: "services" in result ? result.services : [], message: !result.ok && result.error && unknownOutcome(result.error)
+      ? "unknown" : result.ok ? result.outcome : result.outcome === "ok" ? "failed" : result.outcome,
       phase: "done", busy: true, error: result.error });
   const failure = (next: LifecycleTarget, error: unknown, timedOut = false) => {
     const code = errorCode(error);
     operations.update(next, { phase: "done", error: code ?? undefined,
-      message: timedOut ? "timeout" : !code || ["runtime-outcome-unknown", "runtime-stream-broken", "action-caller-disconnected"].includes(code) ? "unknown" : "failed" });
+      message: timedOut ? "timeout" : unknownOutcome(code) ? "unknown" : "failed" });
   };
   async function execute(request: LifecycleQuestion) {
     if (sending.current) return;

@@ -14,6 +14,11 @@ export const STOP_INTENT_LIMIT = 256;
 type PendingKill = { target: StopIntentTarget; containerId: string; atMs: number; windowMs: number; actor: string | null; restart?: boolean };
 type HubStop = { actor: string | null; startedAt: number; finishedAt: number; startedContainers?: Set<string> };
 
+function restoreEntry<T>(map: Map<string, T>, saved: Map<string, T>, key: string): void {
+  if (saved.has(key)) map.set(key, saved.get(key)!);
+  else map.delete(key);
+}
+
 export function stopIntentTarget(container: RawInspect): StopIntentTarget | null {
   const labels = container.Config?.Labels;
   const projectName = labels?.["com.docker.compose.project"];
@@ -132,18 +137,27 @@ export class StopIntentStore {
   }
 
   // Stop routes annotate the request; only Docker's kill/die confirms intent.
-  beginHubStop(containerIds: readonly string[], actor: string | null): () => void {
+  beginHubStop(containerIds: readonly string[], actor: string | null): (mutationStarted?: boolean) => void {
+    const previous = { stops: new Map(this.hubStops), restarts: new Map(this.hubRestarts), kills: new Map(this.kills) };
     const annotation: HubStop = { actor, startedAt: this.now(), finishedAt: Infinity };
     for (const id of containerIds) {
       this.hubStops.set(id, annotation);
       this.hubRestarts.delete(id);
       if (this.kills.get(id)?.restart) this.kills.delete(id);
     }
-    return () => { annotation.finishedAt = this.now(); };
+    return (mutationStarted = true) => {
+      if (mutationStarted) { annotation.finishedAt = this.now(); return; }
+      for (const id of containerIds) {
+        restoreEntry(this.hubStops, previous.stops, id);
+        restoreEntry(this.hubRestarts, previous.restarts, id);
+        restoreEntry(this.kills, previous.kills, id);
+      }
+      this.persist();
+    };
   }
 
   // A restart asks for a running result even if its start subsequently fails.
-  beginHubRestart(containers: readonly RawInspect[]): () => void {
+  beginHubRestart(containers: readonly RawInspect[]): (mutationStarted?: boolean) => void {
     const previous = { intents: new Map(this.intents), kills: new Map(this.kills), restarts: new Map(this.hubRestarts) };
     const annotation: HubStop = { actor: null, startedAt: this.now(), finishedAt: Infinity, startedContainers: new Set() };
     for (const container of containers) {
@@ -157,7 +171,17 @@ export class StopIntentStore {
       this.intents = previous.intents; this.kills = previous.kills; this.hubRestarts = previous.restarts;
       throw error;
     }
-    return () => { annotation.finishedAt = this.now(); };
+    return (mutationStarted = true) => {
+      if (mutationStarted) { annotation.finishedAt = this.now(); return; }
+      // Undo only this reservation, retaining annotations for other targets.
+      for (const container of containers) {
+        restoreEntry(this.hubRestarts, previous.restarts, container.Id);
+        restoreEntry(this.kills, previous.kills, container.Id);
+        const target = stopIntentTarget(container);
+        if (target) restoreEntry(this.intents, previous.intents, targetKey(target));
+      }
+      this.persist();
+    };
   }
 
   isHubRestartActive(containerId: string): boolean {
