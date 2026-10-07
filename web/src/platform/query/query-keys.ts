@@ -78,7 +78,8 @@ export const queryKeys = {
   },
   containers: {
     /** `GET /api/overview`, every arm with its stacks; contacts the arms under the caller (#282). */
-    overview: () => ["containers", "overview"] as const
+    overview: () => ["containers", "overview"] as const,
+    runtimeContext: (hostId: string, containerId: string) => ["containers", hostId, containerId, "runtime-context"] as const
   },
   metrics: {
     /** Measurements of one host, refreshed after a monitor reconnect. */

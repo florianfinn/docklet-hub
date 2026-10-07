@@ -20,7 +20,7 @@ import {
   withStackMarks
 } from "../../features/marks";
 import { OVERVIEW_SLOTS } from "../containers/container-slots";
-import { ContainerList, ContainerStateDot, useOverview, useOverviewUpdate } from "../../features/containers";
+import { LifecycleControls, ContainerList, ContainerStateDot, useOverview, useOverviewUpdate } from "../../features/containers";
 import { StackIndentSwitch } from "./stack/StackIndentSwitch";
 import { detailPageClass } from "./detail-page";
 import { stackPath, type StackTab } from "../../platform/routes/stack-path";
@@ -196,6 +196,7 @@ export function StackScreen({ role, tab }: { role: Role; tab: StackTab }) {
               ⚠️ ABSICHTLICH NICHT `ui/shadcn/tabs.tsx`. Radix führt den aktiven
               Reiter in einem eigenen Zustand und zeichnet `button`s; die
               Adresse wüsste davon nichts. */}
+          <LifecycleControls target={{ kind: "stack", hostId, stack: found.stack }} detail />
           <nav aria-label={t("stackTabsLabel")} className="flex gap-1 border-b border-border">
               {TABS.filter((entry) => editable || !entry.adminOnly).map((entry) => (
                 <Link
