@@ -418,6 +418,7 @@ for (const [stopSignal, signal] of [
   ["SIGRTMIN+3", "38"], ["37", "SIGRTMAX-26"],
   ["SIGRTMIN+31", "65"], ["33", "SIGRTMAX-31"],
   ["SIGRTMIN-1", "33"], ["65", "SIGRTMAX+1"],
+  ["SIGRTMIN-1", "35"], ["35", "SIGRTMIN-1"], ["SIGRTMAX+1", "63"], ["63", "SIGRTMAX+1"],
   ["SIGRTMIN+", "34"], ["64", "SIGRTMAX-"], ["SIGRTMIN+1.5", "35"],
   ["SIGRTMIN+9007199254740993", "34"], ["SIGRTMIN+3", "SIGRTMIN+invalid"]
 ]) {
