@@ -1,11 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
+import { constants } from "node:os";
 import { stopIntentSchema, stopIntentTargetSchema, type ContainerExit, type StopIntent, type StopIntentTarget } from "contract";
 import type { DockerMonitorEvent, RawInspect } from "./engine-model.js";
 
 export const STOP_INTENT_BUFFER_MS = 5_000;
 const DEFAULT_STOP_TIMEOUT_SECONDS = 10;
 const RECENT_EXIT_LIMIT = 256;
+export const STOP_INTENT_LIMIT = 256;
 type PendingKill = { target: StopIntentTarget; containerId: string; atMs: number; windowMs: number; actor: string | null };
 type HubStop = { actor: string | null; startedAt: number; finishedAt: number };
 
@@ -30,6 +32,13 @@ export function stopIntentWindow(container: RawInspect): number {
     ? timeout : DEFAULT_STOP_TIMEOUT_SECONDS) * 1_000 + STOP_INTENT_BUFFER_MS;
 }
 
+function signalNumber(signal: string | undefined): number | null {
+  if (!signal) return null;
+  if (/^\d+$/.test(signal)) return Number(signal);
+  const name = signal.toUpperCase();
+  return constants.signals[(name.startsWith("SIG") ? name : `SIG${name}`) as keyof typeof constants.signals] ?? null;
+}
+
 export class StopIntentStore {
   private generation: string | null = null;
   private intents = new Map<string, StopIntent>();
@@ -37,14 +46,31 @@ export class StopIntentStore {
   private hubStops = new Map<string, HubStop>();
   private exits: ContainerExit[] = [];
 
-  constructor(private readonly filePath: string, private readonly now: () => number = Date.now) {
-    let value: unknown;
+  constructor(
+    private readonly filePath: string,
+    private readonly now: () => number = Date.now,
+    private readonly warn: (message: string) => void = (message) => console.warn(message)
+  ) {
+    let text: string;
     try {
-      value = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      text = fs.readFileSync(filePath, "utf8");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
       throw new Error("Stop intent state unreadable", { cause: error });
     }
+    try {
+      this.load(JSON.parse(text) as unknown);
+    } catch {
+      this.generation = null;
+      this.intents.clear();
+      this.kills.clear();
+      fs.renameSync(filePath, `${filePath}.corrupt-${this.now()}-${process.hrtime.bigint()}`);
+      this.syncDirectory();
+      this.warn("[agent] Invalid stop intent state archived; starting with empty intent state");
+    }
+  }
+
+  private load(value: unknown): void {
     const state = value as { version?: unknown; generation?: unknown; intents?: unknown; kills?: unknown };
     if (!state || state.version !== 1 || !(state.generation === null || typeof state.generation === "string")
       || !Array.isArray(state.intents) || !Array.isArray(state.kills)) throw new Error("Invalid stop intent state");
@@ -61,6 +87,7 @@ export class StopIntentStore {
         || !(kill.actor === null || typeof kill.actor === "string")) throw new Error("Invalid pending stop intent");
       this.kills.set(kill.containerId, kill);
     }
+    this.limitEntries();
   }
 
   setDaemonGeneration(generation: string): void {
@@ -100,6 +127,9 @@ export class StopIntentStore {
       if (atMs - kill.atMs > kill.windowMs) this.kills.delete(id);
     }
     if (event.action === "kill") {
+      const signal = signalNumber(event.signal);
+      if (signal === null || (signal !== signalNumber(container.Config?.StopSignal || "SIGTERM")
+        && signal !== constants.signals.SIGKILL)) return null;
       const annotation = this.hubStops.get(event.containerId);
       const actor = annotation && atMs >= annotation.startedAt && atMs <= annotation.finishedAt
         ? annotation.actor : null;
@@ -140,10 +170,37 @@ export class StopIntentStore {
     }
   }
 
+  // A complete inventory is needed to remove targets absent from Docker.
+  reconcileInventory(containers: readonly RawInspect[]): void {
+    const targets = new Set(containers.map(stopIntentTarget).filter((target) => target !== null).map(targetKey));
+    const ids = new Set(containers.map((container) => container.Id));
+    let changed = false;
+    for (const [key] of this.intents) {
+      if (!targets.has(key)) { this.intents.delete(key); changed = true; }
+    }
+    for (const [id] of this.kills) {
+      if (!ids.has(id)) { this.kills.delete(id); changed = true; }
+    }
+    if (changed) this.persist();
+  }
+
+  private limitEntries(): void {
+    const intents = [...this.intents.entries()].sort((a, b) => Date.parse(a[1].stoppedAt) - Date.parse(b[1].stoppedAt));
+    for (const [key] of intents.slice(0, Math.max(0, intents.length - STOP_INTENT_LIMIT))) this.intents.delete(key);
+    const kills = [...this.kills.entries()].sort((a, b) => a[1].atMs - b[1].atMs);
+    for (const [id] of kills.slice(0, Math.max(0, kills.length - STOP_INTENT_LIMIT))) this.kills.delete(id);
+  }
+
   list(): StopIntent[] { return structuredClone([...this.intents.values()]); }
   recentExits(): ContainerExit[] { return structuredClone(this.exits); }
 
+  private syncDirectory(): void {
+    const fd = fs.openSync(path.dirname(this.filePath), fs.constants.O_RDONLY | fs.constants.O_DIRECTORY);
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  }
+
   private persist(): void {
+    this.limitEntries();
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
     const temporary = `${this.filePath}.tmp`;
     const fd = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW, 0o600);
@@ -155,5 +212,6 @@ export class StopIntentStore {
       fs.closeSync(fd);
     }
     fs.renameSync(temporary, this.filePath);
+    this.syncDirectory();
   }
 }

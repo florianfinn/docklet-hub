@@ -124,7 +124,7 @@ function fixture(t: TestContext, stack: boolean, scenario: Scenario, external = 
     mutations++;
     if (scenario === "confirmed" || scenario === "failed-after-events") {
       assert.equal(stopIntents.list().length, 0);
-      for (const containerId of ids) stopIntents.observe({ action: "kill", containerId }, inspect(containerId));
+      for (const containerId of ids) stopIntents.observe({ action: "kill", signal: "15", containerId }, inspect(containerId));
       assert.equal(stopIntents.list().length, 0);
       for (const containerId of ids) stopIntents.observe({ action: "die", containerId }, inspect(containerId));
       stopped = true;

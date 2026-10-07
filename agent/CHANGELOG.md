@@ -47,6 +47,21 @@ Protokollbruch: Hub und Agenten müssen gemeinsam aktualisiert werden.
 - Manuelle Stopp-Absichten entstehen aus `kill` → `die` und bleiben unter Projekt und Service beziehungsweise Containername im lokalen Zustandsverzeichnis erhalten. Der nächste Start löscht sie; eine erkannte Unterbrechung der Daemon-Kontinuität verwirft sie. Hub-Stopps annotieren den Akteur erst beim tatsächlichen Engine- oder Compose-Aufruf; ohne bestätigende Ereignisse entsteht keine Absicht (#19).
 - Ein Hintergrund-Watcher liest den einzigen Docker-Ereignisstrom auch ohne Hub-Verbindung und verteilt alle bisherigen Lifecycle- und Health-Aktionen an `/monitor-events`. `kill` und Container-Metadaten bleiben lokal. `GET /stop-intents` liefert Absichten, die letzten 256 Ausfallklassifikationen und den Beobachtungsstatus; fehlende Beobachtung ergibt `503`. Diese Ergänzung gehört zur unveröffentlichten Vertragsversion 12.
 
+- Inspect- und Speicherfehler beenden nur die aktuelle Watcher-Verbindung. Der
+  Agent verwirft Absichten und Signalzuordnungen und verbindet sich mit Backoff
+  von 1 bis höchstens 30 Sekunden erneut. `/monitor-events` liefert ohne
+  Beobachtung `503` und beendet offene Leser bei Beobachtungsverlust (#19).
+- Als Stopp-Vorbereitung zählen nur das konfigurierte Container-Stoppsignal
+  (ab Werk `SIGTERM`) und `SIGKILL`. Andere Signale bleiben ohne Zuordnung.
+  Der Containerabgleich entfernt nicht mehr vorhandene Namen und Services;
+  Absichten und Signalzuordnungen sind jeweils auf 256 Einträge begrenzt und
+  verdrängen die nach Ereigniszeit ältesten Einträge (#19).
+- Beschädigte `stop-intents.json` wird mit einer Warnung ohne Inhalt beiseitegelegt;
+  der Agent startet leer. Atomarer Dateiersatz und das Beiseitelegen synchronisieren
+  anschließend das Verzeichnis. Die gemeinsame Absicht aller Compose-Replikas
+  und die Grenze bei kontrolliertem Agent-Ende während eines Daemon-Shutdowns
+  sind dokumentiert. `CONTRACT_VERSION` bleibt 12 (#19).
+
 ## 0.32.0
 
 Der erste Quellstand von docklet hub übernimmt Hub und Agent als Monorepo.

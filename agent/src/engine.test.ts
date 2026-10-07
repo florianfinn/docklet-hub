@@ -481,5 +481,5 @@ test("kill evidence keeps Docker time and Compose metadata only inside the agent
     timeNano: atMs * 1_000_000, Actor: { ID: "a".repeat(64), Attributes: {
       name: "/demo-web", "com.docker.compose.project": "demo", "com.docker.compose.service": "web", signal: "15"
     } } }), { action: "kill", containerId: "a".repeat(64), containerName: "demo-web", atMs,
-    composeProject: "demo", composeService: "web" });
+    composeProject: "demo", composeService: "web", signal: "15" });
 });

@@ -150,9 +150,13 @@ export async function handleHostInfo(ctx: RouteContext): Promise<void> {
 // event material (names, labels, attributes) never leaves the agent.
 export async function handleMonitorEvents(ctx: RouteContext): Promise<void> {
   const { response, actor } = ctx;
-  // R3: a cap of its own, so that a stuck predecessor does not lock out its
-  // successor, while a caller in a reconnect loop still cannot hold an
-  // arbitrary number of long-lived streams open.
+  if (!dockerEvents.isObserving()) {
+    audit.write({ action: "monitor-events", containerId: null, containerName: null,
+      actor, outcome: "error", reason: "events-unavailable" });
+    send(response, 503, { error: "events-unavailable" });
+    return;
+  }
+  // Bound concurrent readers while allowing a reconnecting successor.
   const releaseMonitorSlot = monitorStreams.tryAcquire();
   if (!releaseMonitorSlot) {
     audit.write({

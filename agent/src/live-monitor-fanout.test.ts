@@ -81,7 +81,7 @@ test("two Hub readers receive the full monitor vocabulary from one Docker stream
   const actions = ["start", "stop", "restart", "create", "destroy", "die", "health_status", "oom"] as const;
   for (const action of actions) {
     for (const containerId of [id, observedId, unknownId]) emit({ action, containerId,
-      containerName: containerId === observedId ? "demo-observed" : "demo-web", composeProject: "demo", composeService: "web" });
+      containerName: containerId === observedId ? "demo-observed" : "demo-web", composeProject: "demo", composeService: "web", signal: "1" });
   }
   await until(() => first.response.chunks.length === actions.length * 2 && second.response.chunks.length === actions.length * 2);
   const expected = actions.flatMap((action) => [id, observedId].map((containerId) => ({ action, containerId })));
@@ -99,10 +99,60 @@ test("two Hub readers receive the full monitor vocabulary from one Docker stream
   assert.equal(first.response.chunks.length, expected.length);
   second.response.end();
   await second.task;
-  emit({ action: "kill", containerId: id });
+  emit({ action: "kill", signal: "15", containerId: id });
   emit({ action: "die", containerId: id });
   await until(() => stopIntents.list().length === 1);
   assert.equal(subscriptions, 1);
   assert.equal(dockerEvents.isObserving(), true);
   assert.equal(second.response.chunks.length, expected.length + 1);
+});
+
+test("monitor route returns 503 before the watcher starts", async () => {
+  const reader = openMonitor();
+  await reader.task;
+  assert.equal(reader.response.status, 503);
+  assert.deepEqual(JSON.parse(reader.response.chunks.join("")), { error: "events-unavailable" });
+});
+
+test("losing observation closes readers, rejects readers during reconnect and serves late readers", async (t) => {
+  const id = "a".repeat(64);
+  registry.replaceAll([{ containerId: id, containerName: "demo-web", imageRef: "example/app:1.0", allowed: true }]);
+  t.mock.method(fs, "statSync", () => ({ dev: 1n, ino: 1n, ctimeNs: 1n, isSocket: () => true }));
+  let fail = false;
+  let emit!: (event: DockerMonitorEvent) => void;
+  let subscriptions = 0;
+  t.mock.method(engine, "listContainerIds", async () => [id]);
+  t.mock.method(engine, "inspect", async () => {
+    if (fail) { fail = false; throw Object.assign(new Error("inspect failed"), { status: 500 }); }
+    return { Id: id, Name: "/demo-web", State: { Running: false } };
+  });
+  t.mock.method(engine, "monitorEvents", async (onEvent: typeof emit, signal?: AbortSignal, options?: { onConnected?: () => void }) => {
+    subscriptions++;
+    emit = onEvent;
+    options?.onConnected?.();
+    await new Promise<void>((resolve) => signal?.addEventListener("abort", () => resolve(), { once: true }));
+  });
+  t.after(() => dockerEvents.stop());
+  dockerEvents.start();
+  await until(() => dockerEvents.isObserving());
+  const first = openMonitor();
+  t.after(() => first.response.end());
+  await until(() => first.response.headersSent);
+  fail = true;
+  emit({ action: "die", containerId: id });
+  await first.task;
+  assert.equal(first.response.status, 200);
+  assert.equal(first.response.writableEnded, true);
+  assert.equal(dockerEvents.isObserving(), false);
+  const reconnecting = openMonitor();
+  await reconnecting.task;
+  assert.equal(reconnecting.response.status, 503);
+  await until(() => dockerEvents.isObserving() && subscriptions === 2);
+  const late = openMonitor();
+  t.after(async () => { late.response.end(); await late.task; });
+  await until(() => late.response.headersSent);
+  emit({ action: "die", containerId: id });
+  await until(() => late.response.chunks.length === 1);
+  assert.equal(late.response.status, 200);
+  assert.deepEqual(JSON.parse(late.response.chunks[0]), { action: "die", containerId: id });
 });

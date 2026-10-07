@@ -4,7 +4,7 @@ import type { DockerEngine } from "./engine.js";
 import { StopIntentStore } from "./stop-intent.js";
 
 type EventEngine = Pick<DockerEngine, "inspect" | "listContainerIds" | "monitorEvents">;
-type Listener = (event: Omit<DockerMonitorEvent, "action"> & { action: Exclude<DockerMonitorEvent["action"], "kill"> }) => void;
+type Listener = (event: Omit<DockerMonitorEvent, "action" | "signal"> & { action: Exclude<DockerMonitorEvent["action"], "kill"> }) => void;
 
 export class DockerEventWatcher {
   private listeners = new Set<Listener>();
@@ -45,7 +45,11 @@ export class DockerEventWatcher {
   }
 
   private async run(signal: AbortSignal): Promise<void> {
+    let retryDelayMs = 1_000;
     while (!signal.aborted) {
+      const connection = new AbortController();
+      const abortConnection = () => connection.abort();
+      signal.addEventListener("abort", abortConnection, { once: true });
       let queue = Promise.resolve();
       const containers = new Map<string, RawInspect>();
       try {
@@ -61,10 +65,11 @@ export class DockerEventWatcher {
             if ((error as { status?: number }).status !== 404) throw error;
           }
         }
+        this.intents.reconcileInventory([...containers.values()]);
         if (signal.aborted) return;
         await this.engine.monitorEvents((event) => {
           queue = queue.then(async () => {
-            if (signal.aborted || (event.atMs !== undefined && event.atMs < since * 1_000)) return;
+            if (connection.signal.aborted || (event.atMs !== undefined && event.atMs < since * 1_000)) return;
             if (event.action === "kill" || event.action === "die" || event.action === "start") {
               let container: RawInspect;
               try {
@@ -85,31 +90,47 @@ export class DockerEventWatcher {
               if (event.action === "die") containers.delete(event.containerId);
             }
             // kill is local evidence; the existing monitor stream keeps its shape.
-            if (event.action !== "kill") for (const listener of this.listeners) {
-              try { listener({ ...event, action: event.action }); } catch (error) { this.onError(error); }
+            retryDelayMs = 1_000;
+            if (event.action !== "kill") {
+              const { signal: _signal, ...monitorEvent } = event;
+              for (const listener of this.listeners) {
+                try { listener({ ...monitorEvent, action: event.action }); } catch (error) { this.onError(error); }
+              }
             }
           }).catch((error: unknown) => {
-            this.observing = false;
+            this.markUnavailable();
             this.onError(error);
-            // Persistence/inspection failures must never leave a healthy flag.
-            this.controller?.abort();
+            connection.abort();
           });
-        }, signal, { since, onConnected: () => { this.observing = true; } });
+        }, connection.signal, { since, onConnected: () => {
+          if (!connection.signal.aborted) this.observing = true;
+        } });
+        this.markUnavailable();
         await queue;
-        if (!signal.aborted) this.intents.daemonDisconnected();
       } catch (error) {
+        this.markUnavailable();
         await queue;
-        if (!signal.aborted) {
-          this.onError(error);
-          try { this.intents.daemonDisconnected(); } catch (failure) { this.onError(failure); return; }
-        }
+        if (!signal.aborted) this.onError(error);
       } finally {
-        this.observing = false;
-        for (const listener of this.unavailableListeners) {
-          try { listener(); } catch (error) { this.onError(error); }
+        this.markUnavailable();
+        connection.abort();
+        signal.removeEventListener("abort", abortConnection);
+        if (!signal.aborted) {
+          try { this.intents.daemonDisconnected(); } catch (error) { this.onError(error); }
         }
       }
-      if (!signal.aborted) await setTimeout(1_000, undefined, { signal, ref: false }).catch(() => {});
+      if (!signal.aborted) {
+        await setTimeout(retryDelayMs, undefined, { signal, ref: false }).catch(() => {});
+        retryDelayMs = Math.min(retryDelayMs * 2, 30_000);
+      }
+    }
+  }
+
+  private markUnavailable(): void {
+    if (!this.observing) return;
+    this.observing = false;
+    for (const listener of this.unavailableListeners) {
+      try { listener(); } catch (error) { this.onError(error); }
     }
   }
 }

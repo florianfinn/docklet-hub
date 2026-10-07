@@ -112,6 +112,7 @@ export type EngineInfo = {
 export type DockerMonitorEvent = {
   action: "die" | "start" | "stop" | "restart" | "create" | "destroy" | "health_status" | "oom" | "kill";
   atMs?: number;
+  signal?: string;
   composeProject?: string;
   composeService?: string;
   containerId: string;
@@ -147,9 +148,11 @@ export function monitorEventOf(value: unknown): DockerMonitorEvent | null {
     ...(typeof project === "string" && project ? { composeProject: project } : {}),
     ...(typeof service === "string" && service ? { composeService: service } : {})
   };
+  const signal = raw.Actor?.Attributes?.signal;
   const action = raw.Action;
   if (action === "die" || action === "start" || action === "stop" || action === "restart" || action === "create" || action === "destroy" || action === "oom" || action === "kill") {
-    return { action, containerId, ...metadata };
+    return { action, containerId, ...metadata,
+      ...(action === "kill" && typeof signal === "string" ? { signal } : {}) };
   }
   if (typeof action === "string" && action.startsWith("health_status:")) {
     return { action: "health_status", containerId, ...(containerName ? { containerName } : {}) };
@@ -164,6 +167,7 @@ export type RawInspect = {
   Config?: {
     Image?: string;
     StopTimeout?: number | null;
+    StopSignal?: string;
     Env?: string[] | null;
     Labels?: Record<string, string> | null;
     // For the derived configuration information (S5b, §16.3): the container

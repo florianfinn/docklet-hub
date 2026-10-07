@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { stopIntentsResponseSchema } from "contract";
 import type { DockerMonitorEvent, RawInspect } from "./engine-model.js";
-import { STOP_INTENT_BUFFER_MS, StopIntentStore, stopIntentTarget, stopIntentWindow } from "./stop-intent.js";
+import { STOP_INTENT_BUFFER_MS, STOP_INTENT_LIMIT, StopIntentStore, stopIntentTarget, stopIntentWindow } from "./stop-intent.js";
 
 const id = "a".repeat(64);
 const epoch = Date.parse("2026-10-01T10:00:00.000Z");
@@ -13,7 +13,7 @@ const standalone: RawInspect = { Id: id, Name: "/demo-web", Config: { StopTimeou
 const compose: RawInspect = { ...standalone, Config: { StopTimeout: 30, Labels: {
   "com.docker.compose.project": "demo", "com.docker.compose.service": "web"
 } } };
-const event = (action: DockerMonitorEvent["action"], offset = 0, containerId = id): DockerMonitorEvent => ({ action, containerId, atMs: epoch + offset });
+const event = (action: DockerMonitorEvent["action"], offset = 0, containerId = id): DockerMonitorEvent => ({ action, containerId, atMs: epoch + offset, ...(action === "kill" ? { signal: "15" } : {}) });
 
 function fixture(t: test.TestContext) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "stop-intent-test-"));
@@ -41,7 +41,7 @@ test("die alone is an unexpected exit and creates no intent", (t) => {
   assert.equal(store.recentExits()[0].kind, "unexpected");
 });
 
-test("a late crash after a reload signal is unexpected", (t) => {
+test("a crash beyond the stop signal window is unexpected", (t) => {
   const { store } = fixture(t);
   store.observe(event("kill"), standalone);
   assert.equal(store.observe(event("die", 35_001), standalone), "unexpected");
@@ -230,11 +230,59 @@ test("the shared response contract validates intents and both exit kinds", (t) =
   assert.equal(stopIntentsResponseSchema.safeParse({ observing: true, intents: [{ target: { kind: "compose", projectName: "demo" } }], recentExits: [] }).success, false);
 });
 
-test("corrupt state fails rather than silently losing manual intent", (t) => {
-  const { file } = fixture(t);
-  fs.writeFileSync(file, "{incomplete");
-  assert.throws(() => new StopIntentStore(file), /state unreadable/);
-});
+for (const content of ["{incomplete", "null", JSON.stringify({ version: 2 }),
+  JSON.stringify({ version: 1, generation: "boot-a:socket-a", intents: [{ invalid: true }], kills: [] }),
+  JSON.stringify({ version: 1, generation: "boot-a:socket-a", intents: [], kills: [{ invalid: true }] })]) {
+  test(`corrupt state is archived and starts empty: ${content.slice(0, 20)}`, (t) => {
+    const { store, file, directory } = fixture(t);
+    store.observe(event("kill"), standalone);
+    store.observe(event("die", 1), standalone);
+    const validIntent = store.list()[0];
+    // A valid prefix must not survive an invalid suffix in the same file.
+    const damaged = content.includes('"invalid"') ? JSON.stringify({ version: 1, generation: "boot-a:socket-a",
+      intents: content.includes('"intents":[{"invalid"') ? [validIntent, { invalid: true }] : [validIntent],
+      kills: content.includes('"kills":[{"invalid"') ? [{ invalid: true }] : [] }) : content;
+    fs.writeFileSync(file, damaged);
+    const warnings: string[] = [];
+    const reloaded = new StopIntentStore(file, () => epoch, (message) => warnings.push(message));
+    assert.deepEqual(reloaded.list(), []);
+    assert.equal(reloaded.observe(event("die", 2), standalone), "unexpected");
+    const archives = fs.readdirSync(directory).filter((name) => name.startsWith("stop-intents.json.corrupt-"));
+    assert.equal(archives.length, 1);
+    assert.equal(fs.readFileSync(path.join(directory, archives[0]), "utf8"), damaged);
+    assert.deepEqual(warnings, ["[agent] Invalid stop intent state archived; starting with empty intent state"]);
+    reloaded.setDaemonGeneration("boot-a:socket-a");
+    reloaded.observe(event("kill", 3), standalone);
+    assert.equal(reloaded.observe(event("die", 4), standalone), "manual-stop");
+    assert.equal(new StopIntentStore(file).list().length, 1);
+  });
+}
+
+for (const corrupt of [false, true]) {
+  test(`state rename synchronizes its directory: ${corrupt ? "archive" : "persist"}`, (t) => {
+    const { store, file } = fixture(t);
+    const calls: string[] = [];
+    const open = fs.openSync;
+    const sync = fs.fsyncSync;
+    const rename = fs.renameSync;
+    let directoryFd: number | undefined;
+    t.mock.method(fs, "openSync", (...args: Parameters<typeof fs.openSync>) => {
+      const fd = open(...args);
+      if (args[0] === path.dirname(file)) directoryFd = fd;
+      return fd;
+    });
+    t.mock.method(fs, "fsyncSync", (fd: number) => { calls.push(fd === directoryFd ? "directory-sync" : "file-sync"); sync(fd); });
+    t.mock.method(fs, "renameSync", (...args: Parameters<typeof fs.renameSync>) => { rename(...args); calls.push("rename"); });
+    if (corrupt) {
+      fs.writeFileSync(file, "{incomplete");
+      new StopIntentStore(file, () => epoch, () => {});
+      assert.deepEqual(calls, ["rename", "directory-sync"]);
+    } else {
+      store.observe(event("kill"), standalone);
+      assert.deepEqual(calls, ["file-sync", "rename", "directory-sync"]);
+    }
+  });
+}
 
 test("a temporary-file symlink cannot overwrite another file", (t) => {
   const { store, file, directory } = fixture(t);
@@ -246,7 +294,7 @@ test("a temporary-file symlink cannot overwrite another file", (t) => {
 });
 
 
-test("a later stop signal has its own window after an earlier reload", (t) => {
+test("a later stop signal has its own window after an earlier stop signal", (t) => {
   const { store } = fixture(t);
   store.observe(event("kill"), standalone);
   store.observe(event("kill", 30_000), standalone);
@@ -258,4 +306,96 @@ test("the exit history is bounded independently of durable intent", (t) => {
   for (let index = 0; index < 257; index++) store.observe(event("die", index), standalone);
   assert.equal(store.recentExits().length, 256);
   assert.equal(store.recentExits()[0].occurredAt, new Date(epoch + 1).toISOString());
+});
+
+for (const signal of ["1", "HUP", "SIGHUP", undefined]) {
+  test(`a non-stop or missing kill signal cannot authorize die: ${signal}`, (t) => {
+    const { store } = fixture(t);
+    store.observe({ ...event("kill"), signal }, standalone);
+    assert.equal(store.observe(event("die", 1), standalone), "unexpected");
+    assert.deepEqual(store.list(), []);
+  });
+}
+
+for (const [stopSignal, signal] of [["SIGUSR1", "10"], ["10", "USR1"], ["sigusr1", "SIGUSR1"],
+  ["SIGUSR1", "9"], ["SIGTERM", "KILL"], ["SIGTERM", "TERM"]]) {
+  test(`configured stop signal or SIGKILL authorizes die: ${stopSignal} / ${signal}`, (t) => {
+    const { store } = fixture(t);
+    const container = { ...standalone, Config: { StopSignal: stopSignal } };
+    store.observe({ ...event("kill"), signal }, container);
+    assert.equal(store.observe(event("die", 1), container), "manual-stop");
+  });
+}
+
+test("SIGTERM is not stop evidence for a container configured with another stop signal", (t) => {
+  const { store } = fixture(t);
+  const container = { ...standalone, Config: { StopSignal: "SIGUSR1" } };
+  store.observe(event("kill"), container);
+  assert.equal(store.observe(event("die", 1), container), "unexpected");
+});
+
+test("reload signals do not extend an existing stop signal window", (t) => {
+  const { store } = fixture(t);
+  store.observe(event("kill"), standalone);
+  store.observe({ ...event("kill", 30_000), signal: "1" }, standalone);
+  assert.equal(store.observe(event("die", 35_001), standalone), "unexpected");
+});
+
+test("inventory reconciliation removes absent names and services while keeping recreated targets", (t) => {
+  const { store, file } = fixture(t);
+  for (const container of [standalone, compose]) {
+    store.observe(event("kill"), container);
+    store.observe(event("die", 1), container);
+  }
+  store.reconcileInventory([{ ...compose, Id: "b".repeat(64), Name: "/demo-web-2" }]);
+  assert.deepEqual(store.list().map((intent) => intent.target), [stopIntentTarget(compose)]);
+  store.reconcileInventory([]);
+  assert.deepEqual(store.list(), []);
+  assert.deepEqual(new StopIntentStore(file).list(), []);
+});
+
+test("durable intent evicts the oldest timestamp even with out of order arrivals and survives reload", (t) => {
+  const { store, file } = fixture(t);
+  for (let index = STOP_INTENT_LIMIT; index >= 0; index--) {
+    const container = { ...standalone, Name: `/demo-${index}` };
+    store.observe(event("kill", index * 2), container);
+    store.observe(event("die", index * 2 + 1), container);
+  }
+  assert.equal(store.list().length, STOP_INTENT_LIMIT);
+  assert.equal(store.list().some((intent) => intent.target.kind === "container" && intent.target.containerName === "demo-0"), false);
+  assert.deepEqual(new StopIntentStore(file).list(), store.list());
+});
+
+test("pending stop signals are bounded and absent container IDs are pruned", (t) => {
+  const { store } = fixture(t);
+  for (let index = 0; index <= STOP_INTENT_LIMIT; index++) {
+    store.observe(event("kill", index, index.toString(16).padStart(64, "0")), standalone);
+  }
+  assert.equal(store.observe(event("die", STOP_INTENT_LIMIT + 1, "0".repeat(64)), standalone), "unexpected");
+  store.reconcileInventory([]);
+  assert.equal(store.observe(event("die", STOP_INTENT_LIMIT + 2, "1".padStart(64, "0")), standalone), "unexpected");
+});
+
+test("existing state read failures and failed corruption archival remain visible", (t) => {
+  const { file } = fixture(t);
+  const read = t.mock.method(fs, "readFileSync", () => { throw Object.assign(new Error("state inaccessible"), { code: "EACCES" }); });
+  assert.throws(() => new StopIntentStore(file), /state unreadable/);
+  read.mock.restore();
+  fs.writeFileSync(file, "{incomplete");
+  t.mock.method(fs, "renameSync", () => { throw new Error("archive failed"); });
+  assert.throws(() => new StopIntentStore(file), /archive failed/);
+  assert.equal(fs.readFileSync(file, "utf8"), "{incomplete");
+});
+
+test("loading an oversized state retains only the newest durable intent", (t) => {
+  const { store, file } = fixture(t);
+  store.observe(event("kill"), standalone);
+  store.observe(event("die", 1), standalone);
+  const intent = store.list()[0];
+  const intents = Array.from({ length: STOP_INTENT_LIMIT + 1 }, (_, index) => ({ ...intent,
+    target: { kind: "container", containerName: `demo-${index}` }, stoppedAt: new Date(epoch + index).toISOString() }));
+  fs.writeFileSync(file, JSON.stringify({ version: 1, generation: "boot-a:socket-a", intents: intents.reverse(), kills: [] }));
+  const reloaded = new StopIntentStore(file);
+  assert.equal(reloaded.list().length, STOP_INTENT_LIMIT);
+  assert.equal(reloaded.list().some((entry) => entry.target.kind === "container" && entry.target.containerName === "demo-0"), false);
 });
