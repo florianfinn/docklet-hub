@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { hubStackRuntimeResultSchema,
+import { hubStackRuntimeResultSchema, LIFECYCLE_TIMEOUT_MS,
   type HostOverview, type HubRuntimeContext, type RuntimeAction } from "contract";
 import { retainHostOverview, type LiveState } from "../../domain/hosts";
 import { queryKeys } from "../../platform/query/query-keys";
@@ -11,7 +11,7 @@ import { targetKey, targetContainers, requiresConfirmation, type LifecycleTarget
 import type { OperationResult } from "./lifecycle-operations";
 
 export type LifecycleQuestion = { action: RuntimeAction; target: LifecycleTarget; context?: HubRuntimeContext; changed: boolean };
-export const LIFECYCLE_TIMEOUT_MS = 700_000;
+export { LIFECYCLE_TIMEOUT_MS } from "contract";
 export function useLifecycleState(target: LifecycleTarget) {
   const session = useLifecycleSession();
   const client = useQueryClient();
@@ -133,7 +133,7 @@ export function useLifecycleAction(target: LifecycleTarget) {
           return seen !== undefined && (seen.id !== service.containerId || seen.status !== service.status || seen.startedAt !== service.startedAt);
         }));
       const request: LifecycleQuestion = { action, target, context: value, changed };
-      if (changed || requiresConfirmation(target, action)) setQuestion(request);
+      if (changed || value?.hubOwned === null || requiresConfirmation(target, action)) setQuestion(request);
       else await execute(request);
     } catch (error) { if (!sessionSignal?.aborted) { failure(target, error); operations.update(target, { busy: false }); } }
   };

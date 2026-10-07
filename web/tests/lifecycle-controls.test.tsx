@@ -1,4 +1,5 @@
 import { fixture, container, host, button, textButton, click, press, React, waitFor, settle } from "./lifecycle-test-support.js";
+import { expectedStackSchema } from "contract";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -121,4 +122,69 @@ test("StrictMode does not dispose the active session before its first action", a
   const f = await fixture({ strict: true });
   try { await click(button("stop")); assert.equal(await waitFor(() => f.calls.some((call) => call.method === "POST")), true); }
   finally { await f.close(); }
+});
+
+for (const change of ["ownership", "mode", "container-id", "status", "started-at"] as const) {
+  test(`stack Start asks before sending when preflight changes ${change}`, async () => {
+    const f = await fixture({ kind: "stack", current: host([container("created")]) });
+    try {
+      const value = f.state.context;
+      if (change === "ownership") value.hubOwned = false;
+      if (change === "mode") value.applyDefinition = false;
+      if (change === "container-id") value.services[0].containerId = "replacement-id";
+      if (change === "status") value.services[0].status = "running";
+      if (change === "started-at") value.services[0].startedAt = "2026-10-07T02:00:00Z";
+      value.expectedStack.services = value.services;
+      await click(button("start"));
+      assert.equal(await waitFor(() => document.querySelector('[role="dialog"]') !== null), true);
+      assert.equal(document.querySelector('[role="dialog"]')?.textContent?.includes("erneut bestätigen"), true);
+      assert.equal(f.calls.filter((call) => call.method === "POST").length, 0);
+      await click(textButton("Jetzt ausführen"));
+      assert.equal(await waitFor(() => f.calls.filter((call) => call.method === "POST").length === 1), true);
+      const sent = f.calls.find((call) => call.method === "POST")!.body as { expectedStack: unknown; expectedApplyDefinition: boolean };
+      assert.deepEqual(sent.expectedStack, expectedStackSchema.parse(value.expectedStack));
+      assert.equal(sent.expectedApplyDefinition, value.applyDefinition);
+    } finally { await f.close(); }
+  });
+}
+test("unknown stack ownership stays neutral and explains definition effects before Start", async () => {
+  const current = host([container("created")]); current.stacks[0].hubOwned = null;
+  const f = await fixture({ kind: "stack", current });
+  try {
+    f.state.context.hubOwned = null;
+    assert.equal(button("start").textContent, "Start");
+    await click(button("start"));
+    assert.equal(await waitFor(() => document.querySelector('[role="dialog"]') !== null), true);
+    assert.equal(document.querySelector('[role="dialog"]')?.textContent?.includes("Verwaltung dieses Stacks ist unbekannt"), true);
+    assert.equal(document.querySelector('[role="dialog"]')?.textContent?.includes("werden die Container neu erstellt"), true);
+    assert.equal(f.calls.filter((call) => call.method === "POST").length, 0);
+  } finally { await f.close(); }
+});
+test("offline group shares one visible hint and every action keeps its description and disabled styling", async () => {
+  const current = host(); current.host.status = "offline";
+  const f = await fixture({ current });
+  try {
+    const ids = ["start", "stop", "restart"].map((action) => button(action).getAttribute("aria-describedby"));
+    assert.equal(new Set(ids).size, 1);
+    const hint = document.getElementById(ids[0]!);
+    assert.equal(hint?.textContent?.includes("Host offline"), true);
+    assert.equal(document.body.textContent?.match(/Host offline/g)?.length, 1);
+    const group = button("start").closest('[role="group"]')!;
+    assert.equal(hint?.parentElement === group, true);
+    for (const control of [...group.querySelectorAll('button')]) {
+      assert.equal(control.className.includes("aria-disabled:opacity-50"), true);
+      assert.equal(control.className.includes("aria-disabled:cursor-not-allowed"), true);
+      assert.equal(control.getAttribute("aria-describedby"), ids[0]);
+    }
+    const trigger = textButton("Wartung");
+    await React.act(async () => trigger.focus());
+    for (const key of ["Enter", " ", "ArrowDown"]) {
+      await press(trigger, key);
+      assert.equal(document.querySelector('[role="menu"]') === null, true);
+    }
+    await React.act(async () => trigger.dispatchEvent(new PointerEvent("pointerdown", { button: 0, bubbles: true, cancelable: true })));
+    await settle();
+    assert.equal(document.querySelector('[role="menu"]') === null, true);
+    assert.equal(f.calls.length, 0);
+  } finally { await f.close(); }
 });

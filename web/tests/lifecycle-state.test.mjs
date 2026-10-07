@@ -5,7 +5,7 @@ const container = (status, exitCode = null) => ({ id: "web-id", name: "demo-web"
   running: status === "running", startedAt: null, health: null, compose: { project: "demo", service: "web" }, stats: null,
   runtimeAccess: { blocker: null }, externalManagement: null, state: "ok", marks: [], system: false });
 const target = (status) => ({ kind: "container", hostId: "demo-host", container: container(status) });
-const host = { host: { status: "online" }, agent: { reachable: true, readOnly: false, contractVersion: 12 }, lifecycle: { applyDefinition: true } };
+const host = { host: { status: "online" }, agent: { reachable: true, readOnly: false, contractVersion: 12 }, lifecycle: { applyDefinition: true, stopIntents: { observing: true, intents: [] } } };
 for (const status of ["running", "restarting", "paused", "created", "exited", "dead", "removing", "unknown"])
   for (const action of ["start", "stop", "restart"]) test(`${status}: ${action} follows the lifecycle matrix`, () => {
     const current = target(status);
@@ -28,7 +28,9 @@ test("mixed stack offers all actions; a successful one-shot task does not keep S
     containers: [container("running"), { ...container("exited", 1), id: "db-id", name: "demo-db" }] } };
   for (const action of ["start", "stop", "restart"]) assert.equal(actionBlocker(stack, action), null);
   stack.stack.containers[1].exitCode = 0;
-  assert.equal(actionBlocker(stack, "start"), "already-running");
+  assert.equal(actionBlocker(stack, "start", host), null);
+  stack.stack.containers[1].oneShot = true;
+  assert.equal(actionBlocker(stack, "start", host), "already-running");
   assert.equal(actionBlocker(stack, "stop"), null);
 });
 test("effective mode and confirmation are limited to stack actions", () => {
@@ -47,4 +49,27 @@ test("service and stack operations share their project lock, while other hosts a
   assert.equal(targetsOverlap(current, stack), true);
   assert.equal(targetsOverlap(current, { ...stack, hostId: "other-host" }), false);
   assert.equal(targetsOverlap(current, { ...stack, stack: { project: "other" } }), false);
+});
+
+test("zero exits keep Start available after a hub stop or a manual stop in a mixed stack", () => {
+  const web = container("exited", 0);
+  const db = { ...container("exited", 0), id: "db-id", name: "demo-db", compose: { project: "demo", service: "db" } };
+  const current = { kind: "stack", hostId: "demo-host", stack: { project: "demo", containers: [web, db] } };
+  const stoppedHost = { ...host, lifecycle: { ...host.lifecycle, stopIntents: { observing: true, intents: [
+    { target: { kind: "compose", projectName: "demo", serviceName: "web" } },
+    { target: { kind: "compose", projectName: "demo", serviceName: "db" } }
+  ] } } };
+  assert.equal(actionBlocker(current, "start", stoppedHost), null);
+  web.status = "running";
+  assert.equal(actionBlocker(current, "start", stoppedHost), null);
+  db.oneShot = true;
+  assert.equal(actionBlocker(current, "start", stoppedHost), null);
+});
+test("only explicit completed one-off jobs with known absence of stop intent suppress stack Start", () => {
+  const current = { kind: "stack", stack: { containers: [container("exited", 0)] } };
+  assert.equal(actionBlocker(current, "start", host), null);
+  current.stack.containers[0].oneShot = true;
+  assert.equal(actionBlocker(current, "start", host), "completed");
+  assert.equal(actionBlocker(current, "start"), null);
+  assert.equal(actionBlocker(current, "start", { ...host, lifecycle: { stopIntents: { observing: false, intents: [] } } }), null);
 });

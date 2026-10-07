@@ -10,10 +10,11 @@ const incident: SelfHealingIncident = { id: "demo-incident", target, containerId
 
 test("manual stop uses stable service identity, timestamp and actor; a known crash is distinct", async () => {
   const current = host([container("exited", { exitCode: 137 })]);
-  current.lifecycle!.stopIntents!.intents = [{ target, containerId: "previous-id", stoppedAt: "2026-10-07T01:15:00Z", actor: "user:demo-human" }];
+  current.lifecycle!.stopIntents!.intents = [{ target, containerId: "previous-id", stoppedAt: "2026-10-07T01:15:00Z", actor: "user:demo-human", actorName: "Demo Person" }];
   const f = await fixture({ current });
   try {
-    assert.equal(document.body.textContent?.includes("manuell gestoppt"), true); assert.equal(document.body.textContent?.includes("user:demo-human"), true);
+    assert.equal(document.body.textContent?.includes("manuell gestoppt"), true); assert.equal(document.body.textContent?.includes("Demo Person"), true);
+    assert.equal(document.body.textContent?.includes("user:demo-human"), false);
     assert.equal(document.body.textContent?.includes("abgestürzt"), false);
     const next = host([container("exited", { exitCode: 1 })]); await f.update(next);
     assert.equal(document.body.textContent?.includes("abgestürzt · Exit-Code 1"), true);
@@ -78,7 +79,10 @@ for (const available of [true, false]) test(`incident ${available ? "with logs" 
     assert.equal(document.body.textContent?.includes("Container-Logs und Konfiguration prüfen"), true);
     assert.equal(document.body.textContent?.includes(available ? "Example redacted log" : "Bereinigung nicht verfügbar"), true);
     const details = document.querySelector('details')!; details.open = true;
-    await click(textButton("Vorfall quittieren")); assert.equal(await waitFor(() => f.calls.some((call) => call.path.endsWith("/acknowledge"))), true);
+    const acknowledge = textButton("Vorfall quittieren");
+    assert.equal(acknowledge.className.includes("aria-disabled:opacity-50"), true);
+    assert.equal(acknowledge.className.includes("aria-disabled:cursor-not-allowed"), true);
+    await click(acknowledge); assert.equal(await waitFor(() => f.calls.some((call) => call.path.endsWith("/acknowledge"))), true);
     assert.deepEqual(f.calls.find((call) => call.path.endsWith("/acknowledge"))!.body, { target });
     assert.equal(f.calls.some((call) => call.path.endsWith("/start")), false);
     assert.equal(f.calls.some((call) => call.path.endsWith("/overview")), true);
@@ -128,3 +132,16 @@ test("maintenance follows the agent status despite a past wall-clock expiry", as
     assert.equal(textButton("Wartung einschalten").getAttribute("aria-disabled"), "false");
   } finally { await f.close(); }
 });
+
+for (const [actor, expected] of [["system:hub", "Hub"], ["system:self-healing", "Selbstheilung"],
+  ["user:deleted-user", "Akteur unbekannt"], ["system:unknown", "Akteur unbekannt"]]) {
+  test(`stop actor ${actor} has an understandable label without raw identity`, async () => {
+    const current = host([container("exited", { exitCode: 0 })]);
+    current.lifecycle!.stopIntents!.intents = [{ target, containerId: "old-id", stoppedAt: "2026-10-07T01:15:00Z", actor }];
+    const f = await fixture({ current });
+    try {
+      assert.equal(document.body.textContent?.includes(`· ${expected}`), true);
+      assert.equal(document.body.textContent?.includes(actor), false);
+    } finally { await f.close(); }
+  });
+}

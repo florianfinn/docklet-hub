@@ -1,6 +1,6 @@
 import type { ContainerViewSettings, HostOverview } from "contract";
 
-import { readLifecycleSnapshot } from "../../domain/lifecycle/index.js";
+import { readLifecycleSnapshot, type ReadActorNames } from "../../domain/lifecycle/index.js";
 import { fetchStackDiscovery } from "../../domain/containers/index.js";
 import { fetchContainers } from "../../domain/containers/index.js";
 import type { AgentHealth, HostAccess, HostRecord } from "../../domain/hosts/index.js";
@@ -31,6 +31,7 @@ export type ContainersServiceDeps = {
   decorationFor: (record: HostRecord) => Promise<HostDecoration>;
   writeViewSettings: (settings: ContainerViewSettings) => Promise<ContainerViewSettings>;
   agent?: ContainersAgent;
+  readActorNames?: ReadActorNames;
   readLifecycleSettings?: () => Promise<{ applyDefinition: boolean; maintenanceDurationSeconds: number | null }>;
 };
 
@@ -58,7 +59,7 @@ export function createContainersService({
   decorationFor,
   writeViewSettings,
   agent = DEFAULT_AGENT,
-  readLifecycleSettings
+  readLifecycleSettings, readActorNames
 }: ContainersServiceDeps): ContainersService {
   return {
     overview: async ({ userId, hostId }) => {
@@ -82,11 +83,10 @@ export function createContainersService({
           const target = await hosts.connect(record);
           const options = { actor: { kind: "user" as const, id: userId } };
           const [lifecycle, discovery] = await Promise.all([
-            readLifecycleSnapshot(target, options, settings),
+            readLifecycleSnapshot(target, options, settings, readActorNames),
             fetchStackDiscovery(target, options).catch(() => null)
           ]);
-          return { lifecycle, hubOwnedProjects: new Set(discovery?.stacks.filter((stack) => stack.filePresent && stack.management === "full")
-            .map((stack) => stack.projectName) ?? []) };
+          return { lifecycle, discovery };
         } } : {})
       });
     },

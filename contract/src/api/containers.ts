@@ -63,6 +63,7 @@ export const containerEntrySchema = z.object({
   status: z.string(),
   running: z.boolean(),
   exitCode: z.optional(z.nullable(z.number())),
+  oneShot: z.optional(z.boolean()),
   runtimeAccess: z.optional(runtimeAccessSchema),
   startedAt: z.nullable(z.string()),
   health: z.nullable(z.string()),
@@ -154,7 +155,7 @@ export type OverviewContainer = z.infer<typeof overviewContainerSchema>;
 
 export const stackViewSchema = z.object({
   project: z.string(),
-  hubOwned: z.optional(z.boolean()),
+  hubOwned: z.optional(z.nullable(z.boolean())),
   state: containerStateSchema,
   running: z.number(),
   // The stack's own marks, in the operator's order; never re-sorted.

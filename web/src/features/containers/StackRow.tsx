@@ -32,6 +32,7 @@ export function StackRow({ hostId, stack, open, onHiddenChange, slots }: StackRo
   const t = useTranslations();
   const navigate = useNavigate();
 
+  // open is the initial value; user toggles remain local.
   const [expanded, setExpanded] = useState(open);
 
   return (
@@ -39,6 +40,7 @@ export function StackRow({ hostId, stack, open, onHiddenChange, slots }: StackRo
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div className="flex items-center rounded-md hover:bg-accent data-[state=open]:bg-accent">
+            {/* Navigation and lifecycle actions stay outside the disclosure button. */}
             <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[13px]">
               <ChevronRight
                 aria-hidden="true"
@@ -46,9 +48,8 @@ export function StackRow({ hostId, stack, open, onHiddenChange, slots }: StackRo
               />
               <ContainerStateDot state={stack.state} />
               <span className="truncate font-mono">{stack.project}</span>
-
               {slots?.stackMarks?.(stack)}
-
+              {/* Use stack.total because the visible container list may be filtered. */}
               <span className="ml-auto shrink-0 font-mono text-[11px] text-subtle-foreground" aria-hidden="true">
                 {stack.running}/{stack.total}
               </span>
@@ -80,7 +81,7 @@ export function StackRow({ hostId, stack, open, onHiddenChange, slots }: StackRo
         </ContextMenuContent>
       </ContextMenu>
       <LifecycleControls target={{ kind: "stack", hostId, stack }} />
-
+      {/* data-indent and pl-stack-indent must share the same element. */}
       <CollapsibleContent data-indent={stack.indent} className="pl-stack-indent">
         <ContainerList containers={stack.containers} hostId={hostId} slots={slots} />
       </CollapsibleContent>

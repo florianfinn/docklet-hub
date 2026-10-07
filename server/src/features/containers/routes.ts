@@ -1,3 +1,4 @@
+import { readLifecycleActorNames } from "../../domain/lifecycle/index.js";
 import type { Router } from "express";
 import type { Pool } from "pg";
 
@@ -49,6 +50,7 @@ export function registerContainersRoutes(
     hosts: createHostAccess({ repository, pool, agentSecret }),
     probe: resolveProbeHost({ probeHost }),
     decorationFor,
+    readActorNames: (ids) => readLifecycleActorNames(pool, ids),
     ...(readLifecycleSettings ? { readLifecycleSettings } : {}),
     writeViewSettings: (settings) => writeContainerViewSettings(pool, settings)
   });

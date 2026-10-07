@@ -191,6 +191,7 @@ export function parseContainerList(body: unknown): ContainerOverviewEntry[] {
       status: requiredText(record, "status", what),
       running: record.running === true,
       exitCode: optionalNumber(record, "exitCode"),
+      ...(typeof record.oneShot === "boolean" ? { oneShot: record.oneShot } : {}),
       ...(runtimeAccessSchema.safeParse(record.runtimeAccess).success
         ? { runtimeAccess: runtimeAccessSchema.parse(record.runtimeAccess) } : {}),
       startedAt: optionalText(record, "startedAt"),

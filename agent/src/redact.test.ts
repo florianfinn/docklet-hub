@@ -166,3 +166,12 @@ test("the summary classifies the mutability of the running ref", () => {
   } as never);
   assert.equal(pinned.imageMutability, "pinned");
 });
+
+test("only the explicit Compose one-off label identifies a one-shot job", () => {
+  for (const policy of ["no", "always", "unless-stopped"]) {
+    const inspect = { ...raw, State: { Status: "exited", Running: false, ExitCode: 0 }, HostConfig: { RestartPolicy: { Name: policy } } };
+    assert.equal(toContainerSummary(inspect).oneShot, false);
+    assert.equal(toContainerSummary({ ...inspect, Config: { ...raw.Config, Labels: { "com.docker.compose.oneoff": "True" } } }).oneShot, true);
+    assert.equal(toContainerSummary({ ...inspect, Config: { ...raw.Config, Labels: { "com.docker.compose.oneoff": "False" } } }).oneShot, false);
+  }
+});

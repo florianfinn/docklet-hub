@@ -23,10 +23,10 @@ for (const outcome of ["ok", "partial", "failed"] as const) test(`stream ${outco
     assert.equal(await waitFor(() => f.calls.some((call) => call.path.endsWith("/overview"))), true);
     assert.equal(document.body.textContent?.includes(outcome === "ok" ? "Aktion abgeschlossen" : outcome === "partial" ? "teilweise abgeschlossen" : "Aktion fehlgeschlagen"), true);
     if (outcome !== "ok") {
-      assert.equal(document.querySelector('[role="alert"]') !== null, true);
+      assert.equal(document.querySelector('[role="status"][aria-live="polite"]') !== null, true);
       assert.equal(document.body.textContent?.includes("nicht erzeugt (fremdverwaltet)"), true);
       assert.equal(document.body.textContent?.includes("Erzeugen gehört dem externen Verwalter"), true);
-      await click(textButton("Meldung schließen")); assert.equal(document.querySelector('[role="alert"]') === null, true);
+      await click(textButton("Meldung schließen")); assert.equal(document.querySelector('[role="status"][aria-live="polite"]')?.textContent === '', true);
     }
   } finally { await f.close(); }
 });
@@ -47,7 +47,7 @@ for (const [error, message] of [
   const f = await fixture({ action: () => Response.json({ error }, { status: 502 }) });
   try {
     await click(button("restart")); assert.equal(await waitFor(() => f.calls.some((call) => call.path.endsWith("/overview"))), true);
-    assert.equal(document.body.textContent?.includes(message), true); assert.equal(document.querySelector('[role="alert"]') !== null, true);
+    assert.equal(document.body.textContent?.includes(message), true); assert.equal(document.querySelector('[role="status"][aria-live="polite"]') !== null, true);
   } finally { await f.close(); }
 });
 test("network loss is unknown, not failed, and releases the local lock", async () => {
@@ -122,5 +122,18 @@ test("a sent request with unknown outcome reads state and never repeats automati
     assert.equal(document.body.textContent?.includes("Aktion fehlgeschlagen"), false);
     assert.equal(document.body.textContent?.includes("Die Aktion wurde abgelehnt"), false);
     assert.equal(f.calls.filter((call) => call.method === "POST").length, 1);
+  } finally { await f.close(); }
+});
+
+test("the polite status region exists before the first action and retains its identity", async () => {
+  const f = await fixture();
+  try {
+    const region = document.querySelector('[role="status"][aria-live="polite"]');
+    assert.equal(region !== null, true);
+    assert.equal(region?.textContent, "");
+    await click(button("stop"));
+    assert.equal(await waitFor(() => region?.textContent?.includes("Aktion abgeschlossen") === true), true);
+    assert.equal(document.querySelector('[role="status"][aria-live="polite"]') === region, true);
+    assert.equal(document.querySelector('[role="alert"][aria-live="polite"]') === null, true);
   } finally { await f.close(); }
 });

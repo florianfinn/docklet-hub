@@ -1,4 +1,5 @@
 import { hubContainerActionRequestSchema, hubStackActionRequestSchema, hubRuntimeContextSchema, type RuntimeAction } from "contract";
+import { fetchStackDiscovery, stackOwnership } from "../../domain/containers/index.js";
 import * as z from "zod/mini";
 import type { ContainerAccessRequest, ContainerAccessResult } from "../../domain/hosts/index.js";
 import type { LiveEvents, RefreshTarget } from "../../domain/live-events/index.js";
@@ -10,7 +11,8 @@ export type RuntimeActionsDeps = {
   openContainer: (request: ContainerAccessRequest, writing?: "reads" | "writes") => Promise<ContainerAccessResult>;
   readApplyDefinition: () => Promise<boolean>;
   liveEvents?: Pick<LiveEvents, "refresh">;
-  agent?: Pick<typeof agentClient, "runContainer" | "runStack">;
+  readDiscovery?: typeof fetchStackDiscovery;
+  agent?: Pick<typeof agentClient, "runContainer" | "runStack"> & Partial<Pick<typeof agentClient, "readContext">>;
 };
 function rejected(status: number, error: string): never {
   throw new AgentError("Laufzeitaktion abgelehnt.", status, { detail: { error } });
@@ -25,15 +27,17 @@ export function createRuntimeActionsService(deps: RuntimeActionsDeps) {
       rejected(opened.failure.status, opened.failure.error === "host-unreachable" ? "runtime-host-offline" : opened.failure.error);
     }
     const { access } = opened;
-    const raw = await agentClient.readContext(access.target, ref.containerId, access.options);
+    const [raw, discovery] = await Promise.all([
+      (agent.readContext ?? agentClient.readContext)(access.target, ref.containerId, access.options),
+      (deps.readDiscovery ?? fetchStackDiscovery)(access.target, access.options).catch(() => null)
+    ]);
     const schema = z.object({ projectName: z.string(), projectDir: z.string(), composeFileName: z.string(), readOnly: z.boolean(),
       services: hubRuntimeContextSchema.shape.services });
     const parsed = schema.safeParse(raw);
     if (!parsed.success) rejected(502, "runtime-invalid-response");
     const value = parsed.data;
-    const external = access.containers.some((entry) => entry.compose?.project === value.projectName && entry.externalManagement !== null);
     return hubRuntimeContextSchema.parse({ ...value,
-      expectedStack: { ...value, services: value.services }, hubOwned: !external,
+      expectedStack: { ...value, services: value.services }, hubOwned: stackOwnership(value.projectName, access.containers, discovery),
       applyDefinition: await deps.readApplyDefinition() });
   }
 

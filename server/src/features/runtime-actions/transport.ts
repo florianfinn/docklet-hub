@@ -1,8 +1,9 @@
 import { AgentError, agentPost, type AgentTarget, type RequestOptions } from "../../platform/agent-transport/protocol.js";
 import { streamFetch, StreamFetchError } from "../../platform/agent-transport/stream-fetch.js";
 
-// Covers the 60-second queue and the longest bounded agent action, plus transport reserve.
-export const RUNTIME_TIMEOUT_MS = 690_000;
+import { HUB_RUNTIME_TIMEOUT_MS } from "contract";
+
+export const RUNTIME_TIMEOUT_MS = HUB_RUNTIME_TIMEOUT_MS;
 
 function outcomeUnknown(cause: unknown): AgentError {
   return new AgentError("Ausgang der Laufzeitaktion unbekannt.", 502,

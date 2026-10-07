@@ -2,7 +2,7 @@ import type { HostOverview, LifecycleSnapshot } from "contract";
 
 import { toHostView, type AgentHealth, type HostRecord } from "../../domain/hosts/index.js";
 import {
-  groupIntoStacks,
+  groupIntoStacks, stackOwnership, type StackDiscovery,
   withoutHistory,
   type ContainerOverviewEntry,
   type HostStacks,
@@ -32,7 +32,7 @@ import type { HostDecoration } from "./decoration.js";
 export type { HostOverview };
 
 export type OverviewDeps = {
-  lifecycleFor?: (record: HostRecord) => Promise<{ lifecycle: LifecycleSnapshot; hubOwnedProjects: Set<string> }>;
+  lifecycleFor?: (record: HostRecord) => Promise<{ lifecycle: LifecycleSnapshot; discovery: StackDiscovery | null }>;
   probeHost: (record: HostRecord) => Promise<AgentHealth>;
   fetchContainersFor: (record: HostRecord) => Promise<ContainerOverviewEntry[]>;
   // Was der Betreiber diesem Arm an eigenen Marken und an Einrückung vergeben
@@ -111,7 +111,7 @@ async function overviewFor(record: HostRecord, deps: OverviewDeps): Promise<Host
     ]);
     const grouped = decorate(groupIntoStacks(containers.map(withoutHistory)), decoration);
     if (lifecycle) grouped.stacks = grouped.stacks.map((stack) => ({ ...stack,
-      hubOwned: lifecycle.hubOwnedProjects.has(stack.project) && !stack.containers.some((entry) => entry.externalManagement !== null) }));
+      hubOwned: stackOwnership(stack.project, stack.containers, lifecycle.discovery) }));
     return {
       ...(lifecycle ? { lifecycle: lifecycle.lifecycle } : {}),
       host: toHostView(record, agent),

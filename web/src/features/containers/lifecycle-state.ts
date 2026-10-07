@@ -1,3 +1,4 @@
+import { CONTRACT_VERSION } from "contract";
 import type { HostOverview, OverviewContainer, StackView, RuntimeAction, StopIntentTarget, SelfHealingMaintenanceTarget } from "contract";
 import type { Role } from "../../platform/session/session-user";
 
@@ -35,7 +36,7 @@ export function sameTarget(a: SelfHealingMaintenanceTarget, b: SelfHealingMainte
 export function controlsBlocker(host: HostOverview | undefined, role: Role, busy: boolean): LifecycleBlocker | null {
   if (!host || host.host.status === "offline" || host.host.status === "pending" || !host.agent?.reachable) return "offline";
   if (role !== "admin") return "role";
-  if (host.host.status === "outdated" || (host.agent.contractVersion ?? 0) < 12) return "capability";
+  if (host.host.status === "outdated" || (host.agent.contractVersion ?? 0) < CONTRACT_VERSION) return "capability";
   if (busy) return "busy";
   return null;
 }
@@ -51,13 +52,17 @@ export function runtimeBlocker(target: LifecycleTarget, host: HostOverview | und
   }
   return targetContainers(target).length === 0 ? "unknown-state" : null;
 }
-export function actionBlocker(target: LifecycleTarget, action: RuntimeAction): LifecycleBlocker | null {
+export function actionBlocker(target: LifecycleTarget, action: RuntimeAction, host?: HostOverview): LifecycleBlocker | null {
   const containers = targetContainers(target);
   const running = containers.some((container) => RUNNING_STATES.has(container.status));
   if (action !== "start") return running ? null : "already-stopped";
   if (target.kind === "container") return running ? "already-running" : null;
   const stopped = containers.filter((container) => STOPPED_STATES.has(container.status));
-  if (stopped.some((container) => container.status === "created" || container.exitCode !== 0)) return null;
+  const observation = host?.lifecycle?.stopIntents;
+  const completedJob = (container: OverviewContainer) => container.oneShot === true && container.status === "exited" &&
+    container.exitCode === 0 && observation?.observing === true &&
+    !observation.intents.some((intent) => sameTarget(intent.target, intentTarget(container)));
+  if (stopped.some((container) => !completedJob(container))) return null;
   return running ? "already-running" : "completed";
 }
 export function effectiveDefinition(target: LifecycleTarget, host: HostOverview | undefined): boolean {

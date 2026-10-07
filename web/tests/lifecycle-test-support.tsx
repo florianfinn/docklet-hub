@@ -29,7 +29,7 @@ export function context(current: HostOverview): HubRuntimeContext {
   const stack = current.stacks[0];
   const services = stack.containers.map((entry) => ({ serviceName: entry.compose!.service, containerId: entry.id,
     status: entry.status, startedAt: entry.startedAt, exitCode: entry.exitCode ?? null, allowed: true }));
-  return { hubOwned: stack.hubOwned ?? false, applyDefinition: current.lifecycle!.applyDefinition, readOnly: false,
+  return { hubOwned: stack.hubOwned ?? null, applyDefinition: current.lifecycle!.applyDefinition, readOnly: false,
     expectedStack: { projectName: stack.project, projectDir: "/srv/example/demo", composeFileName: "compose.yml", services }, services };
 }
 export type Call = { path: string; method: string; body: unknown; signal?: AbortSignal | null };

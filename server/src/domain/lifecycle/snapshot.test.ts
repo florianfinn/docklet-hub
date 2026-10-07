@@ -33,3 +33,23 @@ test("503 healing status preserves bounded state while forcing observation to un
   assert.equal(result.stopIntents, null);
   assert.deepEqual(result.selfHealing, { observing: false, budgets: [budget], maintenance: [maintenance], incidents: [incident] });
 });
+
+test("stop actors resolve once to email-free account names; removed users and lookup failures stay unknown", async () => {
+  const actors = ["user:known", "user:known", "user:email-only", "user:deleted", "system:hub", "system:self-healing"];
+  const read = async (readNames: Parameters<typeof readLifecycleSnapshot>[3]) => readLifecycleSnapshot(target,
+    { actor: { kind: "user", id: "demo" }, fetchImpl: async (url) => Response.json(String(url).endsWith("/stop-intents")
+      ? { observing: true, intents: actors.map((actor, index) => ({ actor, containerId: `id-${index}`,
+        stoppedAt: "2026-10-07T01:00:00Z", target: { kind: "container", containerName: `demo-${index}` } })), recentExits: [] }
+      : { observing: true, budgets: [], maintenance: [], incidents: [] }) },
+    { applyDefinition: true, maintenanceDurationSeconds: 3600 }, readNames);
+  let reads = 0;
+  const snapshot = await read(async (ids) => {
+    reads++; assert.deepEqual(ids, ["known", "email-only", "deleted"]);
+    return new Map([["known", "Demo Person demo@example.org"], ["email-only", "demo@example.org"]]);
+  });
+  assert.equal(reads, 1);
+  assert.deepEqual(snapshot.stopIntents?.intents.map((intent) => intent.actorName), ["Demo Person", "Demo Person", null, null, null, null]);
+  assert.equal(JSON.stringify(snapshot).includes("@"), false);
+  const unavailable = await read(async () => { throw new Error("synthetic account lookup failure"); });
+  assert.equal(unavailable.stopIntents?.intents.every((intent) => intent.actorName === null), true);
+});

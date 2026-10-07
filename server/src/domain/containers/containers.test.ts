@@ -265,3 +265,10 @@ test("runtime eligibility and exit code travel without registry or self-manageme
   assert.equal(entry.exitCode, 1); assert.deepEqual(entry.runtimeAccess, { blocker: "observe-only" });
   assert.equal(parseContainerList({ containers: [{ ...SUMMARY, runtimeAccess: { blocker: "private" } }] })[0].runtimeAccess, undefined);
 });
+
+test("explicit one-shot evidence is preserved but absent or malformed evidence is not inferred", () => {
+  for (const value of [true, false, undefined, "true"]) {
+    const [entry] = parseContainerList({ containers: [{ ...SUMMARY, exitCode: 0, oneShot: value }] });
+    assert.equal(entry.oneShot, typeof value === "boolean" ? value : undefined);
+  }
+});

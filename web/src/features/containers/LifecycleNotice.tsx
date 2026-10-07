@@ -20,13 +20,13 @@ export function LifecycleNotice({ operation, dismiss, reload }: {
     const timer = setTimeout(dismiss, 4_500);
     return () => clearTimeout(timer);
   }, [transient, operation?.busy, dismiss]);
-  if (!operation) return null;
-  const errorKey = operation.error && operation.error in ERROR_MESSAGES ? ERROR_MESSAGES[operation.error as keyof typeof ERROR_MESSAGES] : null;
-  const services = operation.progress;
-  return <div role={operation.message && !transient ? "alert" : "status"} aria-live="polite" className="space-y-1 text-xs break-words">
-    {operation.busy ? <p>{t(operation.phase === "preparing" ? "lifecyclePreparing" : operation.phase === "waiting" ? "lifecycleWaiting" : "lifecycleRunning")}</p> : null}
-    {operation.message ? <p>{t(RESULT_MESSAGES[operation.message])}</p> : null}
-    {errorKey ? (<p>{t(errorKey)}</p>) : operation.error ? (<p>{operation.message === "failed" ? t("lifecycleErrorGeneric") : null} {t("lifecycleErrorCode", { code: operation.error })}</p>) : null}
+
+  const errorKey = operation?.error && operation.error in ERROR_MESSAGES ? ERROR_MESSAGES[operation.error as keyof typeof ERROR_MESSAGES] : null;
+  const services = operation?.progress ?? [];
+  return <div role="status" aria-live="polite" className="space-y-1 text-xs break-words">
+    {operation?.busy ? <p>{t(operation.phase === "preparing" ? "lifecyclePreparing" : operation.phase === "waiting" ? "lifecycleWaiting" : "lifecycleRunning")}</p> : null}
+    {operation?.message ? <p>{t(RESULT_MESSAGES[operation.message])}</p> : null}
+    {errorKey ? (<p>{t(errorKey)}</p>) : operation?.error ? (<p>{operation?.message === "failed" ? t("lifecycleErrorGeneric") : null} {t("lifecycleErrorCode", { code: operation.error })}</p>) : null}
     {services.length > 0 ? <ul className="space-y-1">
       {services.map((service) => <li key={service.serviceName}>
         <span>{t("lifecycleServiceState", { service: service.serviceName, status: service.status })}</span>
@@ -34,8 +34,8 @@ export function LifecycleNotice({ operation, dismiss, reload }: {
         {service.outcome === "not-created-externally-managed" ? <p>{t("lifecycleNotCreatedReason")}</p> : null}
       </li>)}
     </ul> : null}
-    {operation.result && "state" in operation.result ? <p>{t("lifecycleServiceState", { service: operation.target.kind === "container" ? operation.target.container.name : "", status: operation.result.state.status })}</p> : null}
-    {operation.message && !operation.busy && !transient ? <div className="flex flex-wrap gap-2">
+    {operation?.result && "state" in operation.result ? <p>{t("lifecycleServiceState", { service: operation.target.kind === "container" ? operation.target.container.name : "", status: operation.result.state.status })}</p> : null}
+    {operation?.message && !operation.busy && !transient ? <div className="flex flex-wrap gap-2">
       <Button className="min-h-11" variant="outline" onClick={reload}>{t("lifecycleReload")}</Button>
       <Button className="min-h-11" variant="ghost" onClick={dismiss}>{t("lifecycleDismiss")}</Button>
     </div> : null}

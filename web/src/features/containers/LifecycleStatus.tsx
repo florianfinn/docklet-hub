@@ -1,6 +1,6 @@
 import { useId } from "react";
 import { useTranslations } from "use-intl";
-import type { OverviewContainer, SelfHealingIncident } from "contract";
+import { SELF_HEALING_ACTOR, SELF_HEALING_SYSTEM_ACTOR, type OverviewContainer, type SelfHealingIncident } from "contract";
 import { useLanguage } from "../../platform/i18n";
 import { formatDateTime } from "../../platform/i18n/time-format";
 import { Button } from "../../platform/ui/shadcn/button";
@@ -33,7 +33,8 @@ export function LifecycleStatus({ target, reload }: { target: LifecycleTarget; r
       const incident = snapshot?.selfHealing?.incidents.find((entry) => entry.closedAt === null && sameTarget(entry.target, intentTarget(container)));
       return <div key={container.name}>
         {container.status === "restarting" ? <p>{container.name} · {t("lifecycleRestarting")}</p> : null}
-        {stopped && intent ? <p>{container.name} · {t("lifecycleManualStop", { time: time(intent.stoppedAt), actor: intent.actor ?? t("lifecycleActorUnknown") })}</p>
+        {stopped && intent ? <p>{container.name} · {t("lifecycleManualStop", { time: time(intent.stoppedAt), actor: intent.actorName ?? t(intent.actor === SELF_HEALING_SYSTEM_ACTOR ? "lifecycleActorHealing" :
+          intent.actor === SELF_HEALING_ACTOR ? "lifecycleActorHub" : "lifecycleActorUnknown") })}</p>
           : stopped && snapshot?.stopIntents?.observing && container.exitCode !== undefined && container.exitCode !== null && container.exitCode !== 0
             ? <p>{container.name} · {t("lifecycleCrashed", { code: container.exitCode })}</p> : null}
         {budget ? <p>{container.name} · {t("lifecycleBudget", { used: budget.usedAttempts, remaining: budget.remainingAttempts })}</p> : null}
@@ -65,7 +66,7 @@ function IncidentView({ hostId, container, incident, reload }: { hostId: string;
     {incident.logs.available ? <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono">{incident.logs.lines.join("\n")}</pre>
       : <p>{t(incident.logs.reason === "redaction-unavailable" ? "lifecycleRedactionUnavailable" : "lifecycleLogsUnavailable")}</p>}
     <p>{t("lifecycleAcknowledgeEffect")}</p>
-    <Button className="min-h-11" variant="outline" aria-disabled={reason !== null} aria-describedby={reason ? id : undefined}
+    <Button className="min-h-11 aria-disabled:opacity-50 aria-disabled:cursor-not-allowed" variant="outline" aria-disabled={reason !== null} aria-describedby={reason ? id : undefined}
       onClick={() => { if (!reason) void write((signal) => acknowledgeIncident(hostId, incident.target, signal)); }}>{t("lifecycleAcknowledge")}</Button>
     {reason ? <p id={id}>{t(BLOCKER_MESSAGES[reason])}</p> : null}
   </details>;

@@ -76,3 +76,21 @@ test("unexpected hub failures become internal-error and still trigger refresh", 
   });
   assert.equal(refreshed, 1);
 });
+
+for (const [management, filePresent, expected] of [["full", true, true], ["full", false, false], ["read-only", true, false],
+  ["unavailable", true, null]] as const) test(`runtime context ownership follows discovery: ${management}, file ${filePresent}`, async () => {
+  const service = createRuntimeActionsService({
+    openContainer: async () => ({ ok: true, access: { target: { baseUrl: "https://agent.example.org", secret: "synthetic" },
+      options: { actor: { kind: "user", id: "human" } }, containers: [{ compose: { project: "demo", service: "web" }, externalManagement: null }] } as never }),
+    readApplyDefinition: async () => true,
+    readDiscovery: async () => {
+      if (management === "unavailable") throw new Error("synthetic discovery failure");
+      return { stacks: [{ ...STACK, management, filePresent, services: [] }], findings: [] };
+    },
+    agent: { runContainer: async () => containerResult(), runStack: async () => undefined,
+      readContext: async () => ({ ...STACK, readOnly: false }) }
+  });
+  const result = await service.context({ hostId: "demo", containerId: ID, userId: "human" });
+  assert.equal(result.hubOwned, expected);
+  assert.equal(result.applyDefinition, true);
+});

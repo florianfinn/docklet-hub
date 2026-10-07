@@ -11,10 +11,11 @@ import { useLifecycleState } from "./use-lifecycle";
 import { useLifecycleWrite } from "./use-lifecycle-write";
 import { setMaintenance, clearMaintenance } from "./api";
 
-export function MaintenanceControls({ target, detail, reload }: { target: LifecycleTarget; detail: boolean; reload: () => Promise<unknown> }) {
+export function MaintenanceControls({ target, detail, reload, reasonId }: { target: LifecycleTarget; detail: boolean; reload: () => Promise<unknown>; reasonId?: string }) {
   const t = useTranslations();
   const id = useId();
   const [open, setOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [duration, setDuration] = useState("default");
   const { host, role, busy } = useLifecycleState(target);
   const write = useLifecycleWrite(target, reload);
@@ -26,21 +27,21 @@ export function MaintenanceControls({ target, detail, reload }: { target: Lifecy
   const defaultText = defaultSeconds === null ? t("lifecycleDurationUnlimited") : t("lifecycleDurationMinutes", { count: (defaultSeconds ?? 3600) / 60 });
   const on = () => { setDuration("default"); setOpen(true); };
   const off = () => { if (!reason) void write((signal) => clearMaintenance(target.hostId, maintenanceTarget(target), signal)); };
-  const trigger = <Button type="button" className="min-h-11 min-w-11 text-xs" variant="outline" aria-disabled={reason !== null}
-    aria-describedby={reason ? `${id}-reason` : undefined} aria-label={t("lifecycleMaintenanceFor", { target: targetName(target) })}>
+  const trigger = <Button type="button" className="min-h-11 min-w-11 text-xs aria-disabled:opacity-50 aria-disabled:cursor-not-allowed" variant="outline" aria-disabled={reason !== null}
+    aria-describedby={reason ? reasonId ?? `${id}-reason` : undefined} aria-label={t("lifecycleMaintenanceFor", { target: targetName(target) })}>
     {t("lifecycleMaintenance")}
   </Button>;
   return <div className="max-w-full">
-    {detail ? <Button type="button" className="min-h-11" variant="outline" aria-disabled={reason !== null}
-      aria-describedby={reason ? `${id}-reason` : undefined} onClick={() => { if (!reason) { if (own) off(); else on(); } }}>
+    {detail ? <Button type="button" className="min-h-11 aria-disabled:opacity-50 aria-disabled:cursor-not-allowed" variant="outline" aria-disabled={reason !== null}
+      aria-describedby={reason ? reasonId ?? `${id}-reason` : undefined} onClick={() => { if (!reason) { if (own) off(); else on(); } }}>
       {t(own ? "lifecycleMaintenanceOff" : "lifecycleMaintenanceOn")}
-    </Button> : <DropdownMenu>
-      <DropdownMenuTrigger asChild onClick={(event) => { if (reason) event.preventDefault(); }}>{trigger}</DropdownMenuTrigger>
+    </Button> : <DropdownMenu open={!reason && menuOpen} onOpenChange={(next) => setMenuOpen(!reason && next)}>
+      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
       <DropdownMenuContent>
         <DropdownMenuItem disabled={reason !== null} onSelect={own ? off : on}>{t(own ? "lifecycleMaintenanceOff" : "lifecycleMaintenanceOn")}</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>}
-    {reason ? <span id={`${id}-reason`} className="block max-w-56 text-xs text-muted-foreground">{t(BLOCKER_MESSAGES[reason])}</span> : null}
+    {reason && !reasonId ? <span id={`${id}-reason`} className="block max-w-56 text-xs text-muted-foreground">{t(BLOCKER_MESSAGES[reason])}</span> : null}
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent>
         <DialogTitle>{t("lifecycleMaintenanceFor", { target: targetName(target) })}</DialogTitle>
@@ -58,7 +59,7 @@ export function MaintenanceControls({ target, detail, reload }: { target: Lifecy
         </Select>
         <DialogFooter>
           <Button className="min-h-11" variant="outline" onClick={() => setOpen(false)}>{t("lifecycleCancel")}</Button>
-          <Button className="min-h-11" aria-disabled={reason !== null} onClick={() => {
+          <Button className="min-h-11 aria-disabled:opacity-50 aria-disabled:cursor-not-allowed" aria-disabled={reason !== null} onClick={() => {
             if (reason) return;
             setOpen(false); void write((signal) => setMaintenance(target.hostId, maintenanceTarget(target), seconds, signal));
           }}>{t("lifecycleMaintenanceOn")}</Button>
