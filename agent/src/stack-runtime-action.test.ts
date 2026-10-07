@@ -1,7 +1,11 @@
 import { RuntimeActionFailure } from "./action-failure.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { RuntimeAction, StackActionRequest } from "contract";
+import {
+  ACTION_QUEUE_WAIT_MS, HUB_RUNTIME_TIMEOUT_MS, LIFECYCLE_TIMEOUT_MS,
+  MAX_STOP_GRACE_MS, RUNTIME_READBACK_RESERVE_MS, RUNTIME_TRANSPORT_RESERVE_MS,
+  type RuntimeAction, type StackActionRequest
+} from "contract";
 import { executeStackRuntimeAction, type StackRuntimeOps } from "./stack-runtime-action.js";
 import { StackEndpointError } from "./stack-control.js";
 import type { PreparedStack, StackContextResponse } from "./runtime/stack.js";
@@ -42,10 +46,10 @@ function fixture(external = false, missing = false) {
     checkRuntimeScope: () => {},
     checkCreateScope: () => { calls.push({ name: "scope" }); },
     imageId: async (ref) => { calls.push({ name: "image", args: ref }); return "image-id"; },
-    up: async (args) => { calls.push({ name: "up", args }); },
-    start: async (timeoutMs) => { calls.push({ name: "start", args: timeoutMs }); },
-    stop: async (timeoutMs) => { calls.push({ name: "stop", args: timeoutMs }); },
-    restart: async (timeoutMs, startWithUp) => { calls.push({ name: startWithUp ? "stop-up" : "stop-start", args: timeoutMs }); },
+    up: async (args, onMutation) => { onMutation(); calls.push({ name: "up", args }); },
+    start: async (timeoutMs, onMutation) => { onMutation(); calls.push({ name: "start", args: timeoutMs }); },
+    stop: async (timeoutMs, onMutation) => { onMutation(); calls.push({ name: "stop", args: timeoutMs }); },
+    restart: async (timeoutMs, startWithUp, onMutation) => { onMutation(); calls.push({ name: startWithUp ? "stop-up" : "stop-start", args: timeoutMs }); },
     refresh: async () => { calls.push({ name: "reanchor-read" }); return after; }
   };
   const body: StackActionRequest = { applyDefinition: false, expectedStack: {
@@ -131,7 +135,7 @@ for (const change of ["id", "status", "startedAt"]) {
 
 test("a CLI failure returns replacement ids and the actual per-service states", async () => {
   const f = fixture();
-  f.ops.up = async () => { throw new Error("failed after replacement"); };
+  f.ops.up = async (_options, onMutation) => { onMutation(); throw new Error("failed after replacement"); };
   f.setAfter({ ...f.prepared.context, services: [{ ...f.prepared.context.services[0], containerId: "replaced", status: "exited", exitCode: 2, health: "unhealthy" }] });
   const result = await stackResult(f.ops, "start", f.body);
   assert.equal(result.body.containerIds.web, "replaced");
@@ -212,7 +216,7 @@ test("a queued stack request sees the predecessor's completed state and refuses 
   let starts = 0;
   let enter!: () => void;
   const entered = new Promise<void>((resolve) => { enter = resolve; });
-  f.ops.start = async () => { starts++; enter(); await new Promise<void>((resolve) => { release = resolve; }); };
+  f.ops.start = async (_timeout, onMutation) => { onMutation(); starts++; enter(); await new Promise<void>((resolve) => { release = resolve; }); };
   const originalRefresh = f.ops.refresh;
   f.ops.refresh = async (prepared) => {
     const after = await originalRefresh(prepared);
@@ -258,4 +262,24 @@ test("own restart with definition off prechecks and creates missing services wit
   const result = await stackResult(f.ops, "restart", f.body);
   assert.equal(result.body.ok, true);
   assert.deepEqual(f.calls.map((call) => call.name), ["config", "scope", "image", "scope", "stop-up", "reanchor-read"]);
+});
+
+
+test("all stack dispatch paths pass deadlines covered by the hub and browser budgets", async () => {
+  for (const external of [false, true]) for (const applyDefinition of [false, true]) {
+    for (const action of ["start", "stop", "restart"] as const) {
+      for (const grace of [MAX_STOP_GRACE_MS / 1000, -1, 2000]) {
+        const { prepared, ops, calls, body } = fixture(external);
+        prepared.context.services[0].stopTimeoutSeconds = grace;
+        prepared.normalized = { services: { web: { image: "example/app:1.0", stop_grace_period: "2h" } } };
+        await stackResult(ops, action, { ...body, applyDefinition });
+        const mutation = calls.find((call) => ["up", "start", "stop", "stop-up", "stop-start"].includes(call.name));
+        assert.ok(mutation, `${external}/${applyDefinition}/${action}/${grace}`);
+        const timeoutMs = mutation.name === "up" ? (mutation.args as { timeoutMs: number }).timeoutMs : mutation.args as number;
+        assert.ok(HUB_RUNTIME_TIMEOUT_MS >= ACTION_QUEUE_WAIT_MS + timeoutMs
+          + RUNTIME_READBACK_RESERVE_MS + RUNTIME_TRANSPORT_RESERVE_MS);
+        assert.ok(LIFECYCLE_TIMEOUT_MS > HUB_RUNTIME_TIMEOUT_MS);
+      }
+    }
+  }
 });

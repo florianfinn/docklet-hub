@@ -188,3 +188,39 @@ test("offline group shares one visible hint and every action keeps its descripti
     assert.equal(f.calls.length, 0);
   } finally { await f.close(); }
 });
+
+for (const action of ["start", "stop", "restart"]) test(`unknown ownership ${action} uses a neutral confirmation description`, async () => {
+  const current = host([container(action === "start" ? "created" : "running")]);
+  current.stacks[0].hubOwned = null;
+  const f = await fixture({ kind: "stack", current });
+  try {
+    await click(button(action));
+    assert.equal(await waitFor(() => document.querySelector('[role="dialog"]') !== null), true);
+    const dialog = document.querySelector('[role="dialog"]')!;
+    assert.equal(dialog.textContent?.includes("Der Agent bestimmt den wirksamen Modus"), true);
+    assert.equal(dialog.textContent?.includes("betrifft die bestehenden Container"), false);
+    assert.equal(f.calls.some((call) => call.method === "POST"), false);
+  } finally { await f.close(); }
+});
+
+test("maintenance menu closes when blocked and cannot reopen by keyboard or pointer", async () => {
+  const f = await fixture();
+  try {
+    const trigger = textButton("Wartung");
+    await press(trigger, "ArrowDown");
+    assert.equal(await waitFor(() => document.querySelector('[role="menu"]') !== null), true);
+    const offline = host(); offline.host.status = "offline";
+    await f.update(offline);
+    assert.equal(await waitFor(() => document.querySelector('[role="menu"]') === null), true);
+    for (const key of ["Enter", " ", "ArrowDown"]) {
+      await press(trigger, key);
+      assert.equal(document.querySelector('[role="menu"]') === null, true);
+    }
+    await React.act(async () => trigger.dispatchEvent(new PointerEvent("pointerdown", {
+      button: 0, pointerType: "mouse", ctrlKey: false, bubbles: true, cancelable: true
+    })));
+    await settle();
+    assert.equal(document.querySelector('[role="menu"]') === null, true);
+    assert.equal(f.calls.length, 0);
+  } finally { await f.close(); }
+});

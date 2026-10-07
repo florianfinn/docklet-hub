@@ -1,36 +1,22 @@
 import type {
   ExpectedContainer, RuntimeAction, RuntimeOutcome, RuntimeServiceResult, RuntimeState
 } from "contract";
+import { DEFAULT_STOP_GRACE_SECONDS } from "contract";
 import type { RawInspect } from "./engine-model.js";
 
-export const ACTION_QUEUE_WAIT_MS = 60_000;
-export const STOP_BUFFER_MS = 10_000;
-export const STACK_BUFFER_MS = 30_000;
-export const RESTART_START_RESERVE_MS = 30_000;
-export const MAX_STACK_ACTION_MS = 10 * 60_000;
-
-export function stopTimeoutSeconds(value: unknown): number {
-  if (value === -1) return MAX_STACK_ACTION_MS / 1000;
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 10;
-}
-
-export function containerActionTimeoutMs(action: RuntimeAction, stopTimeout: unknown): number {
-  return action === "start" ? 30_000 : stopTimeoutSeconds(stopTimeout) * 1000 + STOP_BUFFER_MS;
-}
+export {
+  ACTION_QUEUE_WAIT_MS, STOP_BUFFER_MS, STACK_BUFFER_MS, RESTART_START_RESERVE_MS,
+  MAX_STACK_ACTION_MS, stopTimeoutSeconds, containerActionTimeoutMs, stackActionTimeoutMs
+} from "contract";
 
 // Compose normalizes durations as Go duration strings, including fractions.
 export function gracePeriodSeconds(value: unknown): number {
-  if (typeof value !== "string") return 10;
+  if (typeof value !== "string") return DEFAULT_STOP_GRACE_SECONDS;
   const units: Record<string, number> = { h: 3600, m: 60, s: 1, ms: 0.001, us: 0.000001, "µs": 0.000001, ns: 0.000000001 };
   const parts = [...value.matchAll(/(\d+(?:\.\d+)?)(ms|us|µs|ns|h|m|s)/g)];
-  if (parts.length === 0 || parts.map((part) => part[0]).join("") !== value) return 10;
+  if (parts.length === 0 || parts.map((part) => part[0]).join("") !== value) return DEFAULT_STOP_GRACE_SECONDS;
   const seconds = parts.reduce((sum, part) => sum + Number(part[1]) * units[part[2]], 0);
-  return Number.isFinite(seconds) ? seconds : 10;
-}
-
-export function stackActionTimeoutMs(action: RuntimeAction, gracePeriods: readonly number[]): number {
-  const longest = Math.max(10, ...gracePeriods.map(stopTimeoutSeconds));
-  return Math.min(MAX_STACK_ACTION_MS, Math.max(60_000, longest * 1000 + STACK_BUFFER_MS) * (action === "restart" ? 2 : 1));
+  return Number.isFinite(seconds) ? seconds : DEFAULT_STOP_GRACE_SECONDS;
 }
 
 export function runtimeStateOf(inspect: RawInspect | null, unreadable = false): RuntimeState {

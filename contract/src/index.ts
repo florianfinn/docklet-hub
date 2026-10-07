@@ -403,7 +403,7 @@ export {
 } from "./agent/spec.js";
 export type { ContainerSpecInput, SpecPort, SpecVolume } from "./agent/spec.js";
 export {
-  COMPOSE_ONE_OFF_LABEL, HUB_RUNTIME_TIMEOUT_MS, LIFECYCLE_TIMEOUT_MS,
+  COMPOSE_ONE_OFF_LABEL,
   runtimeActionSchema, expectedContainerSchema, containerActionRequestSchema,
   runtimeStateSchema, runtimeServiceResultSchema, runtimeOutcomeSchema,
   RUNTIME_ACTION_ERRORS, runtimeActionErrorSchema, stackRuntimeResultSchema,
@@ -460,3 +460,11 @@ export type { HubRuntimeError, HubContainerRuntimeResult, HubStackRuntimeResult,
 
 export { lifecycleSnapshotSchema, runtimeAccessSchema, hubRuntimeContextSchema, lifecycleWriteResultSchema } from "./api/lifecycle.js";
 export type { LifecycleSnapshot, HubRuntimeContext } from "./api/lifecycle.js";
+
+export {
+  DEFAULT_STOP_GRACE_SECONDS, ACTION_QUEUE_WAIT_MS, STOP_BUFFER_MS, STACK_BUFFER_MS, RESTART_START_RESERVE_MS,
+  MAX_STOP_GRACE_MS, MAX_STACK_ACTION_MS, MIN_STACK_ACTION_MS, MAX_CONTAINER_ACTION_MS,
+  MAX_AGENT_ACTION_MS, RUNTIME_READBACK_RESERVE_MS, RUNTIME_TRANSPORT_RESERVE_MS,
+  LIFECYCLE_DELIVERY_RESERVE_MS, HUB_RUNTIME_TIMEOUT_MS, LIFECYCLE_TIMEOUT_MS,
+  stopTimeoutSeconds, containerActionTimeoutMs, stackActionTimeoutMs
+} from "./agent/runtime-deadlines.js";

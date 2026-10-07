@@ -52,7 +52,7 @@ export function LifecycleControls({ target, detail = false }: { target: Lifecycl
     <Dialog open={question !== null} onOpenChange={(open) => { if (!open) action.cancel(); }}>
       {question ? <DialogContent>
         <DialogTitle>{t("lifecycleConfirmTitle", { action: label(question.action, Boolean(questionDefinition)), target: targetName(question.target) })}</DialogTitle>
-        <DialogDescription>{t(question.changed ? "lifecycleConfirmChanged" : questionDefinition && question.action === "restart" ? "lifecycleConfirmRecreate" : "lifecycleConfirmRuntime")}</DialogDescription>
+        <DialogDescription>{t(question.changed ? "lifecycleConfirmChanged" : questionDefinition && question.action === "restart" ? "lifecycleConfirmRecreate" : question.context?.hubOwned === null ? "lifecycleConfirmUnknown" : "lifecycleConfirmRuntime")}</DialogDescription>
         {question.context?.hubOwned === null ? <p>{t("lifecycleOwnershipUnknown")}
           {question.context.applyDefinition ? <> {t("lifecycleOwnershipDefinition")}</> : null}
         </p> : null}

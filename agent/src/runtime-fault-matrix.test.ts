@@ -242,12 +242,13 @@ for (const scope of scopes) for (const transport of scope === "container" ? ["sy
   });
 }
 
-for (const scope of ["own-stack", "foreign-stack"] as const) for (const transport of transports) for (const kind of kinds) {
+for (const scope of scopes) for (const transport of scope === "container" ? ["sync"] as const : transports) for (const kind of kinds) {
   test(`failure key and combined delegation survive long rule combinations: ${scope} / ${transport} / ${kind}`, async (t) => {
-    const delegationProfiles = Array.from({ length: 7 }, (_, index) => ({ HostConfig: {
-      Privileged: Boolean((index + 1) & 1), NetworkMode: (index + 1) & 2 ? "host" : "bridge",
-      Binds: (index + 1) & 4 ? ["/var/run/docker.sock:/var/run/docker.sock"] : []
-    } }));
+    const delegationProfiles = Array.from({ length: 7 }, (_, index) => {
+      const flags = scope === "container" ? 7 - index : index + 1;
+      return { HostConfig: { Privileged: Boolean(flags & 1), NetworkMode: flags & 2 ? "host" : "bridge",
+        Binds: flags & 4 ? ["/var/run/docker.sock:/var/run/docker.sock"] : [] } };
+    });
     const originalNotes = delegationProfiles.map(({ HostConfig: host }) => `delegation-lock-allowed: ${[
       ...(host.Binds.length ? ["docker-socket-mount"] : []), ...(host.Privileged ? ["privileged"] : []),
       ...(host.NetworkMode === "host" ? ["host-namespace"] : [])
@@ -255,7 +256,7 @@ for (const scope of ["own-stack", "foreign-stack"] as const) for (const transpor
     assert.equal(new Set(originalNotes).size, 7);
     assert.ok(originalNotes.join("; ").length > MAX_FIELD_CHARS);
     const auditFile = path.join(directory, `combined-delegation-${scope}-${transport}-${kind}.ndjson`);
-    const f = fixture(t, { scope, action: "start", transport, kind, stage: "compose-command" },
+    const f = fixture(t, { scope, action: "start", transport, kind, stage: scope === "container" ? "engine-command" : "compose-command" },
       { delegationProfiles, stderr: "synthetic diagnostic ".repeat(30), persistedAudit: new AgentAuditLog(auditFile) });
     await assert.doesNotReject(f.run);
     assert.ok(f.hits() > 0);
@@ -265,6 +266,9 @@ for (const scope of ["own-stack", "foreign-stack"] as const) for (const transpor
     const persisted = JSON.parse(lines[0]) as { reason: string };
     const key = kind === "engine" ? "engine-action-failed" : kind === "compose" ? "compose-action-failed" : "internal-error";
     assert.ok(persisted.reason.startsWith(`${key}; delegation-lock-allowed: `));
+    const rawReason = f.records[0].reason!;
+    assert.equal(rawReason.match(/delegation-lock-allowed:/g)?.length, 1);
+    assert.ok(rawReason.indexOf(f.diagnostic) > rawReason.indexOf("delegation-lock-allowed:"));
     for (const rule of ["docker-socket-mount", "host-namespace", "privileged"]) assert.ok(persisted.reason.includes(rule));
     assert.equal(persisted.reason.match(/delegation-lock-allowed:/g)?.length, 1);
     assert.equal(f.response.chunks.join("").includes("delegation-lock-allowed"), false);

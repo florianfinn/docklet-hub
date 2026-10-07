@@ -47,7 +47,7 @@ Stack-Aktionen zeigen den Fortschritt je Service aus dem Strom. Das Ergebnis ers
 - Zeitgrenze überschritten: Der Vorgang kann auf dem Host weiterlaufen; die Meldung sagt das, und die Oberfläche liest den Stand neu.
 - Fristablauf oder Verbindungsverlust nach dem Versand: `runtime-outcome-unknown` bei synchronen Antworten beziehungsweise `runtime-stream-broken` bei geöffneten Stack-Strömen. Das Ergebnis ist unbekannt, nicht gescheitert; die Oberfläche liest den Stand nach der Wiederverbindung neu.
 
-Nach jedem Vorgang zeigt die Oberfläche den tatsächlichen Stand aus dem Live-Stand, nicht den erwarteten. Die Browserfrist kommt aus `contract/`: 690 Sekunden Hub-Frist (60 Sekunden Warteschlange, höchstens 600 Sekunden Aktion, 30 Sekunden Transportreserve) plus 10 Sekunden Reserve für die Zustellung der abschließenden Hub-Antwort.
+Nach jedem Vorgang zeigt die Oberfläche den tatsächlichen Stand aus dem Live-Stand, nicht den erwarteten. Die Browserfrist kommt aus `contract/`: 760 Sekunden Hub-Frist (60 Sekunden Warteschlange, höchstens 640 Sekunden Aktion einschließlich Startreserve, 30 Sekunden Nachlesereserve und 30 Sekunden Transportreserve) plus 10 Sekunden Reserve für die Zustellung der abschließenden Hub-Antwort.
 
 ## Absicht, Wartung und Vorfall
 

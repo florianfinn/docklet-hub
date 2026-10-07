@@ -30,6 +30,7 @@ export const enContainers = {
   lifecycleConfirmTitle: "{action}: {target}",
   lifecycleConfirmServices: "Affected services:",
   lifecycleConfirmRecreate: "All affected containers will be recreated. Volumes and bind mounts are preserved.",
+  lifecycleConfirmUnknown: "The action affects the following services. The agent determines the effective mode from their management.",
   lifecycleConfirmRuntime: "The action affects the existing containers of these services.",
   lifecycleConfirmChanged: "State or effective mode changed. Review the new state and confirm again.",
   lifecycleCancel: "Cancel",

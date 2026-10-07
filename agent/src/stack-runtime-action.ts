@@ -10,11 +10,14 @@ export type StackRuntimeOps = {
   checkRuntimeScope: (prepared: PreparedStack) => void;
   checkCreateScope: (prepared: PreparedStack) => void;
   imageId: (ref: string) => Promise<string | null>;
-  up: (options: { applyDefinition: boolean; forceRecreate: boolean; timeoutMs: number }) => Promise<unknown>;
-  start: (timeoutMs: number) => Promise<unknown>;
-  stop: (timeoutMs: number) => Promise<unknown>;
-  restart: (timeoutMs: number, startWithUp: boolean) => Promise<unknown>;
+  // Adapters call onMutation after their final budget check, before Compose.
+  up: (options: { applyDefinition: boolean; forceRecreate: boolean; timeoutMs: number }, onMutation: () => void) => Promise<unknown>;
+  start: (timeoutMs: number, onMutation: () => void) => Promise<unknown>;
+  stop: (timeoutMs: number, onMutation: () => void) => Promise<unknown>;
+  restart: (timeoutMs: number, startWithUp: boolean, onMutation: () => void) => Promise<unknown>;
   refresh: (prepared: PreparedStack) => Promise<StackContextResponse>;
+  beforeMutation?: () => Promise<void>;
+  lastKnownContext?: (prepared: PreparedStack) => StackContextResponse;
 };
 
 export function runtimeServices(action: RuntimeAction, context: StackContextResponse, external: boolean): RuntimeServiceResult[] {
@@ -59,16 +62,21 @@ export async function executeStackRuntimeAction(
     if (options.signal?.aborted) throw new StackEndpointError(409, "action-caller-disconnected");
     ops.checkRuntimeScope(prepared);
     if (creating) ops.checkCreateScope(prepared);
-    mutationStarted = true;
-    options.onMutation?.();
-    if (creating) {
-      if (action === "restart" && !applyDefinition) await ops.restart(timeoutMs, true);
-      else await ops.up({ applyDefinition, forceRecreate: action === "restart", timeoutMs });
+    if (ops.beforeMutation) {
+      await ops.beforeMutation();
+      ops.checkRuntimeScope(prepared);
+      if (creating) ops.checkCreateScope(prepared);
     }
-    else if (action === "start") await ops.start(timeoutMs);
-    else if (action === "stop") await ops.stop(timeoutMs);
-    else await ops.restart(timeoutMs, false);
-  }, () => ops.refresh(prepared), () => ({
+    if (options.signal?.aborted) throw new StackEndpointError(409, "action-caller-disconnected");
+    const onMutation = () => { mutationStarted = true; options.onMutation?.(); };
+    if (creating) {
+      if (action === "restart" && !applyDefinition) await ops.restart(timeoutMs, true, onMutation);
+      else await ops.up({ applyDefinition, forceRecreate: action === "restart", timeoutMs }, onMutation);
+    }
+    else if (action === "start") await ops.start(timeoutMs, onMutation);
+    else if (action === "stop") await ops.stop(timeoutMs, onMutation);
+    else await ops.restart(timeoutMs, false, onMutation);
+  }, () => ops.refresh(prepared), () => ops.lastKnownContext?.(prepared) ?? ({
     ...prepared.context, services: prepared.context.services.map((service) => ({
       ...service, containerId: null, status: "unknown", exitCode: null, health: null, startedAt: null
     }))

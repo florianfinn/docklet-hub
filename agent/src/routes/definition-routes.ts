@@ -1,3 +1,4 @@
+import { RuntimeBudget } from "../runtime-budget.js";
 import { runContainerAction } from "../container-action.js";
 import { actionConnection } from "../runtime/action-connection.js";
 import { applySpecRequestSchema, containerActionRequestSchema, type RuntimeAction } from "contract";
@@ -363,6 +364,7 @@ export async function handleRemove(ctx: ContainerRouteContext): Promise<void> {
 }
 
 export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void> {
+  const budget = new RuntimeBudget();
   const { request, response, actor, containerId, action } = ctx;
   const parsed = parseRequest(containerActionRequestSchema, await readJsonBody(request));
   if (!parsed.ok) {
@@ -371,7 +373,7 @@ export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void
   }
   const connection = actionConnection(request, response);
   try {
-    const result = await runContainerAction(containerId, action as RuntimeAction, parsed.value.expectedContainer, actor, connection.signal);
+    const result = await runContainerAction(containerId, action as RuntimeAction, parsed.value.expectedContainer, actor, connection.signal, undefined, budget);
     if (!response.destroyed) send(response, result.status, result.body);
   } finally {
     connection.dispose();

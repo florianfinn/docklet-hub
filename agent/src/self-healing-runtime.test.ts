@@ -4,9 +4,10 @@ import fs from "node:fs";
 import type http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { Readable } from "node:stream";
 import test, { after } from "node:test";
-import { selfHealingStatusResponseSchema, type ExpectedContainer } from "contract";
+import { selfHealingStatusResponseSchema, HUB_RUNTIME_TIMEOUT_MS, RUNTIME_TRANSPORT_RESERVE_MS, SELF_HEALING_SYSTEM_ACTOR, type ExpectedContainer } from "contract";
 import { EngineError, type RawInspect } from "./engine.js";
 import { truncateField, type AuditEntry } from "./audit.js";
 
@@ -98,7 +99,7 @@ test("engine diagnostics stay in one audit with delegation evidence before trunc
   t.mock.method(engine, "start", async () => { throw new EngineError(`engine responded 503: ${"diagnostic ".repeat(50)}`, 503); });
   f.crash(); await selfHealing.tick();
   assert.equal(f.records.length, 1); assert.equal(f.records[0].outcome, "error");
-  assert.match(truncateField(f.records[0].reason!)!, /^delegation-lock-allowed:.*engine-action-failed/);
+  assert.match(truncateField(f.records[0].reason!)!, /^engine-action-failed; delegation-lock-allowed:.*; diagnostic/);
   assert.equal(JSON.stringify(selfHealingState.entries()[0].attempts).includes("diagnostic"), false);
   assert.equal(selfHealingState.entries()[0].attempts[0].error, "engine-action-failed");
 });
@@ -236,3 +237,28 @@ for (const access of ["not-allowlisted", "observe-only", "read-only"] as const) 
     assert.deepEqual(selfHealingState.entries(), []); assert.equal(f.starts(), 0);
   });
 }
+
+for (const phase of ["gate", "mutation"] as const) test(`autonomous start bounds a stalled ${phase} without a hub caller`, async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  t.mock.method(performance, "now", () => Date.now());
+  const f = fixture(t); f.crash();
+  let signal: AbortSignal | undefined;
+  const stall = async (options?: { signal?: AbortSignal; timeoutMs?: number }) => {
+    signal = options?.signal;
+    assert.equal(options?.timeoutMs, HUB_RUNTIME_TIMEOUT_MS - RUNTIME_TRANSPORT_RESERVE_MS);
+    return new Promise<never>(() => {});
+  };
+  if (phase === "gate") t.mock.method(engine, "inspect", async (_id: string, options?: { signal?: AbortSignal; timeoutMs?: number }) => stall(options));
+  else t.mock.method(engine, "start", async (_id: string, options?: { signal?: AbortSignal; timeoutMs?: number }) => stall(options));
+  const pending = runContainerAction(id, "start", f.expected(), SELF_HEALING_SYSTEM_ACTOR);
+  for (let i = 0; i < 50; i++) await Promise.resolve();
+  t.mock.timers.tick(HUB_RUNTIME_TIMEOUT_MS - RUNTIME_TRANSPORT_RESERVE_MS);
+  const result = await pending;
+  assert.equal(result.status, 504);
+  assert.equal(result.body.error, "runtime-deadline-exceeded");
+  assert.equal(result.mutationStarted, phase === "mutation");
+  assert.equal(signal?.aborted, true);
+  assert.equal(f.records.length, 1);
+  assert.equal(f.records[0].outcome, phase === "mutation" ? "error" : "denied");
+  assert.equal(f.records[0].actor, SELF_HEALING_SYSTEM_ACTOR);
+});

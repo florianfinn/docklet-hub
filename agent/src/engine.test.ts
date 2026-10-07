@@ -472,7 +472,7 @@ test("runtime requests pass the calculated stop deadline to HTTP instead of the 
   await engine.restart("id");
   await engine.stop("id", null);
   await engine.start("id");
-  assert.deepEqual(deadlines, [100_000, 100_000, 20_000, 30_000]);
+  assert.deepEqual(deadlines, [100_000, 130_000, 20_000, 30_000]);
 });
 
 test("kill evidence keeps Docker time and Compose metadata only inside the agent", () => {

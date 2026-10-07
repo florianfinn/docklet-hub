@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -246,18 +247,18 @@ test("stack apply/up forbids build and pull and removes no orphans", () => {
 
 test("both restart phases share a single total deadline", async (t) => {
   const times = [1000, 2500];
-  t.mock.method(Date, "now", () => times.shift() ?? 2500);
+  t.mock.method(performance, "now", () => times.shift() ?? 2500);
   const deadlines: number[] = [];
   await composeDependencySafeRestart(STACK_PROJECT, 2000, async (_args, options) => {
     deadlines.push(options.timeoutMs);
     return { stdout: "", stderr: "" };
   });
-  assert.deepEqual(deadlines, [1000, 1000]);
+  assert.deepEqual(deadlines, [1000, 500]);
 });
 
 test("restart reserves thirty seconds for recovery when stop exhausts its budget", async (t) => {
   let now = 1000;
-  t.mock.method(Date, "now", () => now);
+  t.mock.method(performance, "now", () => now);
   const calls: Array<{ args: string[]; timeout: number }> = [];
   await assert.rejects(composeDependencySafeRestart(STACK_PROJECT, 600_000, async (args, options) => {
     calls.push({ args, timeout: options.timeoutMs });
@@ -280,4 +281,16 @@ test("own restart recovers with safe no-recreate up after a failed stop", async 
   assert.equal(calls.length, 2);
   assert.equal(calls[0].at(-1), "stop");
   assert.deepEqual(calls[1], buildUpArgs(STACK_PROJECT, { removeOrphans: false, pullNever: true, wait: false, noRecreate: true }));
+});
+
+test("an exhausted restart budget never launches a recovery start", async (t) => {
+  let now = 0;
+  t.mock.method(performance, "now", () => now);
+  let calls = 0;
+  await assert.rejects(composeDependencySafeRestart(STACK_PROJECT, 2000, async () => {
+    calls++;
+    now = 2001;
+    return { stdout: "", stderr: "" };
+  }), /deadline exceeded/);
+  assert.equal(calls, 1);
 });

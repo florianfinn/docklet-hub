@@ -188,7 +188,11 @@ Agent-Abwesenheit lassen sich nur anhand des aktuellen Endstands zuordnen;
 vollständige Zwischenfolgen liefert dieser Abgleich nicht.
 
 Unmittelbar vor dem Engine-Aufruf reserviert der Agent den Versuch dauerhaft
-und kennzeichnet den geplanten Heilungsstart. Eine Unterbrechung in diesem
+und kennzeichnet den geplanten Heilungsstart. Läuft das monotone Laufzeitbudget
+während dieser Schreibung oder vor dem Engine-Aufruf ab, nimmt der Agent die
+Reservierung und die Heilungsstartmarkierung dauerhaft zurück: Kein Versuch
+wird verbraucht; der vorherige Wiederholungszeitpunkt bleibt erhalten.
+Eine Prozessunterbrechung in diesem
 Zeitfenster bleibt als `interrupted` verbraucht, auch wenn der Engine-Aufruf
 möglicherweise noch nicht begonnen hatte. Diese vorsichtige Zuordnung verhindert
 kostenlose Wiederholungen nach einem Prozessabbruch. Der nächste Abstand bleibt

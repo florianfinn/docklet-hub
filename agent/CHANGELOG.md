@@ -2,6 +2,37 @@
 
 ## Unveröffentlicht
 
+### Vertragsversion 11
+
+Protokollbruch: Hub und Agenten müssen gemeinsam aktualisiert werden.
+
+- Die Kopfzeile `x-docker-agent-tier` entfällt. Der Agent verlangt und
+  wertet sie nicht mehr aus; eine weiterhin gesendete Kopfzeile wird
+  ignoriert. Jede Route verhält sich wie bisher für `internal`.
+- `CONTRACT_VERSION` steigt von 10 auf 11.
+- `GET /contract` meldet keine Netzstufen mehr: `headers.tier`, `tiers` und
+  das Feld `tier` je Route entfallen; `/health` trägt `public: true`.
+- `GET /monitor-events` beantwortet einen fremden Aufrufer mit
+  `403 actor-not-allowed`. Die Schlüssel `tier-missing` und
+  `internal-only-action` entfallen. `hardening-violated` steht nicht mehr
+  unter den Ablehnungen der Shell, weil `gate()` ihn nicht mehr erzeugt.
+- Audit-Einträge tragen kein Feld `networkTier` mehr.
+- Eine mutierende Aktion auf einem Container mit Delegationssperre wird mit
+  dem Grund `delegation-lock-allowed: <Regeln>` protokolliert.
+
+### Vertragsversion 12
+
+- Laufzeitanfragen teilen eine absolute monotone Frist von 730 Sekunden über
+  Gates, Volumen- und Service-Inspects, Warteschlange, Vorprüfungen, Mutation,
+  Fortschrittsbeobachtung und Nachlesen. Engine- und Compose-Aufrufe erhalten
+  höchstens das Restbudget. Das gilt für Container, Stack-Ströme, synchronen
+  Rückfall und Selbstheilungsstarts. `504 runtime-deadline-exceeded` liefert
+  den zuletzt gelesenen Zustand; genau ein Audit unterscheidet Ablehnung vor
+  und Fehler nach Mutationsbeginn. Vertragsversion 12 bleibt bestehen (#170).
+
+Protokollbruch: Hub und Agenten müssen gemeinsam aktualisiert werden.
+`CONTRACT_VERSION` steigt von 11 auf 12.
+
 - Hub-Neustarts für Container und Stacks löschen die Stopp-Absicht und
   klassifizieren den Stoppteil als unerwartet. Die Heilung wartet bis zum Ende
   der Aktion und kann einen gescheiterten Start auch nach Exit-Code 0 beheben.
@@ -57,7 +88,7 @@
   einem laufenden Projektvorgang warten muss. Danach folgen `start` und Fortschritt
   oder ein terminaler Fehler mit Status und bereinigtem Ergebnis. Der Hub reicht
   das Wartesignal weiter. Die neue NDJSON-Art gehört zur unveröffentlichten
-  Vertragsversion 12; `CONTRACT_VERSION` bleibt 12 und der Fingerabdruck ändert sich (#98).
+  Vertragsversion 12 (#98).
 
 - `PUT /self-healing/config` übernimmt die globale Selbstheilungskonfiguration,
   gebunden an `system:hub`. Alle fünf Konfigurationsfelder sind Pflichtwerte;
@@ -65,41 +96,23 @@
   Die Antwort `{ config }` quittiert die atomar mit Modus 0600 gespeicherten Werte.
   Bis zur ersten Übertragung gelten die Werkswerte. `GET /contract` nennt
   Konfigurationsfelder, Grenzen und `null` als unbegrenzte Wartungsdauer-Vorgabe.
-  Ab Werk bleibt die Vorgabe eine Stunde. Die Route gehört zu Vertragsversion 12;
-  `CONTRACT_VERSION` bleibt für diesen unveröffentlichten Stand 12.
+  Ab Werk bleibt die Vorgabe eine Stunde.
 - Die Konfigurationsroute protokolliert jede Anfrage genau einmal: gültige
   Speicherung als `allowed`, Eingabefehler als `denied`, Speicherfehler als `error`.
   Engine- und Dateifehler werden über `actionFailureOf` beantwortet; Diagnosen
   bleiben im Audit. Konfigurationsannahme bleibt im Nur-Lese-Modus erlaubt,
   weil sie keine Containeraktion ausführt.
 
-Protokollbruch: Hub und Agenten müssen gemeinsam aktualisiert werden.
-
-- Die Kopfzeile `x-docker-agent-tier` entfällt. Der Agent verlangt und
-  wertet sie nicht mehr aus; eine weiterhin gesendete Kopfzeile wird
-  ignoriert. Jede Route verhält sich wie bisher für `internal`.
-- `CONTRACT_VERSION` steigt von 10 auf 11.
-- `GET /contract` meldet keine Netzstufen mehr: `headers.tier`, `tiers` und
-  das Feld `tier` je Route entfallen; `/health` trägt `public: true`.
-- `GET /monitor-events` beantwortet einen fremden Aufrufer mit
-  `403 actor-not-allowed`. Die Schlüssel `tier-missing` und
-  `internal-only-action` entfallen. `hardening-violated` steht nicht mehr
-  unter den Ablehnungen der Shell, weil `gate()` ihn nicht mehr erzeugt.
-- Audit-Einträge tragen kein Feld `networkTier` mehr.
-- Eine mutierende Aktion auf einem Container mit Delegationssperre wird mit
-  dem Grund `delegation-lock-allowed: <Regeln>` protokolliert.
-
-- `CONTRACT_VERSION` steigt für die Laufzeitaktionen auf 12 (#98).
 - Container- und Stack-Aktionen verlangen den gesehenen Laufzustand einschließlich Startzeit. Stack-Start und -Neustart verlangen `applyDefinition`; `allowFallbackUp` und `capabilities.startRequiresApply` entfallen.
 - Hub-eigene Stacks starten fehlende Services mit `up --no-build --pull never` ohne `--wait`. Der Modus „Aus“ erhält bestehende Container mit `--no-recreate`, auch nach dem Stopp beim Neustart. Der Modus „An“ übernimmt Änderungen und erzwingt beim Neustart das Ersetzen. Definition und lokale Images werden vor einer Mutation geprüft. Fremdverwaltete Stacks verwenden ausschließlich vorhandene Container.
-- Aktionen warten höchstens 60 Sekunden auf ihre Sperre; getrennte Aufrufer und geänderte Zustände werden vor der Mutation abgelehnt. Stoppfristen folgen der Grace-Period mit Puffer; Stopp und Start beim Stack-Neustart teilen höchstens 600 Sekunden mit mindestens 30 Sekunden für den Start.
+- Aktionen warten höchstens 60 Sekunden auf ihre Sperre; getrennte Aufrufer und geänderte Zustände werden vor der Mutation abgelehnt. Stoppfristen folgen der Grace-Period mit Puffer; Container-HTTP-Fristen berücksichtigen höchstens 600 Sekunden Grace-Period, ohne die Docker-Konfiguration zu ändern; Container-Neustarts erhalten zusätzlich 30 Sekunden Startreserve. Stopp und Start beim Stack-Neustart teilen höchstens 600 Sekunden mit mindestens 30 Sekunden für den Start. Alle Fristen werden aus `contract/` abgeleitet: höchstens 640 Sekunden Containeraktion, 600 Sekunden Stack-Aktion, 760 Sekunden Hub-Frist einschließlich Warteschlange und je 30 Sekunden Nachlese- und Transportreserve sowie 770 Sekunden Browserfrist.
 - Ergebnisse enthalten nachgelesene Zustände, Exit-Code, Health und aktuelle Container-IDs; Stack-Aktionen liefern optional NDJSON-Fortschritt. Ein fehlender Service erfüllt das Stoppziel, Exit-Code 0 nach dem Start gilt als abgeschlossener Einmalauftrag. Health ist kein zusätzliches Erfolgskriterium.
-- Neue Laufzeitfehler sind `state-changed`, `action-queue-timeout`, `action-caller-disconnected`, `runtime-image-missing`, `runtime-state-unreadable` und `runtime-target-not-reached`. Skalierte Services werden vor einer Containeraktion mit `409 scaled-service-unsupported` abgelehnt.
+- Neue Laufzeitfehler sind unter anderem `state-changed`, `action-queue-timeout`, `action-caller-disconnected`, `runtime-image-missing`, `runtime-state-unreadable` und `runtime-target-not-reached`. Skalierte Services werden vor einer Containeraktion mit `409 scaled-service-unsupported` abgelehnt.
 
-- Laufzeitaktionen protokollieren Fehler vom ersten Gate bis zur Neuverankerung genau einmal: vor der Mutation als `denied`, danach als `error`. Delegationshinweise stehen im selben Eintrag. Auch Fehler der Stack-Vorbereitung und der Warteschlange werden lokal beantwortet.
+- Laufzeitaktionen protokollieren Fehler vom ersten Gate bis zur Neuverankerung genau einmal: vor der Mutation als `denied`, danach als `error`. Delegationshinweise stehen im selben Eintrag: Fehlerschlüssel, ein zusammengeführter Delegationsnachweis, dann Diagnose. Auch Fehler der Stack-Vorbereitung und der Warteschlange werden lokal beantwortet.
 - Engine-, Compose- und unbekannte Laufzeitfehler erhalten den ursprünglichen HTTP-Status beziehungsweise `502` oder `500` und die Schlüssel `engine-action-failed`, `compose-action-failed` und `internal-error`. Neuverankerungsfehler behalten `registry-reanchor-failed` beziehungsweise `container-anchor-mismatch`. Engine-Text, Compose-Exitcode und stderr werden an das Audit übergeben, nicht an die Laufzeitantwort. Bei zwei fehlgeschlagenen Neustartbefehlen bleiben beide Diagnosen erhalten.
-- Fehler bei `compose config` werden für Laufzeitaktionen vor der Mutation abgefangen; die bisherige Toleranz unlesbarer Definitionen anderer Kontextabfragen bleibt erhalten. Nach einer fehlgeschlagenen Mutation wird der Zustand weiterhin nachgelesen; scheitert auch die Nachlese, bleiben beide Diagnosen erhalten und der Zustand wird als unbekannt gemeldet.
-- Stack-Streams beantworten Fehler vor der ersten Zeile mit JSON und HTTP-Status. Danach tragen Fehlerzeilen den spezifischen Schlüssel in `reason`, den Fehlerstatus in `status` und das bereinigte Ergebnis in `body`. `CONTRACT_VERSION` bleibt für diesen unveröffentlichten Stand 12; der Vertragsfingerabdruck wird aktualisiert.
+- Fehler bei `compose config` werden für Laufzeitaktionen vor der Mutation abgefangen. Apply, Down und Stack-Kontext melden eine unlesbare Definition mit `409 compose-config-failed`. Nach einer fehlgeschlagenen Mutation wird der Zustand weiterhin nachgelesen; scheitert auch die Nachlese, bleiben beide Diagnosen erhalten und der Zustand wird als unbekannt gemeldet.
+- Stack-Streams beantworten Fehler vor der ersten Zeile mit JSON und HTTP-Status. Danach tragen Fehlerzeilen den spezifischen Schlüssel in `reason`, den Fehlerstatus in `status` und das bereinigte Ergebnis in `body`.
 
 - Manuelle Stopp-Absichten entstehen aus `kill` → `die` und bleiben unter Projekt und Service beziehungsweise Containername im lokalen Zustandsverzeichnis erhalten. Der nächste Start löscht sie; eine erkannte Unterbrechung der Daemon-Kontinuität verwirft sie. Hub-Stopps annotieren den Akteur erst beim tatsächlichen Engine- oder Compose-Aufruf; ohne bestätigende Ereignisse entsteht keine Absicht (#19).
 - Ein Hintergrund-Watcher liest den einzigen Docker-Ereignisstrom auch ohne Hub-Verbindung und verteilt alle bisherigen Lifecycle- und Health-Aktionen an `/monitor-events`. `kill` und Container-Metadaten bleiben lokal. `GET /stop-intents` liefert Absichten, die letzten 256 Ausfallklassifikationen und den Beobachtungsstatus; fehlende Beobachtung ergibt `503`. Diese Ergänzung gehört zur unveröffentlichten Vertragsversion 12.
@@ -117,7 +130,7 @@ Protokollbruch: Hub und Agenten müssen gemeinsam aktualisiert werden.
   der Agent startet leer. Atomarer Dateiersatz und das Beiseitelegen synchronisieren
   anschließend das Verzeichnis. Die gemeinsame Absicht aller Compose-Replikas
   und die Grenze bei kontrolliertem Agent-Ende während eines Daemon-Shutdowns
-  sind dokumentiert. `CONTRACT_VERSION` bleibt 12 (#19).
+  sind dokumentiert (#19).
 
 ## 0.32.0
 

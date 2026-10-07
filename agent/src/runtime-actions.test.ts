@@ -54,7 +54,10 @@ test("runtime up has no health wait, build, pull or removal in either mode", () 
 test("stop deadlines include Docker's configured grace period and a buffer", () => {
   assert.equal(containerActionTimeoutMs("stop", undefined), 20_000);
   assert.equal(containerActionTimeoutMs("stop", 90), 100_000);
-  assert.equal(containerActionTimeoutMs("restart", 0), 10_000);
+  assert.equal(containerActionTimeoutMs("restart", 0), 40_000);
+  for (const timeout of [0, 10, 90, -1]) {
+    assert.equal(containerActionTimeoutMs("restart", timeout) - containerActionTimeoutMs("stop", timeout), 30_000);
+  }
   assert.equal(containerActionTimeoutMs("start", 90), 30_000);
   assert.equal(containerActionTimeoutMs("stop", -1), 610_000);
   assert.equal(stackActionTimeoutMs("stop", [10, 120]), 150_000);
@@ -171,11 +174,4 @@ test("missing services satisfy stop but unreadable states do not", () => {
     assert.equal(serviceResult("stop", "job", runtimeStateOf(null), external).outcome, "ok");
     assert.equal(serviceResult("stop", "job", runtimeStateOf(null, true), external).outcome, "failed");
   }
-});
-
-test("shared hub and browser deadlines cover queue and maximum action with delivery reserves", async () => {
-  const { HUB_RUNTIME_TIMEOUT_MS, LIFECYCLE_TIMEOUT_MS } = await import("contract");
-  const { ACTION_QUEUE_WAIT_MS, MAX_STACK_ACTION_MS } = await import("./runtime-actions.js");
-  assert.equal(HUB_RUNTIME_TIMEOUT_MS, ACTION_QUEUE_WAIT_MS + MAX_STACK_ACTION_MS + 30_000);
-  assert.equal(LIFECYCLE_TIMEOUT_MS, HUB_RUNTIME_TIMEOUT_MS + 10_000);
 });

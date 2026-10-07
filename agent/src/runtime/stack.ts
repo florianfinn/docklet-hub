@@ -1,3 +1,4 @@
+import { runtimeCall, type RuntimeBudget } from "../runtime-budget.js";
 import {
   type RawInspect
 } from "../engine.js";
@@ -140,9 +141,9 @@ export type CurrentStackContainer = {
 // action: with `--project-name` it could not be proven that Compose leaves it
 // untouched.
 export async function currentStackContainers(
-  project: StackResolvedProject
+  project: StackResolvedProject, budget?: RuntimeBudget
 ): Promise<Map<string, CurrentStackContainer>> {
-  const all = await engine.listWithComposeLabels();
+  const all = await runtimeCall(budget, (options) => engine.listWithComposeLabels(options));
   const sameProjectName = all.filter(
     (entry) => entry.labels["com.docker.compose.project"] === project.projectName
   );
@@ -210,7 +211,7 @@ export function stackState(services: readonly StackServiceSnapshot[]): StackCont
 
 export async function prepareStack(
   project: StackResolvedProject,
-  options: { mutating: boolean; action: string; actor: string | null; runtimeAction?: boolean; onDelegation?: (reason: string) => void },
+  options: { mutating: boolean; action: string; actor: string | null; runtimeAction?: boolean; onDelegation?: (reason: string) => void; budget?: RuntimeBudget; onInspect?: (serviceName: string, inspect: RawInspect) => void },
   readConfig: typeof composeConfig = composeConfig
 ): Promise<PreparedStack> {
   if (options.mutating) {
@@ -221,7 +222,7 @@ export async function prepareStack(
     if (denied) throw new StackEndpointError(denied.status, denied.code);
   }
 
-  const current = await currentStackContainers(project);
+  const current = await currentStackContainers(project, options.budget);
   const entriesByService = registryEntriesByService(project);
   const externallyManaged = registry.isExternallyManaged(project.anchorEntry.containerId) ||
     [...entriesByService.values()].some((entry) => registry.isExternallyManaged(entry.containerId)) ||
@@ -229,7 +230,7 @@ export async function prepareStack(
   let normalized: unknown;
   let definition: StackDefinition;
   try {
-    normalized = await readConfig(project);
+    normalized = await runtimeCall(options.budget, (call) => readConfig(project, call));
     const parsed = stackDefinitionFromConfig(normalized);
     if (!parsed) throw new StackEndpointError(409, "compose-services-missing");
     definition = parsed;
@@ -249,7 +250,9 @@ export async function prepareStack(
       mutating: options.mutating,
       action: options.action,
       actor: options.actor,
-      onDelegation: options.onDelegation
+      onDelegation: options.onDelegation,
+      budget: options.budget,
+      onInspect: (inspect) => options.onInspect?.(serviceName, inspect)
     });
     if (!result.ok) {
       deniedServices.push({ serviceName, reason: result.reason, status: result.status });
@@ -346,8 +349,8 @@ export function ensureCreateScopeNotExternallyManaged(prepared: PreparedStack): 
   if (managed !== null) throw new StackEndpointError(403, "externally-managed", { services: managed });
 }
 
-export async function reanchorStackRegistry(prepared: PreparedStack): Promise<void> {
-  const current = await currentStackContainers(prepared.project);
+export async function reanchorStackRegistry(prepared: PreparedStack, budget?: RuntimeBudget): Promise<void> {
+  const current = await currentStackContainers(prepared.project, budget);
   const replacements = new Map<string, string>();
   for (const [serviceName, container] of current) {
     const old = prepared.entriesByService.get(serviceName);
