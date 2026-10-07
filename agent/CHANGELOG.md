@@ -25,6 +25,19 @@
   beobachteten Start ausgewertet. Unsichere reservierte Versuche nach einem
   Agent-Abbruch bleiben verbraucht. Manuelle Starts und Quittieren füllen auf;
   Docker-Wiederholungen und Heilungsstarts füllen nicht auf.
+- Budgetzustände bleiben auf 256 Ziele begrenzt. Der Inventarabgleich entfernt
+  verschwundene unbelastete Ziele; bei Überlauf werden zuerst die ältesten
+  unbelasteten Einträge verdrängt. Verbrauchte Versuche, ausstehende Heilungen,
+  Startkennzeichnungen und offene Vorfälle schützen einen Eintrag. Sind alle
+  256 Plätze geschützt, nimmt der Heiler keine neuen Ziele auf und startet sie
+  nicht, bis durch Auffüllen und Bereinigen oder Verdrängen wieder Platz entsteht.
+- Versuchspausen, Stabilitätsfenster, Wartungsablauf und Wiederanlauf nach
+  internen Fehlern verwenden im laufenden Prozess monotone Fristen. Uhrsprünge
+  ändern diese Abstände nicht; nach einem Agent-Neustart wird die Restdauer aus
+  den gespeicherten Wanduhrwerten übernommen. Der Wiederanlauf wartet 1, 2, 4,
+  8, 16 und höchstens 30 Sekunden; ein erfolgreicher Takt setzt ihn zurück.
+  Beim kontrollierten Agent-Ende bleiben ausstehende Heilungen und Budgets
+  erhalten. Der nächste Inventarabgleich verwirft inzwischen überholte Heilungen.
 - Vertragsversion 12 erhält `GET /self-healing/status`,
   `PUT`/`DELETE /self-healing/maintenance` und
   `POST /self-healing/incidents/acknowledge`. Die Schreibwege benötigen
@@ -32,7 +45,10 @@
   oder alle aktuellen und späteren Services eines Projekts. Ihr Ende startet
   nichts. Der Status liefert ohne Beobachtung `503`.
 - Ein Vorfall am Budget-Ende enthält stabile ID, Ursache, Versuchsergebnisse,
-  Handlungsschlüssel und höchstens 50 bereinigte Logzeilen. Ohne Bereinigung
+  Handlungsschlüssel und höchstens 50 bereinigte Logzeilen mit jeweils höchstens
+  500 Unicode-Zeichen und insgesamt höchstens 16 KiB UTF-8 einschließlich
+  Zeilentrennern. Die neuesten Zeilen haben Vorrang; die Kürzung nach der
+  Bereinigung trennt keine Unicode-Zeichen. Ohne Bereinigung
   fehlt der Auszug mit `redaction-unavailable`; ohne lesbare Logs mit
   `logs-unavailable`. Geschlossene Vorfälle tragen Abschlusszeit und Grund.
   Es bleiben alle offenen und die letzten 256 geschlossenen Vorfälle gespeichert.

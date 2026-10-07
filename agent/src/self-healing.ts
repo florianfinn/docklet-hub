@@ -65,7 +65,10 @@ export class SelfHealingController {
   }
   // Internal failures retain reservations; watcher disconnects cancel pending retries separately.
   fail(): void {
-    if (this.available) this.retryAt = this.monotonic() + this.retryDelay;
+    if (this.available) {
+      this.retryAt = this.monotonic() + this.retryDelay;
+      this.retryDelay = Math.min(this.retryDelay * 2, 30_000);
+    }
     this.available = false; this.abort.abort();
   }
   reconcileInventory(containers: readonly RawInspect[]): void {

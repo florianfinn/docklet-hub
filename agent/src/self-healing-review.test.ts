@@ -38,6 +38,37 @@ test("changing container names are pruned by inventory and bounded by oldest idl
   assert.equal(f.store.entries().length, 1);
 });
 
+test("idle overflow retains pending healing without consumed attempts", (t) => {
+  const f = healingFixture(t); f.crash();
+  const target = f.target();
+  const pending = f.store.get(target)!.pending;
+  assert.notEqual(pending, null);
+  assert.equal(f.store.get(target)!.attempts.length, 0);
+  for (let index = 0; index < HEALING_ENTRY_LIMIT + 20; index++) {
+    f.advance(1);
+    f.current = { ...f.current, Id: `id-${index}`, Name: `/demo-${index}`,
+      State: { ...f.current.State, Running: true, Status: "running", ExitCode: 0 } };
+    f.controller.reconcile(f.current);
+  }
+  assert.equal(f.store.entries().length, HEALING_ENTRY_LIMIT);
+  assert.deepEqual(f.store.get(target)?.pending, pending);
+  assert.equal(f.store.get(target)?.attempts.length, 0);
+  assert.equal(f.store.get({ kind: "container", containerName: "demo-0" }), undefined);
+  assert.notEqual(f.store.get(f.target()), undefined);
+});
+
+test("empty inventory prunes a missing idle target and retains a missing consumed budget", async (t) => {
+  const f = healingFixture(t); f.crash(); f.advance(1000); await f.controller.tick();
+  const used = f.store.get(f.target())!;
+  assert.equal(used.attempts.length, 1);
+  f.current = { ...f.current, Id: "idle", Name: "/demo-idle" };
+  f.controller.reconcile(f.current);
+  assert.equal(f.store.entries().length, 2);
+  assert.equal(f.store.get(f.target())!.attempts.length, 0);
+  f.controller.reconcileInventory([]);
+  assert.deepEqual(f.store.entries(), [used]);
+});
+
 test("inventory and saturation retain consumed budgets and refuse fresh healing without capacity", async (t) => {
   const f = healingFixture(t); f.crash(); f.advance(1000); await f.controller.tick();
   const used = f.store.entries()[0];
@@ -113,6 +144,33 @@ test("storage failure reports unavailability and recovers with bounded retry bac
   f.advance(1); await f.controller.tick();
   assert.equal(f.status().observing, true); assert.equal(f.starts(), 1);
   assert.equal(f.status().budgets[0].usedAttempts, 1);
+});
+
+test("fail schedules monotonic recovery after 1, 2, 4, 8, 16 and at most 30 seconds", async (t) => {
+  const f = healingFixture(t); f.crash();
+  let writes = 0;
+  const mock = t.mock.method(fs, "renameSync", () => {
+    writes++; throw new Error("synthetic recovery failure");
+  });
+  f.controller.fail();
+  assert.equal(f.controller.isAvailable(), false);
+  f.jump(3_600_000);
+  for (const delay of [1000, 2000, 4000, 8000, 16000, 30000, 30000]) {
+    const previous = writes;
+    f.advance(delay - 1); f.controller.fail(); await f.controller.tick();
+    assert.equal(writes, previous, `recovery must wait ${delay} ms`);
+    assert.equal(f.starts(), 0);
+    f.advance(1); await assert.rejects(f.controller.tick(), /synthetic recovery failure/);
+    assert.equal(writes, previous + 1);
+    assert.equal(f.controller.isAvailable(), false);
+  }
+  mock.mock.restore();
+  f.advance(29999); await f.controller.tick(); assert.equal(f.starts(), 0);
+  f.advance(1); await f.controller.tick();
+  assert.equal(f.controller.isAvailable(), true); assert.equal(f.starts(), 1);
+  f.controller.fail();
+  f.advance(999); await f.controller.tick(); assert.equal(f.controller.isAvailable(), false);
+  f.advance(1); await f.controller.tick(); assert.equal(f.controller.isAvailable(), true);
 });
 
 test("failed observation cleanup is retried before recovery can heal stale evidence", async (t) => {
