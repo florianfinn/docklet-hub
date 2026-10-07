@@ -9,7 +9,7 @@ const STACK = { projectName: "demo", projectDir: "/srv/example/demo", composeFil
 const containerResult = (): HubContainerRuntimeResult => ({ ok: true, action: "start", outcome: "ok",
   state: { ...EXPECTED, exitCode: null, health: null } });
 
-test("unreachable hosts reject after access checking without waiting for refresh, and malformed bodies cannot execute", async () => {
+test("unreachable hosts reject after access checking without waiting for refresh, and malformed bodies cannot execute", { timeout: 5000 }, async () => {
   let opened = 0;
   let refreshed = 0;
   const service = createRuntimeActionsService({

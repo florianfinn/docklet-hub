@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import test from "node:test";
 
-import { streamFetch } from "./stream-fetch.js";
+import { streamFetch, StreamFetchError } from "./stream-fetch.js";
 import { listenOnFetchablePort } from "../testing/port-test-support.js";
 
 // WAS DIESE DATEI PRÜFT — UND WAS NICHT
@@ -102,6 +102,21 @@ test("ein Abbruch vor der Antwort wirft einen AbortError — wie beim eingebaute
   } finally {
     await agent.close();
   }
+});
+
+test("a pre-send abort and a peer disconnect after receiving the request carry delivery evidence", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(streamFetch("http://agent.example.org/action", { signal: controller.signal }),
+    (error: unknown) => error instanceof StreamFetchError && !error.requestSent && error.name === "AbortError");
+  const agent = await serve((request, response) => {
+    request.resume();
+    request.on("end", () => response.destroy());
+  });
+  try {
+    await assert.rejects(streamFetch(`${agent.url}/action`, { method: "POST", body: "{}" }),
+      (error: unknown) => error instanceof StreamFetchError && error.requestSent);
+  } finally { await agent.close(); }
 });
 
 test("ein Abbruch mitten im Rumpf beendet das Lesen und schließt die Verbindung zum Agenten", async () => {

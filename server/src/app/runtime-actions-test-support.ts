@@ -1,7 +1,7 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import express from "express";
-import { DEFAULT_HOST_THEME, CONTRACT_VERSION, type RuntimeAction, type LiveStatus,
+import { DEFAULT_HOST_THEME, CONTRACT_VERSION, type RuntimeAction,
   type HubContainerRuntimeResult, type HubStackRuntimeResult, type ExpectedStack } from "contract";
 import type { Auth } from "../platform/auth/auth.js";
 import { probeAgent, type HostAccess, type HostRecord, type HostRepository, type AgentHealth } from "../domain/hosts/index.js";
@@ -23,10 +23,10 @@ export function stackResult(action: RuntimeAction = "start", applyDefinition = t
 }
 export type AgentCall = { path: string; body: unknown; actor: string | undefined; secret: string | undefined; signal?: AbortSignal };
 export async function fixture(options: { monitorUnavailable?: boolean } = {}) {
-  const state: { role: string | null; health: AgentHealth; live: LiveStatus; mode: boolean; host: boolean;
+  const state: { role: string | null; health: AgentHealth; mode: boolean; host: boolean;
     agent: (request: express.Request, response: express.Response) => void } = {
     role: "admin", health: { reachable: true, version: "0.32.0", contractVersion: CONTRACT_VERSION, readOnly: false, entries: 1 },
-    live: "connected", mode: true, host: true,
+    mode: true, host: true,
     agent: (request, response) => {
       const action = String(request.params.action).replace(/-stream$/, "") as RuntimeAction;
       if (request.path.startsWith("/containers/")) response.json(containerResult(action));
@@ -77,7 +77,7 @@ export async function fixture(options: { monitorUnavailable?: boolean } = {}) {
       role: state.role } } : null } } as unknown as Auth,
     enrollment: {} as never, config: { wireguardEndpoint: "hub.example.org", wireguardPort: 51821 },
     probeHost: async () => { probes += 1; return runtime ? probeAgent(host.agentUrl) : state.health; },
-    liveEvents: { ...runtime, hostStatus: () => runtime?.hostStatus(host.id) ?? state.live,
+    liveEvents: { ...runtime,
       refresh: async (hostId: string, target: RefreshTarget) => {
         refreshes.push({ hostId, target }); return runtime ? runtime.refresh(hostId, target) : [];
       } } as unknown as LiveEvents

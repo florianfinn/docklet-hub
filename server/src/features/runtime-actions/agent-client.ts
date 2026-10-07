@@ -1,14 +1,12 @@
 import { containerRuntimeResultSchema, stackRuntimeResultSchema, stackActionStreamLineSchema,
   hubContainerRuntimeResultSchema, hubStackRuntimeResultSchema, readNdjson,
   type RuntimeAction } from "contract";
-import { AgentError, agentPost, agentStreamPost, streamBodyOf, type AgentTarget, type RequestOptions }
+import { AgentError, agentStreamPost, streamBodyOf, type AgentTarget, type RequestOptions }
   from "../../platform/agent-transport/protocol.js";
 import { watchStreamRejection, agentFailureReason } from "../../platform/agent-transport/stream-rejection.js";
 import type { AgentStreamRelay } from "../../platform/streams/agent-stream-relay.js";
 import { runtimeErrorKey, runtimeRejection } from "./rejections.js";
-
-// Covers the 60-second queue and the longest bounded agent action, plus transport reserve.
-export const RUNTIME_TIMEOUT_MS = 690_000;
+import { RUNTIME_TIMEOUT_MS, runtimePost, runtimeFetch, runtimeJson } from "./transport.js";
 
 function invalidResponse(): AgentError {
   return new AgentError("Ungültiges Laufzeitergebnis.", 502, { detail: { error: "runtime-invalid-response" } });
@@ -29,14 +27,13 @@ export function stackResult(raw: unknown) {
 
 export async function runContainer(target: AgentTarget, id: string, action: RuntimeAction, body: unknown,
   options: RequestOptions) {
-  return containerResult(await agentPost(target, `/containers/${encodeURIComponent(id)}/${action}`, body,
-    { ...options, timeoutMs: RUNTIME_TIMEOUT_MS }));
+  return containerResult(await runtimePost(target, `/containers/${encodeURIComponent(id)}/${action}`, body, options));
 }
 
 export async function runStack(target: AgentTarget, id: string, action: RuntimeAction, body: unknown,
   options: RequestOptions, relay: AgentStreamRelay) {
   const path = `/stacks/${encodeURIComponent(id)}/actions/${action}`;
-  const watch = watchStreamRejection(options.fetchImpl);
+  const watch = watchStreamRejection(runtimeFetch(options.fetchImpl));
   let response: Response;
   try {
     response = await agentStreamPost(target, `${path}-stream`, body,
@@ -48,13 +45,12 @@ export async function runStack(target: AgentTarget, id: string, action: RuntimeA
     if (!(error instanceof AgentError) || error.status !== 404 ||
       (reason !== null && reason !== "not-found" && reason !== "unknown-route")) throw error;
     relay.signal.throwIfAborted();
-    const result = stackResult(await agentPost(target, path, body,
-      { ...options, signal: relay.signal, timeoutMs: RUNTIME_TIMEOUT_MS }));
+    const result = stackResult(await runtimePost(target, path, body, { ...options, signal: relay.signal }));
     await relay.write({ kind: "result", status: 200, body: result });
     return;
   }
   if (!response.headers.get("content-type")?.includes("application/x-ndjson")) {
-    const result = stackResult(await response.json().catch(() => { throw invalidResponse(); }));
+    const result = stackResult(await runtimeJson(response));
     await relay.write({ kind: "result", status: response.status, body: result });
     return;
   }

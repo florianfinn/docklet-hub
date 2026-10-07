@@ -12,7 +12,7 @@ export const HUB_RUNTIME_ERRORS = [
   "scaled-service-unsupported", "ambiguous-registry-service", "stack-service-gate-denied", "container-gone",
   "compose-project-name-missing", "invalid-compose-project-name", "compose-anchor-missing",
   "compose-project-name-collision", "hardening-violated",
-  "runtime-host-offline", "runtime-agent-unreachable", "runtime-agent-failed",
+  "runtime-host-offline", "runtime-agent-unreachable", "runtime-outcome-unknown", "runtime-agent-failed",
   "runtime-invalid-response", "runtime-stream-broken", "invalid-input", "host-unknown",
   "container-unknown", "agent-outdated", "forbidden-origin", "admin-required", "unauthenticated"
 ] as const;
@@ -30,6 +30,7 @@ export const hubStackRuntimeResultSchema = z.object({
 export type HubContainerRuntimeResult = z.infer<typeof hubContainerRuntimeResultSchema>;
 export type HubStackRuntimeResult = z.infer<typeof hubStackRuntimeResultSchema>;
 export const hubStackActionStreamLineSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("queued") }),
   z.object({ kind: z.literal("start"), action: runtimeActionSchema, projectName: z.string(), applyDefinition: z.boolean() }),
   z.object({ kind: z.literal("progress"), service: runtimeServiceResultSchema }),
   z.object({ kind: z.literal("result"), status: z.number(), body: hubStackRuntimeResultSchema }),

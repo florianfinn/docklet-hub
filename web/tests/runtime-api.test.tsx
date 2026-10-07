@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { type HubStackActionStreamLine, type HubContainerRuntimeResult, HUB_RUNTIME_ERRORS } from "contract";
-import { runContainerAction, runStackAction, runtimeActionErrorOf } from "../src/features/containers/api.js";
+import { runContainerAction, runStackAction, runtimeActionErrorOf, runtimeActionResultOf } from "../src/features/containers/api.js";
 import { ApiError } from "../src/platform/http/transport.js";
 
 const expectedContainer = { containerId: "demo/id", status: "running", startedAt: null };
@@ -26,6 +26,7 @@ for (const action of ["start", "stop", "restart"] as const) test(`web container 
 
 test("web stack stream preserves service progress and partial result with no mode from the caller", async (t) => {
   const events: HubStackActionStreamLine[] = [
+    { kind: "queued" },
     { kind: "start", action: "start", projectName: "demo", applyDefinition: false },
     { kind: "progress", service: stackResult.services[0] },
     { kind: "result", status: 502, body: { ...stackResult, ok: false, outcome: "partial", error: "runtime-target-not-reached" } }
@@ -42,6 +43,23 @@ test("web stack stream preserves service progress and partial result with no mod
   const seen: HubStackActionStreamLine[] = [];
   await runStackAction("demo/host", "demo/id", "start", expectedStack, (event) => { seen.push(event); }, caller.signal);
   assert.deepEqual(seen, events);
+});
+
+test("web exposes the sanitized container result of a 502 and rejects incomplete error results", async (t) => {
+  const failed = { ...result, ok: false, outcome: "failed", error: "runtime-target-not-reached" };
+  t.mock.method(globalThis, "fetch", async () => Response.json({ ...failed, stderr: "private diagnostic" }, { status: 502 }));
+  await assert.rejects(runContainerAction("demo", "demo", "start", expectedContainer), (error: unknown) => {
+    assert.equal(error instanceof ApiError && error.status === 502, true);
+    assert.equal(runtimeActionErrorOf(error), "runtime-target-not-reached");
+    assert.deepEqual(runtimeActionResultOf(error), failed);
+    return true;
+  });
+  for (const body of [{ error: "runtime-outcome-unknown" }, { ...failed, state: null },
+    { ...failed, outcome: "unknown" }, { ...failed, error: "private diagnostic" }, result]) {
+    assert.equal(runtimeActionResultOf(new ApiError(502, JSON.stringify(body))), null);
+  }
+  assert.equal(runtimeActionResultOf(new ApiError(502, "invalid JSON")), null);
+  assert.equal(runtimeActionResultOf(new Error("private diagnostic")), null);
 });
 
 test("web reads synchronous stack fallback and preserves every stable HTTP error key", async (t) => {

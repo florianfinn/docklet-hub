@@ -90,9 +90,14 @@ tragen eigene stabile Schlüssel aus `contract/src/api/runtime-actions.ts`,
 insbesondere `state-changed`, `action-queue-timeout`, `action-caller-disconnected`,
 `runtime-target-not-reached` und `scaled-service-unsupported`. Diagnosetexte,
 Engine-Meldungen und zusätzliche Agent-Felder gelangen nicht ins Web.
-Unbekannte Agent-Schlüssel ergeben `runtime-agent-failed`, Transportfehler
-`runtime-agent-unreachable`, unlesbare Ergebnisse `runtime-invalid-response`
-und ein abgerissener oder unvollständiger Stack-Strom `runtime-stream-broken`.
+Unbekannte Agent-Schlüssel ergeben `runtime-agent-failed`. Ein sicher vor dem
+Versand gescheiterter Verbindungsaufbau ergibt `runtime-agent-unreachable`;
+Fristablauf oder Verbindungsabriss nach dem Versand ergibt `runtime-outcome-unknown`,
+weil die Aktion auf dem Host bereits laufen kann. Unlesbare Ergebnisse ergeben
+`runtime-invalid-response`, ein abgerissener oder unvollständiger Stack-Strom
+`runtime-stream-broken`. Synchrone Laufzeitaufrufe verwenden denselben HTTP-Transport
+ohne implizite Kopfzeilenfrist wie die Ströme; ihre Gesamtfrist beträgt 690 Sekunden
+für Warteschlange, Agent-Aktion und Transportreserve.
 
 Die gemeinsame Erreichbarkeitsprüfung bestimmt, ob ein Host Aktionen annehmen
 kann; ein als offline erkannter Host erhält `503 runtime-host-offline` ohne

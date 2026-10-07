@@ -5,6 +5,7 @@ import test from "node:test";
 import { stackActionStreamLineSchema, type StackRuntimeResult } from "contract";
 import { stackRuntimeResponder } from "./runtime/action-stream.js";
 import { actionConnection } from "./runtime/action-connection.js";
+import { KeyedMutex } from "./concurrency.js";
 
 class Response extends EventEmitter {
   headersSent = false;
@@ -40,12 +41,49 @@ test("stack stream starts under the operation hook and carries service progress 
 test("the synchronous fallback has the same status and body", () => {
   const response = new Response();
   const responder = stackRuntimeResponder(response.asHttp(), "start", "app", false);
+  responder.onQueued();
   responder.onStart(false);
   responder.onProgress(service);
   responder.finish({ status: 200, body });
   assert.equal(response.status, 200);
   assert.deepEqual(JSON.parse(response.chunks.join("")), body);
   assert.equal(response.headers["content-type"], "application/json; charset=utf-8");
+});
+
+test("a queued stack signals waiting before lock handoff, then starts without sending headers twice", async () => {
+  const mutex = new KeyedMutex();
+  let release!: () => void;
+  const active = mutex.runExclusive("app", () => new Promise<void>((resolve) => { release = resolve; }));
+  const response = new Response();
+  const responder = stackRuntimeResponder(response.asHttp(), "start", "app", true);
+  let headers = 0;
+  const writeHead = response.writeHead.bind(response);
+  response.writeHead = (...args) => { headers++; writeHead(...args); };
+  const pending = mutex.runExclusive("app", async () => {
+    responder.onStart(false);
+    responder.finish({ status: 200, body });
+  }, { waitMs: 1000, onQueued: responder.onQueued });
+  assert.deepEqual(response.chunks.map((chunk) => JSON.parse(chunk)), [{ kind: "queued" }]);
+  release();
+  await Promise.all([active, pending]);
+  assert.deepEqual(response.chunks.map((chunk) => stackActionStreamLineSchema.parse(JSON.parse(chunk)).kind),
+    ["queued", "start", "result"]);
+  assert.equal(headers, 1);
+  const immediate = new Response();
+  const immediateResponder = stackRuntimeResponder(immediate.asHttp(), "start", "app", true);
+  await mutex.runExclusive("app", async () => immediateResponder.onStart(false),
+    { waitMs: 1000, onQueued: immediateResponder.onQueued });
+  assert.deepEqual(immediate.chunks.map((chunk) => JSON.parse(chunk).kind), ["start"]);
+});
+
+test("queue failure after the waiting line keeps its status in the terminal result", () => {
+  const response = new Response();
+  const responder = stackRuntimeResponder(response.asHttp(), "start", "app", true);
+  responder.onQueued();
+  const failed = { ...body, ok: false, outcome: "failed" as const, error: "action-queue-timeout" };
+  responder.finish({ status: 409, body: failed });
+  assert.deepEqual(response.chunks.map((chunk) => stackActionStreamLineSchema.parse(JSON.parse(chunk))),
+    [{ kind: "queued" }, { kind: "result", status: 409, body: failed }]);
 });
 
 test("preflight failure before the first stream line keeps its HTTP status", () => {

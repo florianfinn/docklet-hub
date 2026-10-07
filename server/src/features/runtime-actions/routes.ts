@@ -1,4 +1,4 @@
-import type { Request, Response, Router } from "express";
+import type { Request, RequestHandler, Response, Router } from "express";
 import type { Pool } from "pg";
 import { runtimeActionSchema } from "contract";
 import { createHostAccess, openContainerAccess, resolveProbeHost, type HostRepository,
@@ -20,6 +20,9 @@ export type RuntimeActionsRouteOptions = {
 };
 
 export function registerRuntimeActionsRoutes(router: Router, options: RuntimeActionsRouteOptions) {
+  const runtimeActionOnly: RequestHandler = (request, _response, next) => {
+    next(runtimeActionSchema.safeParse(request.params.action).success ? undefined : "route");
+  };
   const hosts = createHostAccess(options);
   const probe = resolveProbeHost(options);
   const service = createRuntimeActionsService({
@@ -57,6 +60,6 @@ export function registerRuntimeActionsRoutes(router: Router, options: RuntimeAct
       rejection(error, response, false);
     } finally { response.off("close", abort); }
   });
-  router.post("/hosts/:hostId/containers/:containerId/:action", requireAdmin(options.auth), handler());
-  router.post("/hosts/:hostId/stacks/:containerId/actions/:action", requireAdmin(options.auth), handler(true));
+  router.post("/hosts/:hostId/containers/:containerId/:action", requireAdmin(options.auth), runtimeActionOnly, handler());
+  router.post("/hosts/:hostId/stacks/:containerId/actions/:action", requireAdmin(options.auth), runtimeActionOnly, handler(true));
 }

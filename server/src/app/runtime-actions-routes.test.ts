@@ -38,50 +38,35 @@ for (const stack of [false, true]) for (const action of ["start", "stop", "resta
 
 for (const stack of [false, true]) test(`${stack ? "stack" : "container"} offline and outdated hosts reject independently of live status`, async (t) => {
   const f = await fixture(); t.after(f.close);
-  for (const live of ["connected", "disconnected"] as const) {
-    f.state.live = live;
-    f.state.health = { reachable: false, error: "private diagnostic" };
-    assert.deepEqual(await f.call(stack).then(({ status, body }) => ({ status, body })),
-      { status: 503, body: { error: "runtime-host-offline" } });
-    f.state.health = { reachable: true, version: "0.1.0", contractVersion: 1, readOnly: false, entries: 1 };
-    assert.equal((await f.call(stack)).body.error, "agent-outdated");
-  }
-  assert.equal(f.probes, 4);
+  f.state.health = { reachable: false, error: "private diagnostic" };
+  assert.deepEqual(await f.call(stack).then(({ status, body }) => ({ status, body })),
+    { status: 503, body: { error: "runtime-host-offline" } });
+  f.state.health = { reachable: true, version: "0.1.0", contractVersion: 1, readOnly: false, entries: 1 };
+  assert.equal((await f.call(stack)).body.error, "agent-outdated");
+  assert.equal(f.probes, 2);
   assert.equal(f.calls.length, 0);
-  assert.equal(f.refreshes.length, 4);
+  assert.equal(f.refreshes.length, 2);
 });
-
-for (const stack of [false, true]) for (const action of ["start", "stop", "restart"] as const)
-  test(`${stack ? "stack" : "container"} ${action} remains available when the live stream is disconnected`, async (t) => {
-    const f = await fixture(); t.after(f.close);
-    f.state.live = "disconnected";
-    const response = await f.call(stack, action);
-    assert.equal(response.status, 200);
-    assert.deepEqual(stack ? response.body[0].body : response.body,
-      stack ? stackResult(action, action !== "stop") : containerResult(action));
-    assert.equal(f.probes, 1);
-    assert.equal(f.calls.length, 2);
-    assert.equal(f.refreshes.length, 1);
-    assert.equal(f.state.live, "disconnected");
-  });
 
 for (const stack of [false, true]) test(`${stack ? "stack" : "container"} invalid expectations cannot execute`, async (t) => {
   const f = await fixture(); t.after(f.close);
   for (const body of [{}, { expectedContainer: { ...EXPECTED, startedAt: 123 } }, { expectedStack: { ...STACK, services: 1 } }]) {
     assert.equal((await f.call(stack, "start", body)).body.error, "invalid-input");
   }
-  assert.equal((await f.call(stack, "apply")).body.error, "invalid-input");
+  assert.equal((await f.call(stack, "unknown-action")).body.error, "not-found");
   assert.equal(f.calls.length, 0);
 });
 
 test("monitor-events 503 leaves live status disconnected while healthy container and stack actions execute", { timeout: 5000 }, async (t) => {
   const f = await fixture({ monitorUnavailable: true }); t.after(f.close);
+  let status: string | undefined;
   await new Promise<void>((resolve) => {
     const unsubscribe = f.runtime!.subscribe((event) => {
-      if (event?.kind === "status" && event.status === "disconnected") { unsubscribe(); resolve(); }
+      if (event?.kind === "status") status = event.status;
+      if (event?.kind === "snapshot") status = event.hosts.find((host) => host.hostId === "demo-host")?.status;
+      if (status === "disconnected") resolve();
     });
     t.after(unsubscribe);
-    if (f.runtime!.hostStatus("demo-host") === "disconnected") { unsubscribe(); resolve(); }
   });
   assert.equal(f.calls.some((call) => call.path === "/monitor-events"), true);
   for (const stack of [false, true]) for (const action of ["start", "stop", "restart"] as const) {
@@ -89,7 +74,7 @@ test("monitor-events 503 leaves live status disconnected while healthy container
     assert.equal(response.status, 200);
     assert.deepEqual(stack ? response.body[0].body : response.body,
       stack ? stackResult(action, action !== "stop") : containerResult(action));
-    assert.equal(f.runtime!.hostStatus("demo-host"), "disconnected");
+    assert.equal(status, "disconnected");
   }
   assert.equal(f.probes, 6);
   assert.equal(f.calls.filter((call) => call.path.endsWith("/health")).length >= 6, true);
@@ -125,7 +110,7 @@ test("container error results and stack partial progress retain state and drop d
   f.state.agent = (_request, response) => response.status(502).json({ ...failed, stderr: "private diagnostic" });
   assert.deepEqual((await f.call()).body, failed);
   const partial = { ...stackResult(), ok: false, outcome: "partial", error: "runtime-target-not-reached" };
-  const events = [{ kind: "start", action: "start", projectName: "demo", applyDefinition: true },
+  const events = [{ kind: "queued" }, { kind: "start", action: "start", projectName: "demo", applyDefinition: true },
     { kind: "progress", service: partial.services[0] }, { kind: "result", status: 502, body: partial }];
   f.state.agent = (_request, response) => response.type("application/x-ndjson")
     .end(events.map((line) => JSON.stringify({ ...line, stderr: "private diagnostic" })).join("\n") + "\n");
@@ -225,8 +210,8 @@ test("seen state and caller fields cannot override the session actor or saved st
 test("transport failures and management-lock diagnostics become stable hub keys", async (t) => {
   const f = await fixture(); t.after(f.close);
   f.state.agent = (_request, response) => response.destroy();
-  assert.deepEqual((await f.call()).body, { error: "runtime-agent-unreachable" });
-  assert.deepEqual((await f.call(true)).body, { error: "runtime-agent-unreachable" });
+  assert.deepEqual((await f.call()).body, { error: "runtime-outcome-unknown" });
+  assert.deepEqual((await f.call(true)).body, { error: "runtime-outcome-unknown" });
   f.state.agent = (_request, response) => response.status(403).json({ error: "self-management-locked: /private/diagnostic" });
   assert.deepEqual((await f.call()).body, { error: "self-management-locked" });
   assert.deepEqual((await f.call(true)).body, { error: "self-management-locked" });

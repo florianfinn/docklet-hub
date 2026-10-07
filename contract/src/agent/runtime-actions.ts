@@ -60,6 +60,7 @@ export const containerRuntimeResultSchema = z.object({
 export type ContainerRuntimeResult = z.infer<typeof containerRuntimeResultSchema>;
 
 export const stackActionStreamLineSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("queued") }),
   z.object({ kind: z.literal("start"), action: runtimeActionSchema, projectName: z.string(), applyDefinition: z.boolean() }),
   z.object({ kind: z.literal("progress"), service: runtimeServiceResultSchema }),
   z.object({ kind: z.literal("result"), status: z.number(), body: stackRuntimeResultSchema }),

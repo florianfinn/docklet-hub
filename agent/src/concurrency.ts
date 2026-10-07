@@ -55,7 +55,7 @@ export class KeyedMutex {
   async runExclusive<T>(
     key: string,
     operation: () => Promise<T>,
-    options?: { waitMs: number; signal?: AbortSignal }
+    options?: { waitMs: number; signal?: AbortSignal; onQueued?: () => void }
   ): Promise<T> {
     if (options?.signal?.aborted) throw new ActionQueueError("action-caller-disconnected");
     if (this.active.has(key)) {
@@ -79,6 +79,8 @@ export class KeyedMutex {
         const timer = setTimeout(() => fail("action-queue-timeout"), options.waitMs);
         queue.push(waiter);
         options.signal?.addEventListener("abort", abort, { once: true });
+        try { options.onQueued?.(); }
+        catch (error) { remove(); reject(error); }
       });
     } else {
       this.active.add(key);
