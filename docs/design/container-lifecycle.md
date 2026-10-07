@@ -94,9 +94,13 @@ Unbekannte Agent-Schlüssel ergeben `runtime-agent-failed`, Transportfehler
 `runtime-agent-unreachable`, unlesbare Ergebnisse `runtime-invalid-response`
 und ein abgerissener oder unvollständiger Stack-Strom `runtime-stream-broken`.
 
-Ein im Live-Stand getrennter Host wird vor jedem Agentkontakt sofort mit
-`503 runtime-host-offline` abgelehnt. Derselbe Schlüssel gilt für einen durch
-die Erreichbarkeitsprüfung als offline erkannten Host. Es gibt keine Vormerkung.
+Die gemeinsame Erreichbarkeitsprüfung bestimmt, ob ein Host Aktionen annehmen
+kann; ein als offline erkannter Host erhält `503 runtime-host-offline` ohne
+Vormerkung. Der Live-Stand beschreibt dagegen die Beobachtung: `/monitor-events`
+kann wegen fehlender Docker-Beobachtung mit `503` antworten, während `/health`
+erreichbar bleibt. Ein solcher Host darf Aktionen ausführen. Die erwarteten
+Zustände werden weiterhin vom Agent geprüft; ein veralteter Client-Stand kann
+deshalb mit `state-changed` abgelehnt werden.
 Nach Erfolg, Teilfehler, Fehler oder Browserabbruch löst der Hub einen gezielten
 Live-Refresh aus; dessen Fehlschlag oder Dauer überdeckt das Aktionsergebnis
 nicht. Der Browserabbruch beendet auch den Agentkontakt im synchronen Rückfall.

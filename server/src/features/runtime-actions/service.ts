@@ -8,7 +8,7 @@ import * as agentClient from "./agent-client.js";
 export type RuntimeActionsDeps = {
   openContainer: (request: ContainerAccessRequest) => Promise<ContainerAccessResult>;
   readApplyDefinition: () => Promise<boolean>;
-  liveEvents?: Pick<LiveEvents, "refresh" | "hostStatus">;
+  liveEvents?: Pick<LiveEvents, "refresh">;
   agent?: Pick<typeof agentClient, "runContainer" | "runStack">;
 };
 function rejected(status: number, error: string): never {
@@ -26,7 +26,7 @@ export function createRuntimeActionsService(deps: RuntimeActionsDeps) {
       ? { project: input.data.expectedStack.projectName } : { containerId: ref.containerId };
     try {
       signal.throwIfAborted();
-      if (deps.liveEvents?.hostStatus(ref.hostId) === "disconnected") rejected(503, "runtime-host-offline");
+      // Monitor availability is independent of the health check performed by openContainer.
       const opened = await deps.openContainer(ref);
       if (!opened.ok) {
         const failure = opened.failure;

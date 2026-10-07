@@ -36,20 +36,34 @@ for (const stack of [false, true]) for (const action of ["start", "stop", "resta
     }
   });
 
-for (const stack of [false, true]) test(`${stack ? "stack" : "container"} offline, disconnected and outdated hosts never reach the agent`, async (t) => {
+for (const stack of [false, true]) test(`${stack ? "stack" : "container"} offline and outdated hosts reject independently of live status`, async (t) => {
   const f = await fixture(); t.after(f.close);
-  f.state.live = "disconnected";
-  assert.deepEqual(await f.call(stack).then(({ status, body }) => ({ status, body })),
-    { status: 503, body: { error: "runtime-host-offline" } });
-  assert.equal(f.probes, 0);
-  f.state.live = "connected";
-  f.state.health = { reachable: false, error: "private diagnostic" };
-  assert.equal((await f.call(stack)).body.error, "runtime-host-offline");
-  f.state.health = { reachable: true, version: "0.1.0", contractVersion: 1, readOnly: false, entries: 1 };
-  assert.equal((await f.call(stack)).body.error, "agent-outdated");
+  for (const live of ["connected", "disconnected"] as const) {
+    f.state.live = live;
+    f.state.health = { reachable: false, error: "private diagnostic" };
+    assert.deepEqual(await f.call(stack).then(({ status, body }) => ({ status, body })),
+      { status: 503, body: { error: "runtime-host-offline" } });
+    f.state.health = { reachable: true, version: "0.1.0", contractVersion: 1, readOnly: false, entries: 1 };
+    assert.equal((await f.call(stack)).body.error, "agent-outdated");
+  }
+  assert.equal(f.probes, 4);
   assert.equal(f.calls.length, 0);
-  assert.equal(f.refreshes.length, 3);
+  assert.equal(f.refreshes.length, 4);
 });
+
+for (const stack of [false, true]) for (const action of ["start", "stop", "restart"] as const)
+  test(`${stack ? "stack" : "container"} ${action} remains available when the live stream is disconnected`, async (t) => {
+    const f = await fixture(); t.after(f.close);
+    f.state.live = "disconnected";
+    const response = await f.call(stack, action);
+    assert.equal(response.status, 200);
+    assert.deepEqual(stack ? response.body[0].body : response.body,
+      stack ? stackResult(action, action !== "stop") : containerResult(action));
+    assert.equal(f.probes, 1);
+    assert.equal(f.calls.length, 2);
+    assert.equal(f.refreshes.length, 1);
+    assert.equal(f.state.live, "disconnected");
+  });
 
 for (const stack of [false, true]) test(`${stack ? "stack" : "container"} invalid expectations cannot execute`, async (t) => {
   const f = await fixture(); t.after(f.close);
@@ -58,6 +72,32 @@ for (const stack of [false, true]) test(`${stack ? "stack" : "container"} invali
   }
   assert.equal((await f.call(stack, "apply")).body.error, "invalid-input");
   assert.equal(f.calls.length, 0);
+});
+
+test("monitor-events 503 leaves live status disconnected while healthy container and stack actions execute", { timeout: 5000 }, async (t) => {
+  const f = await fixture({ monitorUnavailable: true }); t.after(f.close);
+  await new Promise<void>((resolve) => {
+    const unsubscribe = f.runtime!.subscribe((event) => {
+      if (event?.kind === "status" && event.status === "disconnected") { unsubscribe(); resolve(); }
+    });
+    t.after(unsubscribe);
+    if (f.runtime!.hostStatus("demo-host") === "disconnected") { unsubscribe(); resolve(); }
+  });
+  assert.equal(f.calls.some((call) => call.path === "/monitor-events"), true);
+  for (const stack of [false, true]) for (const action of ["start", "stop", "restart"] as const) {
+    const response = await f.call(stack, action);
+    assert.equal(response.status, 200);
+    assert.deepEqual(stack ? response.body[0].body : response.body,
+      stack ? stackResult(action, action !== "stop") : containerResult(action));
+    assert.equal(f.runtime!.hostStatus("demo-host"), "disconnected");
+  }
+  assert.equal(f.probes, 6);
+  assert.equal(f.calls.filter((call) => call.path.endsWith("/health")).length >= 6, true);
+  const actions = f.calls.filter((call) => call.path !== "/containers" &&
+    (call.path.startsWith("/containers/") || call.path.startsWith("/stacks/")));
+  assert.equal(actions.length, 6);
+  assert.equal(f.refreshes.length, 6);
+  assert.equal(actions.every((call) => call.actor === "user:demo-human"), true);
 });
 
 for (const stack of [false, true]) test(`${stack ? "stack" : "container"} every stable agent refusal is preserved without diagnostics or fallback`, async (t) => {
