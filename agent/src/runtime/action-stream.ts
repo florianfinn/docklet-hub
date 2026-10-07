@@ -3,10 +3,20 @@ import type { RuntimeAction, RuntimeServiceResult, StackActionStreamLine, StackR
 import { sendLine } from "../ndjson-line.js";
 
 export function stackRuntimeResponder(response: http.ServerResponse, action: RuntimeAction, projectName: string, streaming: boolean) {
+  const open = () => {
+    if (!response.headersSent) response.writeHead(200, {
+      "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store, no-transform"
+    });
+  };
   return {
+    onQueued: () => {
+      if (!streaming || response.destroyed) return;
+      open();
+      sendLine(response, { kind: "queued" } satisfies StackActionStreamLine);
+    },
     onStart: (applyDefinition: boolean) => {
       if (!streaming || response.destroyed) return;
-      response.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store, no-transform" });
+      open();
       sendLine(response, { kind: "start", action, projectName, applyDefinition } satisfies StackActionStreamLine);
     },
     onProgress: (service: RuntimeServiceResult) => {

@@ -30,13 +30,14 @@ export type Route = {
 };
 
 export const ROUTES: readonly Route[] = [
-  { methods: ["PUT"], pattern: "/self-healing/config", mutating: true, audit: "self-healing-config", onlyActor: SELF_HEALING_ACTOR },
   // --- Before the secret check ------------------------------------------
   { methods: ["GET"], pattern: "/health", public: true, mutating: false, audit: "health" },
 
   // The response contains the whole route surface, so it stays behind the
   // secret.
   { methods: ["GET"], pattern: "/contract", mutating: false, audit: "contract" },
+
+  { methods: ["PUT"], pattern: "/self-healing/config", mutating: true, audit: "self-healing-config", onlyActor: SELF_HEALING_ACTOR },
 
   // --- Information and control on the individual container --------------
   { methods: ["GET"], pattern: "/containers", mutating: false, audit: "list" },

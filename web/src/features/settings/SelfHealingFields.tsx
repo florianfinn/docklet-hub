@@ -32,7 +32,7 @@ export function SelfHealingFields({ value, onChange, editable, busy, onSave }: {
           max={SELF_HEALING_LIMITS.attempts.max} value={displayNumber(value.attempts)} disabled={disabled}
           aria-describedby="self-healing-limits" required onChange={(event) => {
             const attempts = event.target.valueAsNumber;
-            const retryDelaysSeconds = Number.isInteger(attempts) && attempts >= 1 && attempts <= 10
+            const retryDelaysSeconds = Number.isInteger(attempts) && attempts >= SELF_HEALING_LIMITS.attempts.min && attempts <= SELF_HEALING_LIMITS.attempts.max
               ? Array.from({ length: attempts }, (_, index) => value.retryDelaysSeconds[index]
                 ?? DEFAULT_SELF_HEALING_CONFIG.retryDelaysSeconds[index] ?? value.retryDelaysSeconds.at(-1) ?? 300)
               : value.retryDelaysSeconds;

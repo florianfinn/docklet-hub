@@ -33,3 +33,19 @@ test("ungültige Compose-Wahl und fehlgeschlagene Speicherung brechen das Anlege
   await assert.rejects(failed.databaseHooks.user.create.before({} as never,
     { body: { applyComposeDefinition: false } } as never), /storage-failed/);
 });
+
+test("setup middleware rejects invalid runtime settings before claiming a slot or writing", async () => {
+  let queries = 0;
+  let writes = 0;
+  const config = authOptions({ pool: { query: async () => { queries += 1; throw new Error("Unexpected SQL"); } } as unknown as Pool,
+    secret: "x".repeat(32), baseUrl: "https://hub.example.org", writeSetupRuntime: async () => { writes += 1; } });
+  for (const applyComposeDefinition of ["false", null, 0, {}, []]) {
+    await assert.rejects(config.hooks.before({ path: "/sign-up/email", body: { applyComposeDefinition },
+      context: {} } as never), (error: unknown) => {
+      const apiError = error as { status?: string; body?: { code?: string } };
+      return apiError.status === "BAD_REQUEST" && apiError.body?.code === "INVALID_RUNTIME_SETTINGS";
+    });
+  }
+  assert.equal(queries, 0);
+  assert.equal(writes, 0);
+});

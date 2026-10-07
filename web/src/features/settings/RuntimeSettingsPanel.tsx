@@ -16,7 +16,7 @@ export function RuntimeSettingsPanel({ role }: { role: Role }) {
   const t = useTranslations();
   const editable = role === "admin";
   const client = useQueryClient();
-  const query = useQuery({ queryKey: QUERY_KEY, queryFn: fetchRuntimeSettings, refetchInterval: 5000 });
+  const query = useQuery({ queryKey: QUERY_KEY, queryFn: fetchRuntimeSettings, refetchInterval: (state) => editable && state.state.data?.selfHealing.hosts.some((host) => host.status !== "synced") ? 5000 : false });
   const [runtimeDraft, setRuntimeDraft] = useState<RuntimeSettings>();
   const [healingDraft, setHealingDraft] = useState<SelfHealingConfig>();
   const runtime = runtimeDraft ?? query.data?.runtime;

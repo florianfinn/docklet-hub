@@ -99,11 +99,21 @@ test("ungültige Eingaben und fehlende Adminrechte schreiben nichts", async () =
   }
 });
 
-test("fehlgeschlagene Quittung bleibt sichtbar und erhält die letzte bestätigte Revision", async () => {
+test("fehlgeschlagene neue Revision bleibt sichtbar und erhält die letzte bestätigte Revision", async () => {
   const f = runtimePool();
   await recordSelfHealingDelivery(f.pool, "demo-host", 1, "synced");
   await recordSelfHealingDelivery(f.pool, "demo-host", 2, "failed");
+  f.state.revision = 2;
   const result = await readSelfHealingSettings(f.pool);
   assert.equal(result.hosts[0].status, "failed");
   assert.equal(result.hosts[0].appliedRevision, 1);
+});
+
+test("a failed retransmission cannot hide an acknowledged current revision", async () => {
+  const f = runtimePool();
+  await recordSelfHealingDelivery(f.pool, "demo-host", 1, "synced");
+  await recordSelfHealingDelivery(f.pool, "demo-host", 1, "failed");
+  assert.equal((await readSelfHealingSettings(f.pool)).hosts[0].status, "synced");
+  f.state.revision = 2;
+  assert.equal((await readSelfHealingSettings(f.pool)).hosts[0].status, "failed");
 });
