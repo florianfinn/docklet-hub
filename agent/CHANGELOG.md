@@ -2,6 +2,30 @@
 
 ## Unveröffentlicht
 
+- Begrenzte Selbstheilung startet bestehende erlaubte Container nach unerwartetem
+  `die` mit Exit-Code ungleich 0. Die Neustartregel `no` gibt den Agent frei;
+  `on-failure:N` erst nach ausgeschöpften Docker-Wiederholungen im gestoppten
+  Zustand. Unbegrenztes `on-failure`, `always` und `unless-stopped` werden beobachtet.
+  Manuelle Aktionen und Heilung teilen Prüfkette, Zustandsprüfung, Warteschlange
+  und genau einen Aktionsaudit mit `system:self-healing`.
+- `self-healing-state.json` speichert Budget, absolute Abstände, Startkennzeichnung,
+  Stabilitätsfenster, Wartungen und Vorfälle atomar mit Modus 0600 sowie Datei-
+  und Verzeichnissynchronisierung. `RestartCount` wird relativ zum letzten
+  beobachteten Start ausgewertet. Unsichere reservierte Versuche nach einem
+  Agent-Abbruch bleiben verbraucht. Manuelle Starts und Quittieren füllen auf;
+  Docker-Wiederholungen und Heilungsstarts füllen nicht auf.
+- Vertragsversion 12 erhält `GET /self-healing/status`,
+  `PUT`/`DELETE /self-healing/maintenance` und
+  `POST /self-healing/incidents/acknowledge`. Die Schreibwege benötigen
+  `system:hub` oder einen menschlichen Akteur. Wartung gilt für ein Containerziel
+  oder alle aktuellen und späteren Services eines Projekts. Ihr Ende startet
+  nichts. Der Status liefert ohne Beobachtung `503`.
+- Ein Vorfall am Budget-Ende enthält stabile ID, Ursache, Versuchsergebnisse,
+  Handlungsschlüssel und höchstens 50 bereinigte Logzeilen. Ohne Bereinigung
+  fehlt der Auszug mit `redaction-unavailable`; ohne lesbare Logs mit
+  `logs-unavailable`. Geschlossene Vorfälle tragen Abschlusszeit und Grund.
+  Es bleiben alle offenen und die letzten 256 geschlossenen Vorfälle gespeichert.
+
 - `PUT /self-healing/config` übernimmt die globale Selbstheilungskonfiguration,
   gebunden an `system:hub`. Alle fünf Konfigurationsfelder sind Pflichtwerte;
   der gemeinsame Vertrag prüft Grenzen und einen Abstand je Versuch.

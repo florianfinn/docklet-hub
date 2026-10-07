@@ -23,7 +23,7 @@ export function stopIntentTarget(container: RawInspect): StopIntentTarget | null
   return containerName ? { kind: "container", containerName } : null;
 }
 
-function targetKey(target: StopIntentTarget): string {
+export function targetKey(target: StopIntentTarget): string {
   return JSON.stringify(target.kind === "compose"
     ? [target.kind, target.projectName, target.serviceName]
     : [target.kind, target.containerName]);

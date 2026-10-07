@@ -436,3 +436,15 @@ export {
   stopIntentTargetSchema, stopIntentSchema, containerExitSchema, stopIntentsResponseSchema,
   type StopIntentTarget, type StopIntent, type ContainerExit, type StopIntentsResponse
 } from "./agent/stop-intents.js";
+
+export {
+  SELF_HEALING_SYSTEM_ACTOR, SELF_HEALING_RECOMMENDATION,
+  selfHealingMaintenanceTargetSchema, selfHealingMaintenanceRequestSchema,
+  selfHealingTargetRequestSchema, selfHealingMaintenanceDeleteSchema, selfHealingMaintenanceSchema,
+  selfHealingAttemptSchema, selfHealingCauseSchema, selfHealingLogSchema, selfHealingIncidentSchema,
+  selfHealingBudgetSchema, selfHealingStatusResponseSchema
+} from "./agent/self-healing-status.js";
+export type {
+  SelfHealingMaintenanceTarget, SelfHealingMaintenance, SelfHealingAttempt, SelfHealingCause,
+  SelfHealingLog, SelfHealingIncident, SelfHealingStatusResponse
+} from "./agent/self-healing-status.js";

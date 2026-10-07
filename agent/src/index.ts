@@ -1,3 +1,4 @@
+import { startSelfHealing, stopSelfHealing } from "./runtime/self-healing.js";
 import path from "node:path";
 import { legacyEnvKeysInUse } from "./request-keys.js";
 import { startBootstrapRegistration } from "./bootstrap-registration.js";
@@ -41,7 +42,6 @@ try {
 }
 
 server.listen(config.listenPort, config.listenHost, async () => {
-  dockerEvents.start();
   console.log(
     `[agent] listening on ${config.listenHost}:${config.listenPort}, ` +
       `readOnly=${config.readOnly}, allowlist entries=${registry.size()}`
@@ -106,6 +106,8 @@ server.listen(config.listenPort, config.listenHost, async () => {
   // plausible.
   await determineOwnContainerId();
   await addOwnMounts();
+  startSelfHealing();
+  dockerEvents.start();
 
   // Try a first sample immediately; afterwards 60 points of 10 seconds each
   // hold the last ten minutes of history. The timer is not a second
@@ -165,6 +167,7 @@ server.listen(config.listenPort, config.listenHost, async () => {
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
+    stopSelfHealing();
     void dockerEvents.stop().finally(() => process.exit(0));
   });
 }

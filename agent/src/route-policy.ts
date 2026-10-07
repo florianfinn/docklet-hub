@@ -25,11 +25,17 @@ export type Route = {
   audit: string;
   // Additionally bound to exactly one caller.
   onlyActor?: string;
+  // Configuration controls accept the hub system actor or an attributed human.
+  hubActor?: true;
   // The name under which gate() sees the same route.
   gate?: string;
 };
 
 export const ROUTES: readonly Route[] = [
+  { methods: ["GET"], pattern: "/self-healing/status", mutating: false, audit: "self-healing-status" },
+  { methods: ["PUT"], pattern: "/self-healing/maintenance", mutating: true, audit: "self-healing-maintenance", hubActor: true },
+  { methods: ["DELETE"], pattern: "/self-healing/maintenance", mutating: true, audit: "self-healing-maintenance", hubActor: true },
+  { methods: ["POST"], pattern: "/self-healing/incidents/acknowledge", mutating: true, audit: "self-healing-acknowledge", hubActor: true },
   { methods: ["PUT"], pattern: "/self-healing/config", mutating: true, audit: "self-healing-config", onlyActor: SELF_HEALING_ACTOR },
   // --- Before the secret check ------------------------------------------
   { methods: ["GET"], pattern: "/health", public: true, mutating: false, audit: "health" },
@@ -255,7 +261,8 @@ export type RouteDecision =
 // A route that is not in the table passes and ends in the dispatcher's 404.
 export function checkRoute(method: string, pathname: string, actor: string | null): RouteDecision {
   const route = findRoute(method, pathname);
-  if (route?.onlyActor !== undefined && actor !== route.onlyActor) {
+  if ((route?.onlyActor !== undefined && actor !== route.onlyActor)
+    || (route?.hubActor && (!actor?.trim() || (actor.trim().startsWith("system:") && actor !== SELF_HEALING_ACTOR)))) {
     return { ok: false, status: 403, reason: "actor-not-allowed", audit: route.audit };
   }
   return { ok: true };

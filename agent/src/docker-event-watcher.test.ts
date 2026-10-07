@@ -292,3 +292,66 @@ test("repeated disconnects back off and a processed live event resets the delay"
   }
   assert.deepEqual(f.errors, []);
 });
+
+test("healing receives the same inspected and classified sequence with no additional event subscription", async (t) => {
+  const f = fixture(t);
+  const classifications: Array<string | null> = [];
+  const actions: string[] = [];
+  let reconciled = 0;
+  let observing = false;
+  f.watcher.attachLifecycle({
+    reconcile: (inspect) => { assert.equal(inspect.Id, id); reconciled++; },
+    observe: (event, inspect, classification) => {
+      assert.equal(inspect.Id, id); actions.push(event.action); classifications.push(classification);
+    },
+    setObserving: (value) => { observing = value; }, fail: () => { throw new Error("unexpected failure"); }
+  });
+  f.watcher.start(); await until(() => f.watcher.isObserving());
+  f.emit("kill"); f.emit("die"); f.emit("start"); f.emit("die");
+  await until(() => actions.length === 4);
+  assert.deepEqual(actions, ["kill", "die", "start", "die"]);
+  assert.deepEqual(classifications, [null, "manual-stop", null, "unexpected"]);
+  assert.equal(reconciled, 1); assert.equal(f.subscriptions(), 1); assert.equal(observing, true);
+  await f.watcher.stop(); assert.equal(observing, false);
+});
+
+test("healing persistence failure makes healing unavailable while the sole watcher reconnects", async (t) => {
+  const f = fixture(t, async () => {}); let failed = false;
+  f.watcher.attachLifecycle({ reconcile: () => {}, setObserving: () => {},
+    observe: () => { throw new Error("healing storage unavailable"); }, fail: () => { failed = true; } });
+  f.watcher.start(); await until(() => f.watcher.isObserving());
+  f.emit("die"); await until(() => f.errors.length === 1);
+  assert.equal(failed, true);
+  await until(() => f.subscriptions() === 2 && f.watcher.isObserving());
+  assert.equal(f.subscriptions(), 2);
+});
+
+
+test("healing is suspended on disconnect and reconciled from fresh inventory before reconnect", async (t) => {
+  let resume!: () => void;
+  const f = fixture(t, async (_delayMs, signal) => {
+    await new Promise<void>((resolve) => {
+      resume = resolve;
+      signal.addEventListener("abort", () => resolve(), { once: true });
+    });
+  });
+  const sequence: string[] = [];
+  f.watcher.attachLifecycle({
+    reconcile: (inspect) => { sequence.push(`inventory:${inspect.State?.StartedAt ?? "initial"}`); },
+    observe: (event) => { sequence.push(event.action); },
+    setObserving: (value) => { sequence.push(`observing:${value}`); },
+    fail: () => { throw new Error("unexpected healing failure"); }
+  });
+  f.watcher.start(); await until(() => f.watcher.isObserving());
+  f.emit("die"); await until(() => sequence.includes("die"));
+  f.end(); await until(() => resume !== undefined);
+  f.setContainer({ ...container, State: { Running: false, StartedAt: "offline-start" } });
+  resume(); await until(() => f.subscriptions() === 2 && f.watcher.isObserving());
+  f.emitRaw({ action: "die", containerId: id, atMs: f.since()! * 1000 - 1 });
+  f.emit("stop");
+  const received: string[] = [];
+  f.watcher.subscribe((event) => received.push(event.action));
+  await until(() => received.includes("stop"));
+  assert.deepEqual(sequence, ["inventory:initial", "observing:true", "die", "observing:false",
+    "inventory:offline-start", "observing:true"]);
+});

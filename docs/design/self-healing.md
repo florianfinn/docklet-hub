@@ -22,6 +22,14 @@ Ein einziger Hintergrund-Watcher liest `/events` auch ohne Hub-Verbindung und ve
 
 ## Wer heilt und wann
 
+Bei Verlust der Ereignisbeobachtung verwirft der Heiler vorgemerkte Ausfälle,
+beendet wartende Heilungsaktionen und unterbricht das Stabilitätsfenster. Nach
+der Wiederverbindung gleicht er Startzeit, Container-ID und Neustartzähler mit
+dem aktuellen Inventar ab. Ein gestoppter Endzustand allein löst keine Heilung
+aus: Ereignisfolgen aus der Beobachtungslücke werden nicht rekonstruiert. Erst
+ein neu beobachteter unerwarteter Ausfall kann wieder einen Versuch auslösen;
+verbrauchtes Budget und offene Vorfälle bleiben erhalten.
+
 Die Selbstheilung läuft im Agent. Er erkennt Ausfälle und Stopp-Absichten aus denselben Docker-Ereignissen und heilt deshalb auch, solange der Tunnel zum Hub getrennt ist. Ein Hub als Auslöser würde jeden Verbindungsabbruch zu einer Lücke in der Selbstheilung machen.
 
 Auslöser ist nur ein unerwarteter Ausfall: ein `die` ohne zugeordnetes Stoppsignal mit einem Exit-Code ungleich 0. Ein Einmalauftrag mit Exit-Code 0 ist kein Ausfall. Die Neustartregel des Containers entscheidet, ob der Agent eingreift:
@@ -89,3 +97,65 @@ Während der Wartung heilt der Agent nicht, und Ausfälle zählen nicht ins Budg
 ## Vorfall
 
 Ein Vorfall nennt das Ziel, die Ursache mit Exit-Code und Fehlermeldung der Engine, jeden Versuch mit Zeitpunkt und Ergebnis, eine empfohlene Handlung und die letzten 50 Logzeilen des Containers. Der Log-Auszug durchläuft die Bereinigung, die auch für Log-Ansichten gilt. Ist die Bereinigung nicht verfügbar, entsteht der Vorfall ohne Log-Auszug und nennt den Grund; ungeprüfte Logzeilen gibt er nicht weiter. Je Ziel gibt es höchstens einen offenen Vorfall. Der Agent speichert ihn, der Hub liest und zeigt ihn. Der Aufbau ist so gewählt, dass ihn das Ticket- und Hinweissystem aus #157 ohne Umbau übernehmen kann; der Versand über Meldekanäle folgt [notification-channels.md](notification-channels.md).
+
+## Lokaler Zustand und Agent-Routen
+
+`self-healing-state.json` liegt neben der Registry. Speicherformat 1 enthält
+Budgeteinträge unter demselben Zielschlüssel wie die Stopp-Absicht, Wartungen und
+Vorfälle. Ein Budgeteintrag hält Versuche, den letzten beobachteten Start mit
+Container-ID, Startzeit und `RestartCount`, den Beginn des laufenden
+Stabilitätsfensters sowie eine ausstehende Ausfallbehandlung mit erwartetem
+Laufzustand und absolutem Fälligkeitszeitpunkt fest. Die neue Datei wird mit
+Modus `0600` geschrieben, synchronisiert und atomar ersetzt; anschließend wird
+das Verzeichnis synchronisiert. Ein beschädigter Zustand bricht den Agent-Start
+ab, statt ein frisches Budget anzunehmen.
+
+Der Vergleich des `RestartCount` erfolgt gegenüber dem Wert beim letzten
+beobachteten Start desselben Containers. Ein manueller Start, der den Zähler
+zurücksetzt, wird dadurch zur neuen Vergleichsbasis. Ein anschließender
+Docker-Start mit Zähler 1 zählt wieder als Docker-Wiederholung, auch wenn vor
+dem manuellen Start bereits Zähler 2 beobachtet wurde. Container-ID und
+`StartedAt` ermöglichen den Abgleich beim Agent-Start. Starts während der
+Agent-Abwesenheit lassen sich nur anhand des aktuellen Endstands zuordnen;
+vollständige Zwischenfolgen liefert dieser Abgleich nicht.
+
+Unmittelbar vor dem Engine-Aufruf reserviert der Agent den Versuch dauerhaft
+und kennzeichnet den geplanten Heilungsstart. Eine Unterbrechung in diesem
+Zeitfenster bleibt als `interrupted` verbraucht, auch wenn der Engine-Aufruf
+möglicherweise noch nicht begonnen hatte. Diese vorsichtige Zuordnung verhindert
+kostenlose Wiederholungen nach einem Prozessabbruch. Der nächste Abstand bleibt
+als absoluter Zeitpunkt erhalten. Ein fehlgeschlagener Start kann ohne weiteres
+`die` den nächsten begrenzten Versuch auslösen. Ein erfolgreicher Start schöpft
+das Budget zunächst nur aus; ein Vorfall entsteht bei einem erneuten Ausfall
+oder einem gescheiterten letzten Start. Das Stabilitätsfenster kann das Budget
+eines durchgehend laufenden Containers vorher wieder auffüllen.
+
+Vorfälle tragen eine stabile ID, Ziel, Ursache, Versuchsergebnisse, den
+Handlungsschlüssel `inspect-container-logs-and-configuration` und entweder einen
+bereinigten Log-Auszug oder `redaction-unavailable` beziehungsweise
+`logs-unavailable`. Auch die Engine-Ursache wird mit den bekannten Log-Geheimnissen
+bereinigt; fehlt die Bereinigung, bleibt die Fehlermeldung leer. Diagnosen von
+fehlgeschlagenen Agent-Aktionen bleiben im Audit. Geschlossene Vorfälle behalten
+Abschlusszeit und Grund (`manual-start` oder `acknowledged`), damit #157 ihren
+Lebenszyklus übernehmen kann. Alle offenen und die letzten 256 geschlossenen
+Vorfälle bleiben gespeichert. Beginn und Ende der Wartung ändern sie nicht.
+
+Die neuen Routen gehören zum unveröffentlichten Vertrag 12:
+
+- `GET /self-healing/status` liefert `observing`, `budgets`, `maintenance` und
+  `incidents`. Die Antwort ist nicht cachebar. Fehlende Docker-Beobachtung oder
+  ein ausgefallener Heiler ergeben `503` mit `observing: false`.
+- `PUT /self-healing/maintenance` erhält `target` und optional
+  `durationSeconds`. Ohne Dauer gilt die gespeicherte Konfigurationsvorgabe;
+  `null` bedeutet unbegrenzt. Das Ziel ist ein Containername, Projekt und
+  Service oder `kind: stack` mit Projektname.
+- `DELETE /self-healing/maintenance` erhält `target` und hebt diese Wartung auf.
+- `POST /self-healing/incidents/acknowledge` erhält das Containerziel `target`,
+  schließt dessen offenen Vorfall und füllt das Budget ohne Start auf.
+
+Die drei Schreibwege erlauben `system:hub` oder einen nicht leeren menschlichen
+Akteur über den authentifizierten Hub-Zugang. Andere `system:`-Akteure und
+fehlende Akteure werden von der Routenpolitik abgewiesen. Die Zustandsänderungen
+bleiben im Nur-Lese-Modus möglich und schreiben je Anfrage genau einen
+Audit-Eintrag. Die Containeraktion des Heilers verwendet dagegen
+`system:self-healing` und bleibt vollständig durch die Mutationsprüfkette gesperrt.

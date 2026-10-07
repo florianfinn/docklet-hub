@@ -6,6 +6,12 @@ import { StopIntentStore } from "./stop-intent.js";
 type WatcherDependencies = { wait?: (delayMs: number, signal: AbortSignal) => Promise<void> };
 
 type EventEngine = Pick<DockerEngine, "inspect" | "listContainerIds" | "monitorEvents">;
+export type LifecycleObserver = {
+  reconcile: (container: RawInspect) => void;
+  observe: (event: DockerMonitorEvent, container: RawInspect, classification: "manual-stop" | "unexpected" | null) => void;
+  setObserving: (observing: boolean) => void;
+  fail: () => void;
+};
 type Listener = (event: Omit<DockerMonitorEvent, "action" | "signal"> & { action: Exclude<DockerMonitorEvent["action"], "kill"> }) => void;
 
 export class DockerEventWatcher {
@@ -15,6 +21,16 @@ export class DockerEventWatcher {
   private task: Promise<void> | null = null;
   private observing = false;
   private readonly wait: (delayMs: number, signal: AbortSignal) => Promise<void>;
+
+  private lifecycle: LifecycleObserver | null = null;
+
+  attachLifecycle(observer: LifecycleObserver): void { this.lifecycle = observer; }
+
+  private updateLifecycle(operation: (observer: LifecycleObserver) => void): void {
+    if (!this.lifecycle) return;
+    try { operation(this.lifecycle); }
+    catch (error) { this.lifecycle.fail(); throw error; }
+  }
 
   constructor(
     private readonly engine: EventEngine,
@@ -67,6 +83,7 @@ export class DockerEventWatcher {
             const container = await this.engine.inspect(id);
             containers.set(id, container);
             this.intents.reconcile(container);
+            this.updateLifecycle((observer) => observer.reconcile(container));
           } catch (error) {
             if ((error as { status?: number }).status !== 404) throw error;
           }
@@ -92,7 +109,9 @@ export class DockerEventWatcher {
                   } : {} }
                 };
               }
-              this.intents.observe(event, container);
+              const classification = this.intents.observe(event, container);
+              if (connection.signal.aborted) return;
+              this.updateLifecycle((observer) => observer.observe(event, container, classification));
               if (event.action === "die") containers.delete(event.containerId);
             }
             // kill is local evidence; the existing monitor stream keeps its shape.
@@ -109,11 +128,16 @@ export class DockerEventWatcher {
             connection.abort();
           });
         }, connection.signal, { since, onConnected: () => {
-          if (!connection.signal.aborted) this.observing = true;
+          if (!connection.signal.aborted) {
+            this.updateLifecycle((observer) => observer.setObserving(true));
+            this.observing = true;
+          }
         } });
+        connection.abort();
         this.markUnavailable();
         await queue;
       } catch (error) {
+        connection.abort();
         this.markUnavailable();
         await queue;
         if (!signal.aborted) this.onError(error);
@@ -135,6 +159,8 @@ export class DockerEventWatcher {
   private markUnavailable(): void {
     if (!this.observing) return;
     this.observing = false;
+    try { this.updateLifecycle((observer) => observer.setObserving(false)); }
+    catch (error) { this.onError(error); }
     for (const listener of this.unavailableListeners) {
       try { listener(); } catch (error) { this.onError(error); }
     }
