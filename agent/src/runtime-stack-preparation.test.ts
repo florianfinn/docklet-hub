@@ -23,7 +23,7 @@ process.env.DOCKER_AGENT_BIND_BASE_PATH = "/srv/apps";
 const { handleSafeAction } = await import("./routes/definition-routes.js");
 const { config, engine, registry, audit, stackLocks } = await import("./runtime/state.js");
 const { runStackRuntimeAction } = await import("./runtime/stack-action.js");
-const { handleStackAction } = await import("./routes/stack-routes.js");
+const { handleStackAction, handleStackContext } = await import("./routes/stack-routes.js");
 const { prepareStack, stackProjectFromRegistry, reanchorStackRegistry, ensureCreateScopeNotExternallyManaged, StackEndpointError } = await import("./runtime/stack.js");
 after(() => fs.rmSync(directory, { recursive: true, force: true }));
 const projectDir = "/srv/apps/app";
@@ -382,7 +382,7 @@ for (const source of ["inventory", "inspect", "unknown"] as const) {
     assert.equal(req.response.status, 500);
     assert.equal(req.response.body.error, source === "unknown" ? "internal-error" : "engine-action-failed");
     assert.deepEqual(records.map(({ outcome, reason }) => ({ outcome, reason })), [{ outcome: "denied",
-      reason: source === "unknown" ? "Error: inventory unavailable" : "engine-action-failed: inventory unavailable" }]);
+      reason: source === "unknown" ? "internal-error; Error: inventory unavailable" : "engine-action-failed; inventory unavailable" }]);
   });
 }
 
@@ -424,7 +424,7 @@ for (const failure of [new EngineError("start refused by engine", 409), new Comp
     assert.equal(req.response.body.error, compose ? "compose-action-failed" : "engine-action-failed");
     assert.equal(records.length, 1);
     assert.equal(records[0].outcome, "error");
-    assert.equal(records[0].reason, compose ? "compose-action-failed (exit 7): start refused by Compose; stderr: private tool output" : "engine-action-failed: start refused by engine");
+    assert.equal(records[0].reason, compose ? "compose-action-failed; (exit 7): start refused by Compose; stderr: private tool output" : "engine-action-failed; start refused by engine");
     assert.equal("auditReason" in req.response.body, false);
     assert.equal(JSON.stringify(req.response.body).includes("private tool output"), false);
   });
@@ -496,7 +496,7 @@ test("stack runtime unreadable state after a successful command is audited as er
   assert.equal(req.response.body.error, "engine-action-failed");
   assert.equal(records.length, 1);
   assert.equal(records[0].outcome, "error");
-  assert.equal(records[0].reason, "engine-action-failed: inventory unavailable");
+  assert.equal(records[0].reason, "engine-action-failed; inventory unavailable");
 });
 
 for (const action of ["start", "stop", "restart"] as const) {
@@ -516,7 +516,7 @@ for (const action of ["start", "stop", "restart"] as const) {
     assert.equal(req.response.body.error, "compose-action-failed");
     assert.equal(records.length, 1);
     assert.equal(records[0].outcome, "error");
-    assert.match(String(records[0].reason), /compose-action-failed \(exit \?\).*stderr: mutation failed/);
+    assert.match(String(records[0].reason), /compose-action-failed; \(exit \?\).*stderr: mutation failed/);
     assert.equal("mutationStarted" in req.response.body, false);
   });
 }
@@ -541,3 +541,22 @@ for (const status of [404, 500]) test(`stack restart annotation handles disappea
   const mutations = commands.filter((args) => args.includes("stop") || args.includes("start"));
   assert.equal(mutations.length, status === 404 ? 2 : 0);
 });
+
+for (const action of ["apply", "down", "context"]) {
+  test(`non-runtime ${action} maps unreadable Compose config to 409 without mutation`, async (t) => {
+    mockEngine(t);
+    const commands: string[][] = [];
+    mockCompose(t, (args, done) => { commands.push(args); done(new Error("synthetic config failure")); });
+    const req = stackRequest(action, { expectedStack: expectedStack(), confirmation: "app" });
+    if (action === "context") {
+      req.context.url = new URL("http://agent.invalid/stacks/old/context");
+      await handleStackContext(req.context, req.context.url.pathname.match(/^\/stacks\/([^/]+)\/context$/)!);
+    } else {
+      await handleStackAction(req.context, req.context.url.pathname.match(/^\/stacks\/([^/]+)\/actions\/([^/]+)$/)!);
+    }
+    assert.equal(req.response.status, 409);
+    assert.deepEqual(req.response.body, { error: "compose-config-failed" });
+    assert.equal(commands.length, 1);
+    assert.equal(commands[0].includes("config"), true);
+  });
+}

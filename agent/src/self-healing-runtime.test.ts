@@ -98,7 +98,7 @@ test("engine diagnostics stay in one audit with delegation evidence before trunc
   t.mock.method(engine, "start", async () => { throw new EngineError(`engine responded 503: ${"diagnostic ".repeat(50)}`, 503); });
   f.crash(); await selfHealing.tick();
   assert.equal(f.records.length, 1); assert.equal(f.records[0].outcome, "error");
-  assert.match(truncateField(f.records[0].reason!)!, /^delegation-lock-allowed:.*engine-action-failed/);
+  assert.match(truncateField(f.records[0].reason!)!, /^engine-action-failed; delegation-lock-allowed:.*; diagnostic/);
   assert.equal(JSON.stringify(selfHealingState.entries()[0].attempts).includes("diagnostic"), false);
   assert.equal(selfHealingState.entries()[0].attempts[0].error, "engine-action-failed");
 });

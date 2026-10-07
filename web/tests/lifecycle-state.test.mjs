@@ -69,6 +69,11 @@ test("only explicit completed one-off jobs with known absence of stop intent sup
   const current = { kind: "stack", stack: { containers: [container("exited", 0)] } };
   assert.equal(actionBlocker(current, "start", host), null);
   current.stack.containers[0].oneShot = true;
+  for (const exitCode of [1, 137, null]) {
+    current.stack.containers[0].exitCode = exitCode;
+    assert.equal(actionBlocker(current, "start", host), null);
+  }
+  current.stack.containers[0].exitCode = 0;
   assert.equal(actionBlocker(current, "start", host), "completed");
   assert.equal(actionBlocker(current, "start"), null);
   assert.equal(actionBlocker(current, "start", { ...host, lifecycle: { stopIntents: { observing: false, intents: [] } } }), null);

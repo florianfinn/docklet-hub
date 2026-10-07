@@ -3,6 +3,7 @@ import { EngineError, type RawInspect } from "./engine.js";
 import { composeContextOf } from "./compose.js";
 import { StackEndpointError } from "./stack-control.js";
 import { executeContainerRuntimeAction } from "./container-runtime-action.js";
+import { actionAuditReason } from "./action-audit.js";
 import { actionFailureOf } from "./action-failure.js";
 import { ACTION_QUEUE_WAIT_MS, runtimeStateOf } from "./runtime-actions.js";
 import { config, engine, registry, audit, stackLocks, stopIntents } from "./runtime/state.js";
@@ -18,7 +19,7 @@ export async function runContainerAction(
   let containerName: string | null = null;
   const delegation = new Set<string>();
   const onDelegation = (reason: string) => { delegation.add(reason); };
-  const auditReason = (reason?: string) => [...delegation, reason].filter(Boolean).join("; ") || undefined;
+  const auditReason = (reason?: string, key = reason) => actionAuditReason(delegation, reason, key);
   try {
     const initial = await gate(containerId, { mutating: true, action, actor, onDelegation });
     if (!initial.ok) throw new StackEndpointError(initial.status, initial.reason);
@@ -93,7 +94,7 @@ export async function runContainerAction(
   } catch (error) {
     const failure = actionFailureOf(error, true);
     audit.write({ action, containerId, containerName, actor,
-      outcome: mutationStarted ? "error" : "denied", reason: auditReason(failure.auditReason) });
+      outcome: mutationStarted ? "error" : "denied", reason: auditReason(failure.auditReason, String(failure.body.error)) });
     return { status: failure.status, body: failure.body, mutationStarted };
   }
 }

@@ -54,7 +54,10 @@ test("runtime up has no health wait, build, pull or removal in either mode", () 
 test("stop deadlines include Docker's configured grace period and a buffer", () => {
   assert.equal(containerActionTimeoutMs("stop", undefined), 20_000);
   assert.equal(containerActionTimeoutMs("stop", 90), 100_000);
-  assert.equal(containerActionTimeoutMs("restart", 0), 10_000);
+  assert.equal(containerActionTimeoutMs("restart", 0), 40_000);
+  for (const timeout of [0, 10, 90, -1]) {
+    assert.equal(containerActionTimeoutMs("restart", timeout) - containerActionTimeoutMs("stop", timeout), 30_000);
+  }
   assert.equal(containerActionTimeoutMs("start", 90), 30_000);
   assert.equal(containerActionTimeoutMs("stop", -1), 610_000);
   assert.equal(stackActionTimeoutMs("stop", [10, 120]), 150_000);

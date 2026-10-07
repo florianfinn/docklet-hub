@@ -44,6 +44,7 @@ export const deContainers = {
   lifecycleConfirmTitle: "{action}: {target}",
   lifecycleConfirmServices: "Betroffene Services:",
   lifecycleConfirmRecreate: "Alle betroffenen Container werden neu erstellt. Volumes und Bind-Mounts bleiben erhalten.",
+  lifecycleConfirmUnknown: "Die Aktion betrifft die folgenden Services. Der Agent bestimmt den wirksamen Modus anhand ihrer Verwaltung.",
   lifecycleConfirmRuntime: "Die Aktion betrifft die bestehenden Container dieser Services.",
   lifecycleConfirmChanged: "Der Stand oder der wirksame Modus hat sich geändert. Bitte den neuen Stand prüfen und erneut bestätigen.",
   lifecycleCancel: "Abbrechen",

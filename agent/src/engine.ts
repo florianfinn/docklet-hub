@@ -288,6 +288,7 @@ export class DockerEngine {
 
   async restart(containerId: string, stopTimeout?: number | null): Promise<void> {
     const timeout = stopTimeout === undefined ? (await this.inspect(containerId)).Config?.StopTimeout : stopTimeout;
+    // Docker owns both phases; the HTTP deadline includes a full start reserve.
     await this.expectNoContent(`/containers/${encodeURIComponent(containerId)}/restart`, containerActionTimeoutMs("restart", timeout));
   }
 

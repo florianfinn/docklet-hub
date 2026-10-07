@@ -15,7 +15,9 @@ export function stopTimeoutSeconds(value: unknown): number {
 }
 
 export function containerActionTimeoutMs(action: RuntimeAction, stopTimeout: unknown): number {
-  return action === "start" ? 30_000 : stopTimeoutSeconds(stopTimeout) * 1000 + STOP_BUFFER_MS;
+  if (action === "start") return RESTART_START_RESERVE_MS;
+  const stopDeadline = stopTimeoutSeconds(stopTimeout) * 1000 + STOP_BUFFER_MS;
+  return stopDeadline + (action === "restart" ? RESTART_START_RESERVE_MS : 0);
 }
 
 // Compose normalizes durations as Go duration strings, including fractions.

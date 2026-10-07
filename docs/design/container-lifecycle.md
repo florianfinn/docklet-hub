@@ -57,7 +57,15 @@ Stack-Aktionen melden Fortschritt je Service als NDJSON-Strom wie die übrigen C
 
 Der Stream für Start, Stopp und Neustart ist über den Suffix `-stream` am Aktionsnamen oder den Accept-Header `application/x-ndjson` erreichbar. Ohne Stream-Anforderung antwortet derselbe Vorgang synchron. Vorprüfungsfehler vor der ersten Stream-Zeile behalten ihren HTTP-Status und liefern JSON. Während des Compose-Vorgangs liest der Agent vorhandene erlaubte Container im Sekundentakt nach und meldet Zustandsänderungen je Service; das Abschlussresultat enthält die neu verankerten IDs. Nach Beginn einer Mutation läuft der Vorgang auch bei getrennter Verbindung bis zum Nachlesen zu Ende. Die Gesamtbewertung beschreibt die nachgelesenen Zielzustände; ein zusätzlicher Ausführungs- oder Vorprüfungsfehler wird als Fehler mitgemeldet und verhindert `ok: true`, auch wenn der Zielzustand bereits erreicht war. Ein Accept-Header für NDJSON bei `apply` oder `down` führt zur synchronen JSON-Antwort; ein Fehler nach Stream-Beginn meldet eine Fehlerzeile mit spezifischem Schlüssel in `reason`, Fehlerstatus in `status` und bereinigtem Ergebnis in `body`.
 
-Eine Fehlergrenze je Laufzeithandler umfasst das erste Gate, die Vorbereitung, die Warteschlange, die Mutation, die Nachlese und die Neuverankerung. Jeder Fehler wird genau einmal auditiert: vor Mutationsbeginn als `denied`, danach als `error`. Delegationshinweise aus den Gates stehen im selben Eintrag. Engine-Fehler behalten ihren HTTP-Status und `engine-action-failed`, Compose-Fehler erhalten `502 compose-action-failed`, unbekannte Fehler `500 internal-error`. Auch eine fehlgeschlagene Definitionsabfrage wird vor der Mutation so beantwortet. Ankerkonflikte behalten ihren eigenen Schlüssel. Engine-Text, Compose-Exitcode und stderr werden an das Audit übergeben und fehlen in der Antwort; bei fehlgeschlagenem Wiederanlauf oder zusätzlichem Nachlesefehler bleiben beide Diagnosen erhalten. Die allgemeine Audit-Feldgrenze bleibt bestehen.
+Eine Fehlergrenze je Laufzeithandler umfasst das erste Gate, die Vorbereitung, die Warteschlange, die Mutation, die Nachlese und die Neuverankerung. Jeder Fehler wird genau einmal auditiert: vor Mutationsbeginn als `denied`, danach als `error`. Delegationshinweise aus den Gates stehen im selben Eintrag. Engine-Fehler behalten ihren HTTP-Status und `engine-action-failed`, Compose-Fehler erhalten `502 compose-action-failed`, unbekannte Fehler `500 internal-error`. Auch eine fehlgeschlagene Definitionsabfrage wird vor der Mutation so beantwortet. Ankerkonflikte behalten ihren eigenen Schlüssel. Engine-Text, Compose-Exitcode und stderr werden an das Audit übergeben und fehlen in der Antwort; bei fehlgeschlagenem Wiederanlauf oder zusätzlichem Nachlesefehler bleiben beide Diagnosen erhalten.
+
+Bei Fehlern verwenden Container- und Stack-Aktionen dasselbe Format: zuerst der Fehlerschlüssel,
+danach genau ein `delegation-lock-allowed: <Regeln>` mit alphabetisch sortierten,
+einmalig genannten Regeln aus allen Gates, danach die Diagnose. Ohne
+Delegationssperre entfällt der Nachweis. Die primäre Diagnose wiederholt den
+führenden Schlüssel nicht. Erfolgreiche Vorgänge behalten ihren Ergebnisgrund. Die allgemeine
+Audit-Feldgrenze von 240 Zeichen bleibt bestehen; eine sichtbare Kürzung betrifft
+damit zuerst die nachgeordneten Diagnosen, nicht Schlüssel oder Regeln.
 
 ### Gleichzeitige Vorgänge und Zeitgrenzen
 
@@ -71,7 +79,12 @@ Der Agent begrenzt die Wartezeit auf eine Vorgangssperre auf 60 Sekunden. Contai
 
 Ein nie gestarteter Container im Zustand `created` gilt beim Stopp bereits als gestoppt; die idempotente Engine-Antwort 304 bleibt erfolgreich.
 
-Die HTTP-Frist für einen Container-Stopp oder -Neustart beträgt `StopTimeout` plus 10 Sekunden. Ohne gesetzten Wert gelten Dockers 10 Sekunden. Ein explizit unbegrenzter Docker-Stopp (`StopTimeout: -1`) erhält eine Agent-Frist von 610 Sekunden. Die Stack-Frist beträgt die längste konfigurierte oder nachgelesene Stoppfrist plus 30 Sekunden, mindestens 60 Sekunden. Beim Neustart wird dieser Wert für die beiden Phasen verdoppelt; der gesamte Compose-Vorgang ist auf 600 Sekunden begrenzt. Beide Neustartphasen teilen diese Frist, auch beim bestmöglichen Start nach einem fehlgeschlagenen Stopp. Der Stopp erhält höchstens die Gesamtfrist abzüglich 30 Sekunden; dieser feste Anteil bleibt für den Start reserviert. Er entspricht dem Stack-Puffer und verhindert, dass ein ausgeschöpfter Stopp dem Wiederanlauf nur eine praktisch unbrauchbare Restfrist lässt.
+Die HTTP-Frist für einen Container-Stopp beträgt `StopTimeout` plus 10 Sekunden.
+Ein Container-Neustart erhält zusätzlich 30 Sekunden für den Start, also
+`StopTimeout` plus 40 Sekunden. Docker führt beide Phasen im selben
+`restart`-Aufruf aus; eine eigene Stoppfrist innerhalb dieses Aufrufs kann der
+Agent nicht setzen. Die zusätzliche Reserve entspricht der Frist eines reinen
+Starts und bleibt auch bei `StopTimeout: 0` vollständig erhalten. Ohne gesetzten Wert gelten Dockers 10 Sekunden. Ein explizit unbegrenzter Docker-Stopp (`StopTimeout: -1`) erhält beim Stopp eine Agent-Frist von 610 Sekunden, beim Neustart 640 Sekunden. Die Stack-Frist beträgt die längste konfigurierte oder nachgelesene Stoppfrist plus 30 Sekunden, mindestens 60 Sekunden. Beim Neustart wird dieser Wert für die beiden Phasen verdoppelt; der gesamte Compose-Vorgang ist auf 600 Sekunden begrenzt. Beide Neustartphasen teilen diese Frist, auch beim bestmöglichen Start nach einem fehlgeschlagenen Stopp. Der Stopp erhält höchstens die Gesamtfrist abzüglich 30 Sekunden; dieser feste Anteil bleibt für den Start reserviert. Er entspricht dem Stack-Puffer und verhindert, dass ein ausgeschöpfter Stopp dem Wiederanlauf nur eine praktisch unbrauchbare Restfrist lässt.
 
 ### Hub-API und Offline-Ablehnung
 
