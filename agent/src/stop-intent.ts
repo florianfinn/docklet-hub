@@ -12,7 +12,7 @@ const LINUX_SIGRTMAX = 64;
 const RECENT_EXIT_LIMIT = 256;
 export const STOP_INTENT_LIMIT = 256;
 type PendingKill = { target: StopIntentTarget; containerId: string; atMs: number; windowMs: number; actor: string | null; restart?: boolean };
-type HubStop = { actor: string | null; startedAt: number; finishedAt: number };
+type HubStop = { actor: string | null; startedAt: number; finishedAt: number; startedContainers?: Set<string> };
 
 export function stopIntentTarget(container: RawInspect): StopIntentTarget | null {
   const labels = container.Config?.Labels;
@@ -145,7 +145,7 @@ export class StopIntentStore {
   // A restart asks for a running result even if its start subsequently fails.
   beginHubRestart(containers: readonly RawInspect[]): () => void {
     const previous = { intents: new Map(this.intents), kills: new Map(this.kills), restarts: new Map(this.hubRestarts) };
-    const annotation: HubStop = { actor: null, startedAt: this.now(), finishedAt: Infinity };
+    const annotation: HubStop = { actor: null, startedAt: this.now(), finishedAt: Infinity, startedContainers: new Set() };
     for (const container of containers) {
       this.hubRestarts.set(container.Id, annotation);
       this.kills.delete(container.Id);
@@ -169,7 +169,7 @@ export class StopIntentStore {
     const atMs = event.atMs ?? this.now();
     const annotation = this.hubRestarts.get(event.containerId);
     const kill = this.kills.get(event.containerId);
-    return Boolean(annotation && atMs >= annotation.startedAt && atMs <= annotation.finishedAt)
+    return Boolean(annotation && !annotation.startedContainers?.has(event.containerId) && atMs >= annotation.startedAt && atMs <= annotation.finishedAt)
       || Boolean(event.action !== "kill" && kill?.restart && atMs >= kill.atMs && atMs - kill.atMs <= kill.windowMs);
   }
 
@@ -211,6 +211,7 @@ export class StopIntentStore {
       return exit ? "unexpected" : null;
     }
     if (event.action === "start") {
+      this.hubRestarts.get(event.containerId)?.startedContainers?.add(event.containerId);
       if (!this.isHubRestartActive(event.containerId)) this.hubRestarts.delete(event.containerId);
       this.kills.delete(event.containerId);
       this.hubStops.delete(event.containerId);

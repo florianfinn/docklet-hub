@@ -13,17 +13,12 @@ for (const [policy, maximum, heals] of [
   assert.equal(f.status().budgets[0].usedAttempts, heals ? 1 : 0);
 });
 
-test("bounded on-failure waits for stopped state and exhausted RestartCount", async (t) => {
+test("bounded on-failure waits for fresh failure evidence after Docker retries", async (t) => {
   const f = healingFixture(t, "on-failure", 2);
   f.current.RestartCount = 1;
   f.crash(); f.advance(1000); await f.controller.tick(); assert.equal(f.starts(), 0);
-  f.current.RestartCount = 2;
-  f.current.State!.Restarting = true;
-  await f.controller.tick(); assert.equal(f.starts(), 0);
-  f.current.State!.Restarting = false;
-  f.current.State!.Running = true;
-  await f.controller.tick(); assert.equal(f.starts(), 0);
-  f.current.State!.Running = false;
+  assert.equal(f.status().budgets[0].nextAttemptAt, null);
+  f.manualStart(2); f.crash(); f.advance(1000);
   await f.controller.tick(); assert.equal(f.starts(), 1);
 });
 

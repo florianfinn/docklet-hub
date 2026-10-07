@@ -223,3 +223,16 @@ test("production incident omits logs when the confirmed environment cannot be re
   assert.deepEqual(incident.logs, { available: false, reason: "redaction-unavailable" });
   assert.equal(incident.cause.engineError, null);
 });
+
+for (const access of ["not-allowlisted", "observe-only", "read-only"] as const) {
+  test(`production healer allocates no budget for initially excluded containers: ${access}`, (t) => {
+    const f = fixture(t);
+    selfHealingState.change((state) => { state.entries = []; });
+    if (access === "read-only") {
+      const previous = config.readOnly; config.readOnly = true; t.after(() => { config.readOnly = previous; });
+    } else t.mock.method(registry, "checkAccess", () => access);
+    selfHealing.reconcile(f.current);
+    selfHealing.observe({ containerId: id, action: "die", exitCode: 1 }, f.current, "unexpected");
+    assert.deepEqual(selfHealingState.entries(), []); assert.equal(f.starts(), 0);
+  });
+}

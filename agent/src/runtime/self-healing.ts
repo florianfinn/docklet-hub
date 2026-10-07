@@ -5,10 +5,13 @@ import { healingEvidence } from "../self-healing-evidence.js";
 import { actionFailureOf } from "../action-failure.js";
 import { EngineError } from "../engine.js";
 import { selfHealingState, selfHealingConfig, engine, registry, config, audit, dockerEvents, stopIntents } from "./state.js";
+import { forcedManagement } from "../stacks.js";
 import { gate } from "./gate.js";
 
 export const selfHealing = new SelfHealingController(selfHealingState, {
   config: () => selfHealingConfig.read(),
+  eligible: (container) => !config.readOnly && registry.checkAccess(container.Id, true) === "allowed"
+    && forcedManagement(container.Config?.Labels?.["com.docker.compose.project.working_dir"] ?? "") !== "read-only",
   restartInProgress: (id) => stopIntents.isHubRestartActive(id),
   async check(id) {
     try {
@@ -45,5 +48,5 @@ export function startSelfHealing(): void {
 export function stopSelfHealing(): void {
   if (timer) clearInterval(timer);
   timer = null;
-  selfHealing.setObserving(false);
+  selfHealing.shutdown();
 }

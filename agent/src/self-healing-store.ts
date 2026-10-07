@@ -16,6 +16,8 @@ export type HealingEntry = {
   healingStart: { containerId: string; previousStartedAt: string | null; requestedAt: number } | null;
   pending: { id: string; expected: ExpectedContainer; dueAt: number | null; occurredAt: number; cause: SelfHealingCause } | null;
 };
+export const HEALING_ENTRY_LIMIT = 256;
+
 type State = { version: 1; entries: HealingEntry[]; maintenance: SelfHealingMaintenance[]; incidents: SelfHealingIncident[] };
 const timestamp = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0;
 const textOrNull = (value: unknown) => value === null || typeof value === "string";
@@ -73,13 +75,17 @@ export function maintenanceKey(target: SelfHealingMaintenanceTarget): string {
 
 export class SelfHealingStore {
   private state: State = { version: 1, entries: [], maintenance: [], incidents: [] };
-  constructor(private readonly file: string) {
+  private deadlines = new Map<string, { wall: number; monotonic: number }>();
+  constructor(private readonly file: string, private readonly now: () => number = Date.now,
+    private readonly monotonic: () => number = () => performance.now()) {
     try {
       this.state = validateState(JSON.parse(fs.readFileSync(file, "utf8")));
       fs.chmodSync(file, 0o600);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
+    this.syncDeadlines();
+    if (this.state.entries.length > HEALING_ENTRY_LIMIT) this.change(() => {});
     // Reservations survive a crash; never repeat an uncertain engine mutation for free.
     if (this.state.entries.some((entry) => entry.attempts.some((attempt) => attempt.result === "pending"))) {
       this.change((state) => {
@@ -88,6 +94,44 @@ export class SelfHealingStore {
         }
       });
     }
+  }
+  private protectedEntry(entry: HealingEntry, state = this.state): boolean {
+    return entry.attempts.length > 0 || entry.pending !== null || entry.healingStart !== null
+      || state.incidents.some((item) => item.closedAt === null && targetKey(item.target) === targetKey(entry.target));
+  }
+  canTrack(target: StopIntentTarget): boolean {
+    return Boolean(this.get(target)) || this.state.entries.length < HEALING_ENTRY_LIMIT
+      || this.state.entries.some((entry) => !this.protectedEntry(entry));
+  }
+  reconcileInventory(targets: ReadonlySet<string>): void {
+    if (this.state.entries.some((entry) => !targets.has(targetKey(entry.target)) && !this.protectedEntry(entry))) {
+      this.change((state) => { state.entries = state.entries.filter((entry) => targets.has(targetKey(entry.target)) || this.protectedEntry(entry, state)); });
+    }
+  }
+  private syncDeadlines(): void {
+    const active = new Set<string>();
+    const track = (key: string, wall: number | null) => {
+      if (wall === null) return;
+      active.add(key);
+      if (this.deadlines.get(key)?.wall !== wall) this.deadlines.set(key, { wall, monotonic: this.monotonic() + wall - this.now() });
+    };
+    for (const entry of this.state.entries) {
+      const key = targetKey(entry.target);
+      track(`stable:${key}`, entry.runningSince);
+      if (entry.pending) track(`retry:${entry.pending.id}`, entry.pending.dueAt);
+    }
+    for (const item of this.state.maintenance) track(`maintenance:${maintenanceKey(item.target)}`, item.expiresAt === null ? null : Date.parse(item.expiresAt));
+    for (const key of this.deadlines.keys()) if (!active.has(key)) this.deadlines.delete(key);
+  }
+  isDue(entry: HealingEntry): boolean {
+    if (entry.pending?.dueAt == null) return false;
+    const deadline = this.deadlines.get(`retry:${entry.pending.id}`);
+    return deadline?.wall === entry.pending.dueAt && this.monotonic() >= deadline.monotonic;
+  }
+  isStable(entry: HealingEntry, seconds: number): boolean {
+    const deadline = this.deadlines.get(`stable:${targetKey(entry.target)}`);
+    return entry.runningSince !== null && deadline?.wall === entry.runningSince
+      && this.monotonic() - deadline.monotonic >= seconds * 1000;
   }
   entries(): HealingEntry[] { return structuredClone(this.state.entries); }
   get(target: StopIntentTarget): HealingEntry | undefined {
@@ -102,6 +146,13 @@ export class SelfHealingStore {
   change(update: (state: State) => void): void {
     const next = structuredClone(this.state);
     update(next);
+    if (next.entries.length > HEALING_ENTRY_LIMIT) {
+      const idle = next.entries.filter((entry) => !this.protectedEntry(entry, next))
+        .sort((a, b) => (a.lastStart?.observedAt ?? 0) - (b.lastStart?.observedAt ?? 0));
+      const remove = new Set(idle.slice(0, next.entries.length - HEALING_ENTRY_LIMIT).map((entry) => targetKey(entry.target)));
+      next.entries = next.entries.filter((entry) => !remove.has(targetKey(entry.target)));
+      if (next.entries.length > HEALING_ENTRY_LIMIT) throw new Error("Self-healing budget capacity exhausted");
+    }
     // Closed incidents form a bounded handoff history; open incidents are never discarded.
     next.incidents = [...next.incidents.filter((item) => item.closedAt !== null).slice(-256),
       ...next.incidents.filter((item) => item.closedAt === null)];
@@ -114,14 +165,19 @@ export class SelfHealingStore {
       try { fs.writeFileSync(fd, JSON.stringify(next)); fs.fchmodSync(fd, 0o600); fs.fsyncSync(fd); }
       finally { fs.closeSync(fd); }
       fs.renameSync(temporary, this.file);
+      // After replacement, retain reservations even if directory synchronization fails.
+      this.state = next;
+      this.syncDeadlines();
       const directoryFd = fs.openSync(directory, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY);
       try { fs.fsyncSync(directoryFd); } finally { fs.closeSync(directoryFd); }
-      this.state = next;
     } finally { fs.rmSync(temporary, { force: true }); }
   }
-  expire(now: number): void {
-    if (this.state.maintenance.some((item) => item.expiresAt !== null && Date.parse(item.expiresAt) <= now)) {
-      this.change((state) => { state.maintenance = state.maintenance.filter((item) => item.expiresAt === null || Date.parse(item.expiresAt) > now); });
+  private maintenanceExpired(item: SelfHealingMaintenance): boolean {
+    return item.expiresAt !== null && this.monotonic() >= this.deadlines.get(`maintenance:${maintenanceKey(item.target)}`)!.monotonic;
+  }
+  expire(_now: number): void {
+    if (this.state.maintenance.some((item) => this.maintenanceExpired(item))) {
+      this.change((state) => { state.maintenance = state.maintenance.filter((item) => !this.maintenanceExpired(item)); });
     }
   }
   maintained(target: StopIntentTarget, now: number): boolean {
@@ -156,13 +212,12 @@ export class SelfHealingStore {
   hasIncident(target: StopIntentTarget): boolean {
     return this.state.incidents.some((item) => targetKey(item.target) === targetKey(target) && item.closedAt === null);
   }
-  status(config: SelfHealingConfig, observing: boolean, now: number): SelfHealingStatusResponse {
-    this.expire(now);
+  status(config: SelfHealingConfig, observing: boolean, _now: number): SelfHealingStatusResponse {
     return structuredClone({ observing, budgets: this.state.entries.map((entry) => ({
       target: entry.target, containerId: entry.containerId, usedAttempts: entry.attempts.length,
       remainingAttempts: Math.max(0, config.attempts - entry.attempts.length), attempts: entry.attempts,
       nextAttemptAt: entry.pending?.dueAt != null ? new Date(entry.pending.dueAt).toISOString() : null,
       runningSince: entry.runningSince === null ? null : new Date(entry.runningSince).toISOString()
-    })), maintenance: this.state.maintenance, incidents: this.state.incidents });
+    })), maintenance: this.state.maintenance.filter((item) => !this.maintenanceExpired(item)), incidents: this.state.incidents });
   }
 }

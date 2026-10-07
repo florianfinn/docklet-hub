@@ -46,3 +46,15 @@ test("unconfirmed compose anchors use container secrets and never read a foreign
     () => { throw new Error("foreign environment read"); });
   assert.deepEqual(result.logs, { available: true, lines: ["••••"] });
 });
+
+for (const character of ["x", "界", "😀"]) test(`incident bounds long UTF-8 log lines and total excerpt: ${character}`, async () => {
+  const result = await healingEvidence(container, cause, entry, "/srv/apps",
+    async () => Buffer.from(Array.from({ length: 70 }, () => character.repeat(10_000) + secret).join("\n")), () => []);
+  assert.equal(result.logs.available, true);
+  if (!result.logs.available) throw new Error("expected excerpt");
+  assert.equal(result.logs.lines.length <= 50, true);
+  assert.equal(result.logs.lines.every((line) => Array.from(line).length <= 500), true);
+  assert.equal(Buffer.byteLength(result.logs.lines.join("\n"), "utf8") <= 16 * 1024, true);
+  assert.equal(result.logs.lines.every((line) => !line.includes("�")), true);
+  assert.equal(JSON.stringify(result).includes(secret), false);
+});

@@ -1,3 +1,4 @@
+import { EngineError } from "../engine.js";
 import { actionFailureOf, type ActionFailure } from "../action-failure.js";
 import type { RuntimeAction, StackActionRequest, RuntimeServiceResult } from "contract";
 import {
@@ -28,7 +29,14 @@ export async function runStackRuntimeAction(
     let stopContainerIds: string[] = [];
     const withRestartIntent = async (operation: () => Promise<unknown>) => {
       if (action !== "restart") return operation();
-      const containers = await Promise.all(stopContainerIds.map((id) => engine.inspect(id)));
+      const inspected = await Promise.all(stopContainerIds.map(async (id) => {
+        try { return await engine.inspect(id); }
+        catch (error) {
+          if (error instanceof EngineError && error.status === 404) return null;
+          throw error;
+        }
+      }));
+      const containers = inspected.filter((container) => container !== null);
       const finish = stopIntents.beginHubRestart(containers);
       try { return await operation(); }
       finally { finish(); }

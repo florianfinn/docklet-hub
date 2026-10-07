@@ -12,6 +12,7 @@ export function healingFixture(t: TestContext, policy = "no", maximum = 0) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "healing-test-"));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const file = path.join(directory, "state.json");
+  let monotonic = 0;
   let now = 1_800_000_000_000;
   let config: SelfHealingConfig = { ...DEFAULT_SELF_HEALING_CONFIG, retryDelaysSeconds: [1, 2, 3], stabilityWindowSeconds: 10 };
   let current: RawInspect = { Id: "a".repeat(64), Name: "/demo-web", Config: { Labels: {} }, RestartCount: 0,
@@ -22,7 +23,7 @@ export function healingFixture(t: TestContext, policy = "no", maximum = 0) {
   let starts = 0;
   let logCalls = 0;
   let evidence: { logs: SelfHealingLog; cause: SelfHealingCause } | null = null;
-  let store = new SelfHealingStore(file);
+  let store = new SelfHealingStore(file, () => now, () => monotonic);
   let intents = new StopIntentStore(path.join(directory, "intents.json"), () => now);
   let controller: SelfHealingController;
   const ports: HealingPorts = {
@@ -49,7 +50,7 @@ export function healingFixture(t: TestContext, policy = "no", maximum = 0) {
     controller.observe(event, structuredClone(current), intents.observe(event, current), restarting);
   };
   const setup = () => {
-    controller = new SelfHealingController(store, ports, () => now);
+    controller = new SelfHealingController(store, ports, () => now, () => monotonic);
     controller.reconcile(current);
     controller.setObserving(true);
   };
@@ -60,7 +61,9 @@ export function healingFixture(t: TestContext, policy = "no", maximum = 0) {
     get config() { return config; }, set config(value: SelfHealingConfig) { config = value; },
     get intents() { return intents; },
     target: () => stopIntentTarget(current)!, now: () => now,
-    advance: (ms: number) => { now += ms; },
+    advance: (ms: number) => { now += ms; monotonic += ms; },
+    jump: (ms: number) => { now += ms; },
+    monotonic: () => monotonic,
     emit, crash: (exitCode = 1) => {
       current.State = { ...current.State, Running: false, Restarting: false, Status: "exited", ExitCode: exitCode, Error: "synthetic engine error" };
       emit("die", exitCode);
@@ -71,7 +74,7 @@ export function healingFixture(t: TestContext, policy = "no", maximum = 0) {
       current.State = { ...current.State, Running: true, Restarting: false, Status: "running", StartedAt: new Date(now).toISOString() };
       emit("start");
     },
-    restart: () => { store = new SelfHealingStore(file); intents = new StopIntentStore(path.join(directory, "intents.json"), () => now); setup(); },
+    restart: () => { store = new SelfHealingStore(file, () => now, () => monotonic); intents = new StopIntentStore(path.join(directory, "intents.json"), () => now); setup(); },
     block: (value = true) => { blocked = value; }, failStarts: () => { failures = true; },
     evidence: (value: typeof evidence) => { evidence = value; }, starts: () => starts, logCalls: () => logCalls,
     status: () => store.status(config, controller.isAvailable(), now)

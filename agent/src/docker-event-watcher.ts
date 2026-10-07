@@ -7,6 +7,7 @@ type WatcherDependencies = { wait?: (delayMs: number, signal: AbortSignal) => Pr
 
 type EventEngine = Pick<DockerEngine, "inspect" | "listContainerIds" | "monitorEvents">;
 export type LifecycleObserver = {
+  reconcileInventory?: (containers: readonly RawInspect[]) => void;
   reconcile: (container: RawInspect) => void;
   observe: (event: DockerMonitorEvent, container: RawInspect, classification: "manual-stop" | "unexpected" | null, restartRequested: boolean) => void;
   setObserving: (observing: boolean) => void;
@@ -89,6 +90,7 @@ export class DockerEventWatcher {
           }
         }
         this.intents.reconcileInventory([...containers.values()]);
+        this.updateLifecycle((observer) => observer.reconcileInventory?.([...containers.values()]));
         if (signal.aborted) return;
         await this.engine.monitorEvents((event) => {
           queue = queue.then(async () => {

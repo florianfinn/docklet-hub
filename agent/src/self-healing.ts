@@ -11,6 +11,7 @@ import { SelfHealingStore, type HealingEntry } from "./self-healing-store.js";
 
 export type HealingPorts = {
   config: () => SelfHealingConfig;
+  eligible?: (container: RawInspect) => boolean;
   restartInProgress?: (id: string) => boolean;
   check: (id: string) => Promise<RawInspect | null>;
   inspect: (id: string) => Promise<RawInspect | null>;
@@ -35,30 +36,52 @@ export class SelfHealingController {
   private busy = false;
   private available = true;
   private observing = false;
+  private retryAt = 0;
+  private retryDelay = 1000;
+  private observationLost = false;
+  private shuttingDown = false;
   private abort = new AbortController();
-  constructor(readonly store: SelfHealingStore, private readonly ports: HealingPorts, private readonly now: () => number = Date.now) {}
+  constructor(readonly store: SelfHealingStore, private readonly ports: HealingPorts, private readonly now: () => number = Date.now,
+    private readonly monotonic: () => number = () => performance.now()) {}
 
   isAvailable(): boolean { return this.available; }
   setObserving(observing: boolean): void {
+    if (this.shuttingDown) return;
     const lostObservation = this.observing && !observing;
     this.observing = observing;
     if (!observing) this.abort.abort();
     else if (this.abort.signal.aborted) this.abort = new AbortController();
-    if (lostObservation) this.store.change((state) => {
+    if (lostObservation) { this.observationLost = true; this.clearObservation(); }
+  }
+  shutdown(): void { this.shuttingDown = true; this.observing = false; this.abort.abort(); }
+  private clearObservation(): void {
+    this.store.change((state) => {
       for (const entry of state.entries) {
         entry.pending = null;
         entry.runningSince = null;
       }
     });
+    this.observationLost = false;
   }
   // Internal failures retain reservations; watcher disconnects cancel pending retries separately.
-  fail(): void { this.available = false; this.abort.abort(); }
+  fail(): void {
+    if (this.available) this.retryAt = this.monotonic() + this.retryDelay;
+    this.available = false; this.abort.abort();
+  }
+  reconcileInventory(containers: readonly RawInspect[]): void {
+    this.store.reconcileInventory(new Set(containers.map(stopIntentTarget).filter((target) => target !== null).map(targetKey)));
+  }
+  private canTrack(container: RawInspect): boolean {
+    const target = stopIntentTarget(container);
+    return target !== null && (this.ports.eligible?.(container) ?? true) && this.store.canTrack(target);
+  }
 
   reconcile(container: RawInspect): void {
     const target = stopIntentTarget(container);
     if (!target) return;
     const entry = this.store.get(target);
     if (!entry) {
+      if (!this.canTrack(container)) return;
       this.store.put({ target, containerId: container.Id, attempts: [], pending: null, healingStart: null,
         lastStart: { containerId: container.Id, startedAt: container.State?.StartedAt ?? null,
           restartCount: container.RestartCount ?? 0, observedAt: this.now() },
@@ -82,6 +105,7 @@ export class SelfHealingController {
     if (!target) return;
     const at = event.atMs ?? this.now();
     if (event.action === "start") { this.started(container, at); return; }
+    if (!this.store.get(target) && !this.canTrack(container)) return;
     const entry = this.store.get(target) ?? { target, containerId: container.Id, attempts: [],
       pending: null, healingStart: null, lastStart: null, runningSince: null };
     if ((event.action === "kill" && isStopSignal(container, event.signal)) || event.action === "destroy"
@@ -124,23 +148,39 @@ export class SelfHealingController {
     }
     entry.lastStart = { containerId: container.Id, startedAt, restartCount, observedAt: at };
     entry.containerId = container.Id;
-    entry.runningSince = at;
+    entry.runningSince = this.now();
     entry.healingStart = null;
     entry.pending = null;
     this.store.put(entry);
   }
 
   async tick(): Promise<void> {
-    if (this.busy || !this.available) return;
+    if (this.busy || this.shuttingDown || (!this.available && this.monotonic() < this.retryAt)) return;
     this.busy = true;
     try {
+      if (!this.available) {
+        if (this.observationLost) this.clearObservation();
+        else this.store.change((state) => {
+          for (const entry of state.entries) for (const attempt of entry.attempts) {
+            if (attempt.result === "pending") attempt.result = "interrupted";
+          }
+        });
+        this.available = true;
+        if (this.observing) this.abort = new AbortController();
+      }
       this.store.expire(this.now());
       if (!this.observing) return;
       for (const snapshot of this.store.entries()) {
         if (!this.observing) break;
         await this.process(snapshot);
       }
-    } catch (error) { this.fail(); throw error; }
+      this.retryDelay = 1000;
+    } catch (error) {
+      this.available = false; this.abort.abort();
+      this.retryAt = this.monotonic() + this.retryDelay;
+      this.retryDelay = Math.min(this.retryDelay * 2, 30_000);
+      throw error;
+    }
     finally { this.busy = false; }
   }
 
@@ -148,7 +188,7 @@ export class SelfHealingController {
     const config = this.ports.config();
     const key = targetKey(snapshot.target);
     if (snapshot.runningSince !== null && snapshot.attempts.length > 0
-      && this.now() - snapshot.runningSince >= config.stabilityWindowSeconds * 1000 && !this.store.hasIncident(snapshot.target)) {
+      && this.store.isStable(snapshot, config.stabilityWindowSeconds) && !this.store.hasIncident(snapshot.target)) {
       const current = await this.ports.inspect(snapshot.containerId);
       const latest = this.store.get(snapshot.target)!;
       if (current?.State?.Running && !current.State.Restarting && latest.runningSince === snapshot.runningSince
@@ -169,7 +209,11 @@ export class SelfHealingController {
       entry.pending = null; this.store.put(entry); return;
     }
     const policy = retryPolicy(current);
-    if (policy === "wait" || current.State?.Running || current.State?.Restarting) return;
+    if (policy === "wait") {
+      // Docker's next start/die event supplies fresh evidence; a stopped state cannot promise a retry.
+      entry.pending = null; this.store.put(entry); return;
+    }
+    if (current.State?.Running || current.State?.Restarting) return;
     if (current.State?.Status !== "exited") { entry.pending = null; this.store.put(entry); return; }
     if (!this.available || !this.observing || !this.ports.config().enabled || this.store.maintained(entry.target, this.now())) return;
     if (entry.attempts.length >= this.ports.config().attempts) {
@@ -192,10 +236,11 @@ export class SelfHealingController {
       this.store.put(entry);
       return;
     }
-    if (this.now() < pending.dueAt) return;
+    if (!this.store.isDue(entry)) return;
     const expected = expectedOf(current);
     const number = entry.attempts.length + 1;
     let reservationAt: string | null = null;
+    let reservationFailure: unknown;
     const result = await this.ports.start(current.Id, expected, this.abort.signal, (before) => {
       const latest = this.store.get(entry.target)!;
       if (!this.available || !this.observing || this.ports.restartInProgress?.(before.Id) || !this.ports.config().enabled || number > this.ports.config().attempts
@@ -208,12 +253,14 @@ export class SelfHealingController {
       latest.healingStart = { containerId: before.Id, previousStartedAt: before.State?.StartedAt ?? null, requestedAt: this.now() };
       const nextDelay = this.ports.config().retryDelaysSeconds[number];
       latest.pending = { ...pending, dueAt: nextDelay === undefined ? null : this.now() + nextDelay * 1000 };
-      this.store.put(latest);
+      try { this.store.put(latest); }
+      catch (error) { reservationFailure = error; throw error; }
     });
+    if (reservationFailure !== undefined) throw reservationFailure;
     const latest = this.store.get(entry.target)!;
     const attempt = latest.attempts.find((item) => item.attempt === number && item.startedAt === reservationAt);
     if (!attempt) {
-      if (!result.mutationStarted && latest.pending?.id === pending.id && latest.attempts.length < this.ports.config().attempts) {
+      if (!this.shuttingDown && !result.mutationStarted && latest.pending?.id === pending.id && latest.attempts.length < this.ports.config().attempts) {
         latest.pending = null; this.store.put(latest);
       }
       return;

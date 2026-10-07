@@ -15,8 +15,8 @@ for (const phase of ["before-engine", "after-engine"] as const) test(`an interru
     throw new Error("synthetic process interruption");
   };
   await assert.rejects(f.controller.tick(), /synthetic process interruption/);
-  const restored = new SelfHealingStore(f.file);
-  const controller = new SelfHealingController(restored, f.ports, f.now);
+  const restored = new SelfHealingStore(f.file, f.now, f.monotonic);
+  const controller = new SelfHealingController(restored, f.ports, f.now, f.monotonic);
   controller.reconcile(f.current);
   const entry = restored.get(f.target())!;
   assert.equal(entry.attempts.length, 1); assert.equal(entry.attempts[0].result, "interrupted");
