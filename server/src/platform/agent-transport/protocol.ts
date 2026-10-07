@@ -131,7 +131,7 @@ const BINARY_TIMEOUT_MS = 120_000;
 // den nackten Rumpf entgegen (`src/index.ts:1436` ff.).
 type RequestShape =
   | { method: "GET" | "DELETE" }
-  | { method: "POST" | "PUT"; payload: unknown }
+  | { method: "POST" | "PUT" | "DELETE"; payload: unknown }
   | { method: "PUT"; body: Uint8Array };
 
 /**
@@ -330,20 +330,14 @@ export async function agentPost(
   return agentRequest(target, path, options, { method: "POST", payload });
 }
 
-/**
- * An authenticated DELETE without a body.
- *
- * The first caller is clearing a compose selection (#185,
- * `DELETE /containers/:id/compose-selection`). As with `agentPut`, the return
- * value is the parsed ANSWER: the agent acknowledges with
- * `{ ok: true, selectedFilePath: null }`.
- */
+/** An authenticated DELETE, optionally with a JSON target. */
 export async function agentDelete(
   target: AgentTarget,
   path: string,
-  options: RequestOptions
+  options: RequestOptions,
+  body?: unknown
 ): Promise<unknown> {
-  return agentRequest(target, path, options, { method: "DELETE" });
+  return agentRequest(target, path, options, { method: "DELETE", ...(body === undefined ? {} : { payload: body }) });
 }
 
 /**

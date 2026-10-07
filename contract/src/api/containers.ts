@@ -4,6 +4,7 @@ import * as z from "zod/mini";
 import { DEFAULT_STACK_DISPLAY, INDENT_STEPS } from "../presets.js";
 import { agentHealthSchema, hostViewSchema } from "./hosts.js";
 import { markViewSchema } from "./marks.js";
+import { lifecycleSnapshotSchema, runtimeAccessSchema } from "./lifecycle.js";
 import { stepSchema } from "./steps.js";
 
 // The response shapes of the container routes: the list of one arm, the
@@ -61,6 +62,9 @@ export const containerEntrySchema = z.object({
   image: z.string(),
   status: z.string(),
   running: z.boolean(),
+  exitCode: z.optional(z.nullable(z.number())),
+  oneShot: z.optional(z.boolean()),
+  runtimeAccess: z.optional(runtimeAccessSchema),
   startedAt: z.nullable(z.string()),
   health: z.nullable(z.string()),
   compose: z.nullable(z.object({ project: z.string(), service: z.string() })),
@@ -151,6 +155,7 @@ export type OverviewContainer = z.infer<typeof overviewContainerSchema>;
 
 export const stackViewSchema = z.object({
   project: z.string(),
+  hubOwned: z.optional(z.nullable(z.boolean())),
   state: containerStateSchema,
   running: z.number(),
   // The stack's own marks, in the operator's order; never re-sorted.
@@ -171,6 +176,7 @@ export const stackViewSchema = z.object({
 export type StackView = z.infer<typeof stackViewSchema>;
 
 export const hostOverviewSchema = z.object({
+  lifecycle: z.optional(lifecycleSnapshotSchema),
   host: hostViewSchema,
   // ⚠️ `null` means NOT ASKED (the arm still waits for its registration) and
   // is not the same as "unreachable".

@@ -14,7 +14,7 @@ import { containerPath, type ContainerTab } from "../../platform/routes/containe
 import { detailPageClass } from "./detail-page";
 import { hostDisplay } from "../../domain/hosts";
 import { MarkList } from "../../features/marks";
-import { ContainerStateDot, isUnknownManager, managerName, useOverview } from "../../features/containers";
+import { LifecycleControls, ContainerStateDot, isUnknownManager, managerName, useOverview } from "../../features/containers";
 import { stackPath } from "../../platform/routes/stack-path";
 
 // ⚠️ LOADED LAZILY (#258): the log view, its line renderer and the stream
@@ -206,6 +206,7 @@ function ContainerDetail({ found, tab }: { found: Found; tab: ContainerTab }) {
           Adresse wüsste davon nichts, und ein Neuladen fiele auf den ersten
           Reiter zurück. Genau das ist der Fall, den Entscheidung 1 des
           Betreibers ausschließt. */}
+      <LifecycleControls target={{ kind: "container", hostId: host.host.id, container }} detail />
       <nav aria-label={t("containerTabsLabel")} className="flex gap-1 border-b border-border">
         {TABS.map((entry) => (
           <Link

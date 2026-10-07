@@ -18,6 +18,7 @@ import { mapLimit } from "../concurrency.js";
 import { fromLegacyForms } from "../registry.js";
 import { toMonitorStatus } from "../monitor.js";
 import { sendLine } from "../ndjson-line.js";
+import { forcedManagement } from "../stacks.js";
 import { config, engine, registry, monitors, audit, statsHistory, monitorStreams, dockerEvents } from "../runtime/state.js";
 import { hardeningOptionsFor, imageManagerLabelOf, volumeBindsOf } from "../runtime/containers.js";
 import { send, readJsonBody, parseRequest, rejectRequest, RouteContext } from "../runtime/http.js";
@@ -114,13 +115,18 @@ export async function handleContainerList(ctx: RouteContext): Promise<void> {
       try {
         const inspect = await engine.inspect(id);
         const volumeResolution = await volumeBindsOf(inspect);
-        return toContainerSummary(inspect, {
+        return { ...toContainerSummary(inspect, {
           ...hardeningOptionsFor(id),
           volumeBinds: volumeResolution.binds,
           unresolvedVolumes: volumeResolution.unresolved,
           stats: statsHistory.snapshot(id),
           imageManagerLabel: await imageManagerLabelOf(inspect.Config?.Labels, inspect.Image)
-        });
+        }), exitCode: inspect.State?.ExitCode ?? null,
+          runtimeAccess: { blocker: registry.checkAccess(id, true, false) === "observe-only" ? "observe-only" :
+            !registry.isAllowed(id) ? "not-allowlisted" :
+              forcedManagement(inspect.Config?.Labels?.["com.docker.compose.project.working_dir"] ?? "") === "read-only"
+                ? "self-management-locked" : null } };
+
       } catch (error) {
         if (error instanceof EngineError && error.status === 404) return null;
         throw error;

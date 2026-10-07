@@ -54,8 +54,8 @@ test("runtime reports reconciliation failures with safe causes and throttles rep
       await until(() => lists === i + 2);
     }
     assert.deepEqual(errors, [
-      { operation: "reconcile", reason: "SyntaxError", suppressed: 0 },
-      { operation: "reconcile", reason: "SyntaxError", suppressed: 5 }
+      { hostId: null, operation: "reconcile", reason: "SyntaxError", suppressed: 0 },
+      { hostId: null, operation: "reconcile", reason: "SyntaxError", suppressed: 5 }
     ]);
   } finally { await live.stop(); }
 });

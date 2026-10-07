@@ -2,6 +2,7 @@ import { AgentError } from "../../platform/agent-transport/protocol.js";
 
 export type LiveRuntimeError = {
   operation: "reconcile" | "monitor";
+  hostId: string | null;
   reason: string;
   status?: number;
   code?: string;
@@ -15,9 +16,9 @@ export const LIVE_ERROR_INTERVAL_MS = 30_000;
 /** Log only local categories, HTTP status and known transport codes, never remote text. */
 export function createLiveErrorReporter(log: (error: LiveRuntimeError) => void, now: () => number = Date.now) {
   const recent = new Map<string, { at: number; suppressed: number }>();
-  return (operation: LiveRuntimeError["operation"], error: unknown) => {
+  return (operation: LiveRuntimeError["operation"], error: unknown, hostId: string | null = null) => {
     const detail: LiveRuntimeError = {
-      operation,
+      operation, hostId,
       reason: error instanceof AgentError ? "agent-error" :
         error instanceof Error && LOCAL_REASONS.has(error.message) ? error.message :
           error instanceof Error && ERROR_NAMES.has(error.name) ? error.name : "unknown-error",

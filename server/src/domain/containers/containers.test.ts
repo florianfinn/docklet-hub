@@ -57,6 +57,7 @@ test("ein vollständiger Datensatz wird auf die Felder der Übersicht verkürzt"
     image: "ghcr.io/example/jellyfin:10.9.0",
     status: "running",
     running: true,
+    exitCode: null,
     startedAt: "2026-09-01T08:00:00.000Z",
     health: "healthy",
     compose: { project: "media", service: "jellyfin" },
@@ -256,4 +257,18 @@ test("die Einzelansicht fragt den Container unter seiner kodierten Kennung", asy
   );
   assert.equal(url, "http://docker-agent:8099/containers/a%2Fb");
   assert.deepEqual(stats?.samples, SAMPLES);
+});
+
+test("runtime eligibility and exit code travel without registry or self-management diagnostics", () => {
+  const [entry] = parseContainerList({ containers: [{ ...SUMMARY, exitCode: 1,
+    runtimeAccess: { blocker: "observe-only", privateDirectory: "/private" } }] });
+  assert.equal(entry.exitCode, 1); assert.deepEqual(entry.runtimeAccess, { blocker: "observe-only" });
+  assert.equal(parseContainerList({ containers: [{ ...SUMMARY, runtimeAccess: { blocker: "private" } }] })[0].runtimeAccess, undefined);
+});
+
+test("explicit one-shot evidence is preserved but absent or malformed evidence is not inferred", () => {
+  for (const value of [true, false, undefined, "true"]) {
+    const [entry] = parseContainerList({ containers: [{ ...SUMMARY, exitCode: 0, oneShot: value }] });
+    assert.equal(entry.oneShot, typeof value === "boolean" ? value : undefined);
+  }
 });

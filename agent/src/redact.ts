@@ -1,3 +1,4 @@
+import { COMPOSE_ONE_OFF_LABEL } from "contract";
 import { toInspectedContainer, type RawInspect } from "./engine.js";
 import { hardeningRuleNames, type HardeningRule } from "./hardening.js";
 import { mutabilityOfRef, type Mutability } from "./image-ref.js";
@@ -20,6 +21,9 @@ export type ContainerSummary = {
   image: string;
   status: string;
   running: boolean;
+  exitCode?: number | null;
+  oneShot?: boolean;
+  runtimeAccess?: { blocker: "not-allowlisted" | "observe-only" | "self-management-locked" | null };
   startedAt: string | null;
   health: string | null;
   // A running container can hang in an old network namespace even though
@@ -161,6 +165,7 @@ export function toContainerSummary(raw: RawInspect, options: SummaryOptions = {}
     image: raw.Config?.Image ?? raw.Image ?? "",
     status: raw.State?.Status ?? "unknown",
     running: raw.State?.Running === true,
+    oneShot: raw.Config?.Labels?.[COMPOSE_ONE_OFF_LABEL]?.toLowerCase() === "true",
     startedAt: raw.State?.StartedAt ?? null,
     health: raw.State?.Health?.Status ?? null,
     networkMode: raw.HostConfig?.NetworkMode ?? null,

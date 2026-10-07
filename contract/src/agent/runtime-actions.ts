@@ -1,5 +1,12 @@
 import * as z from "zod/mini";
 
+// Compose explicitly marks containers created for one-off runs. Restart policy alone is insufficient.
+export const COMPOSE_ONE_OFF_LABEL = "com.docker.compose.oneoff";
+// Hub transport covers a 60 s queue, a 600 s action and 30 s transport reserve.
+export const HUB_RUNTIME_TIMEOUT_MS = 690_000;
+// Let the hub deliver its terminal response before the browser aborts (10 s delivery reserve).
+export const LIFECYCLE_TIMEOUT_MS = HUB_RUNTIME_TIMEOUT_MS + 10_000;
+
 export const runtimeActionSchema = z.enum(["start", "stop", "restart"]);
 export type RuntimeAction = z.infer<typeof runtimeActionSchema>;
 

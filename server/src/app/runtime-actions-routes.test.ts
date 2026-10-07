@@ -217,3 +217,22 @@ test("transport failures and management-lock diagnostics become stable hub keys"
   assert.deepEqual((await f.call(true)).body, { error: "self-management-locked" });
   assert.equal(f.refreshes.length, 4);
 });
+
+test("runtime context exposes only expectation and service eligibility under the human actor", async (t) => {
+  const f = await fixture(); t.after(f.close); f.state.role = "user";
+  f.state.agent = (_request, response) => response.json({ ...STACK, readOnly: false,
+    services: [{ serviceName: "web", ...EXPECTED, exitCode: 0, allowed: true, secret: "private diagnostic" }],
+    couplings: [{ private: "diagnostic" }], stderr: "private diagnostic" });
+  const response = await fetch(`${f.url}/hosts/demo-host/stacks/${ID}/context`);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.expectedStack, STACK); assert.equal(body.hubOwned, false); assert.equal(body.applyDefinition, true);
+  assert.equal(JSON.stringify(body).includes("private diagnostic"), false);
+  assert.equal(f.calls.at(-1)?.actor, "user:demo-human"); assert.equal(f.refreshes.length, 0);
+});
+test("changed runtime mode rejects a confirmed stack request before mutation", async (t) => {
+  const f = await fixture(); t.after(f.close); f.state.mode = false;
+  const result = await f.call(true, "restart", { expectedStack: STACK, expectedApplyDefinition: true });
+  assert.equal(result.status, 409); assert.equal(result.body.error, "state-changed");
+  assert.equal(f.calls.some((call) => call.path.includes("actions/")), false);
+});

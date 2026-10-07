@@ -26,7 +26,7 @@ export function registerRuntimeActionsRoutes(router: Router, options: RuntimeAct
   const hosts = createHostAccess(options);
   const probe = resolveProbeHost(options);
   const service = createRuntimeActionsService({
-    openContainer: (ref) => openContainerAccess({ hosts, probe }, ref, "writes"),
+    openContainer: (ref, writing = "writes") => openContainerAccess({ hosts, probe }, ref, writing),
     readApplyDefinition: options.readApplyDefinition,
     ...(options.liveEvents ? { liveEvents: options.liveEvents } : {})
   });
@@ -60,6 +60,14 @@ export function registerRuntimeActionsRoutes(router: Router, options: RuntimeAct
       rejection(error, response, false);
     } finally { response.off("close", abort); }
   });
+  router.get("/hosts/:hostId/stacks/:containerId/context", withSession(options.auth, async (request, response, user) => {
+    response.setHeader("Cache-Control", "no-store");
+    try { response.json(await service.context({ hostId: String(request.params.hostId), containerId: String(request.params.containerId), userId: user.id })); }
+    catch (error) {
+      if (!(error instanceof AgentError)) { response.status(500).json({ error: "internal-error" }); return; }
+      rejection(error, response, true);
+    }
+  }));
   router.post("/hosts/:hostId/containers/:containerId/:action", requireAdmin(options.auth), runtimeActionOnly, handler());
   router.post("/hosts/:hostId/stacks/:containerId/actions/:action", requireAdmin(options.auth), runtimeActionOnly, handler(true));
 }

@@ -1,6 +1,6 @@
 # Bedienvertrag für Start, Stopp und Neustart
 
-Dieser Vertrag legt fest, wie die Oberfläche die Lifecycle-Aktionen anbietet (#86). Er beschreibt nur die Bedienung. Semantik, Ergebnisse und Fehlerschlüssel der Laufzeitaktionen stehen in [container-lifecycle.md](container-lifecycle.md) (#97) und kommen aus der technischen Umsetzung (#98), damit UI und API denselben Vertrag umsetzen; fehlt dort etwas, wird es dort ergänzt und nicht in der Oberfläche nachgebaut. Die Grenzen für fremdverwaltete Container folgen #5.
+Dieser Vertrag legt fest, wie die Oberfläche die Lifecycle-Aktionen anbietet (#86). Er beschreibt nur die Bedienung. Semantik, Ergebnisse und Fehlerschlüssel der Laufzeitaktionen stehen in [container-lifecycle.md](container-lifecycle.md) (#97) und kommen aus der technischen Umsetzung (#98), damit UI und API denselben Vertrag umsetzen; fehlt dort etwas, wird es dort ergänzt und nicht in der Oberfläche nachgebaut. Die Grenzen für fremdverwaltete Container stehen in [phase-5-write-access.md](phase-5-write-access.md).
 
 ## Zustände und Aktionen
 
@@ -13,13 +13,13 @@ Ein Ziel ist ein einzelner Container, auch ein Service eines Stacks, oder ein ga
 | im Übergang | gesperrt, Fortschritt sichtbar | gesperrt, Fortschritt je Service |
 | unbekannt oder offline | gesperrt mit Grund | gesperrt mit Grund |
 
-Im Übergang ist ein Ziel nur, solange ein Vorgang des Hubs darauf läuft. Meldet Docker `restarting`, zählt der Container als laufend und zeigt, dass er wiederholt neu startet; gerade bei einem Absturz-Loop braucht der Nutzer Stopp und Neustart. `paused` zählt ebenfalls als laufend, `created` und `exited` als gestoppt. `dead`, `removing` und unbekannte Zustände sperren die Aktionen mit Grund. Ein Stack mit laufenden und gestoppten Services bietet alle drei Aktionen an, weil jede davon eine sinnvolle Absicht ausdrückt. Ein Service, der als Einmalauftrag mit Exit-Code 0 beendet ist, gilt dabei als erledigt und hält den Start nicht dauerhaft angeboten.
+Im Übergang ist ein Ziel nur, solange ein Vorgang des Hubs darauf läuft. Meldet Docker `restarting`, zählt der Container als laufend und zeigt, dass er wiederholt neu startet; gerade bei einem Absturz-Loop braucht der Nutzer Stopp und Neustart. `paused` zählt ebenfalls als laufend, `created` und `exited` als gestoppt. `dead`, `removing` und unbekannte Zustände sperren die Aktionen mit Grund. Ein Stack mit laufenden und gestoppten Services bietet alle drei Aktionen an, weil jede davon eine sinnvolle Absicht ausdrückt. Nur ein ausdrücklich mit dem Compose-Label `com.docker.compose.oneoff=True` gekennzeichneter Container gilt nach Exit-Code 0 als erledigter Einmalauftrag und hält das Startangebot des Stacks nicht offen. Exit-Code 0 oder Restart-Policy `no` allein beweisen keinen Einmalauftrag. Eine Stopp-Absicht hat immer Vorrang, auch bei einem gekennzeichneten Einmalauftrag. Ist die Absichtsbeobachtung unbekannt, bleibt Start verfügbar. Regulär oder manuell gestoppte Services halten Start auch nach Exit-Code 0 offen.
 
 Die Aktionen stehen direkt in der Zeile jedes Containers und Stacks und in der Detailansicht, nicht nur im Kontextmenü. Auf schmalen Ansichten bleiben sie als Schaltflächen mit ausreichender Trefferfläche erreichbar; nichts hängt allein an Hover oder Rechtsklick. Jede Schaltfläche ist per Tastatur erreichbar und trägt ihren Namen auch für Screenreader.
 
 ## Beschriftung nach wirksamem Modus
 
-Bei Stack-Aktionen Hub-eigener Projekte mit eingeschalteter Einstellung „Compose-Definition bei Start und Neustart anwenden“ nennt die Schaltfläche die Wirkung: „Start · Definition anwenden“ und „Neustart · neu erstellen“. Fremdverwaltete Stacks, Einzelcontainer und einzelne Services zeigen immer die reine Laufzeitaktion, weil sie nie neu erstellt werden. Den Schalter selbst fragt die Ersteinrichtung mit kurzer Erklärung und der Vorauswahl „An“ ab; danach steht er in den Einstellungen. So wird ein Neustart nie stillschweigend zum Recreate.
+Bei Stack-Aktionen Hub-eigener Projekte mit eingeschalteter Einstellung „Compose-Definition bei Start und Neustart anwenden“ nennt die Schaltfläche die Wirkung: „Start · Definition anwenden“ und „Neustart · neu erstellen“. Fremdverwaltete Stacks, Einzelcontainer und einzelne Services zeigen immer die reine Laufzeitaktion, weil sie nie neu erstellt werden. Den Schalter selbst fragt die Ersteinrichtung mit kurzer Erklärung und der Vorauswahl „An“ ab; danach steht er in den Einstellungen. Die Übersicht und der Vorab-Kontext verwenden dieselbe Ableitung: eine vorhandene Compose-Datei mit Verwaltung `full` und keine bekannte Fremdverwaltung. Fällt die Discovery aus, bleibt die Verwaltung unbekannt; die Beschriftung bleibt neutral. Vor dem Versand erscheint dann auch bei Start eine Rückfrage, die den unbekannten Verwaltungszustand und bei eingeschalteter Definitionseinstellung die mögliche Anwendung der Definition beziehungsweise Neuerstellung erläutert. So wird ein Neustart nie stillschweigend zum Recreate.
 
 ## Gesperrte Aktionen
 
@@ -32,7 +32,7 @@ Start, Stopp und Neustart eines einzelnen Containers laufen ohne Rückfrage, wei
 - Stopp und Neustart eines ganzen Stacks nennen die betroffenen Services.
 - „Neustart · neu erstellen“ nennt die betroffenen Services und dass Volumes und Bind-Mounts erhalten bleiben.
 
-„Start · Definition anwenden“ fragt nicht: Er ersetzt nur Container, deren Definition sich geändert hat, und genau das ist die gewählte Einstellung. Welche Services ersetzt wurden, nennt das Ergebnis.
+„Start · Definition anwenden“ fragt nicht: Er ersetzt nur Container, deren Definition sich geändert hat, und genau das ist die gewählte Einstellung. „Neustart · neu erstellen“ ersetzt dagegen alle betroffenen Container und fragt deshalb nach. Welche Services ersetzt wurden, nennt das Ergebnis.
 
 Rückfragen vor jeder Aktion würden zum Wegklicken erziehen und die wenigen wichtigen Rückfragen entwerten.
 
@@ -47,12 +47,12 @@ Stack-Aktionen zeigen den Fortschritt je Service aus dem Strom. Das Ergebnis ers
 - Zeitgrenze überschritten: Der Vorgang kann auf dem Host weiterlaufen; die Meldung sagt das, und die Oberfläche liest den Stand neu.
 - Fristablauf oder Verbindungsverlust nach dem Versand: `runtime-outcome-unknown` bei synchronen Antworten beziehungsweise `runtime-stream-broken` bei geöffneten Stack-Strömen. Das Ergebnis ist unbekannt, nicht gescheitert; die Oberfläche liest den Stand nach der Wiederverbindung neu.
 
-Nach jedem Vorgang zeigt die Oberfläche den tatsächlichen Stand aus dem Live-Stand, nicht den erwarteten.
+Nach jedem Vorgang zeigt die Oberfläche den tatsächlichen Stand aus dem Live-Stand, nicht den erwarteten. Die Browserfrist kommt aus `contract/`: 690 Sekunden Hub-Frist (60 Sekunden Warteschlange, höchstens 600 Sekunden Aktion, 30 Sekunden Transportreserve) plus 10 Sekunden Reserve für die Zustellung der abschließenden Hub-Antwort.
 
 ## Absicht, Wartung und Vorfall
 
-Ein gestoppter Container mit Stopp-Absicht zeigt „manuell gestoppt“ mit Zeitpunkt und, wenn bekannt, wer gestoppt hat. Ein gestoppter Container ohne Absicht mit Exit-Code ungleich 0 zeigt „abgestürzt“. Aktive Wartung erscheint als Kennzeichen mit Ablaufzeit; ein- und ausgeschaltet wird sie in der Detailansicht und im Menü des Ziels, mit wählbarer Dauer, ab Werk eine Stunde, auf Wunsch unbegrenzt. Ein offener Vorfall der Selbstheilung erscheint am Container mit Ursache, Versuchen, empfohlener Handlung und Log-Auszug und lässt sich dort quittieren. Die Regeln dahinter stehen in [self-healing.md](self-healing.md).
+Ein gestoppter Container mit Stopp-Absicht zeigt „manuell gestoppt“ mit Zeitpunkt und, wenn bekannt, wer gestoppt hat. Der Hub löst `user:<id>` zum Kontonamen auf und entfernt E-Mail-Adressen aus dem Namen; bei gelöschtem Konto, leerem Namen oder fehlgeschlagener Auflösung steht „Akteur unbekannt“. Systemakteure heißen „Hub“ beziehungsweise „Selbstheilung“. Ein gestoppter Container ohne Absicht mit Exit-Code ungleich 0 zeigt „abgestürzt“. Aktive Wartung erscheint als Kennzeichen mit Ablaufzeit; ein- und ausgeschaltet wird sie in der Detailansicht und im Menü des Ziels, mit wählbarer Dauer, ab Werk eine Stunde, auf Wunsch unbegrenzt. Ein offener Vorfall der Selbstheilung erscheint am Container mit Ursache, Versuchen, empfohlener Handlung und Log-Auszug und lässt sich dort quittieren. Die Regeln dahinter stehen in [self-healing.md](self-healing.md).
 
 ## Update, Recreate und Entfernen
 
-Diese Aktionen folgen denselben Zuständen, Sperrgründen und Fortschrittsregeln, verändern aber Container oder Definitionen und fragen deshalb immer. Die Rückfrage nennt das Ziel, die betroffenen Services, was mit Daten geschieht und den Rückweg: Ein Update fällt beim Fehlschlag auf das vorherige Image mit der vorherigen Definition zurück ([update-and-rollback.md](update-and-rollback.md)), und Entfernen erhält Daten im Standardweg. Bei fremdverwalteten Containern sind sie gesperrt und nennen den zuständigen Verwalter. Vorschau, Ablauf und Rückweg im Einzelnen bedient #88; die Erfolgskriterien eines Updates entscheidet #13.
+Diese Aktionen folgen denselben Zuständen, Sperrgründen und Fortschrittsregeln, verändern aber Container oder Definitionen und fragen deshalb immer. Die Rückfrage nennt das Ziel, die betroffenen Services, was mit Daten geschieht und den Rückweg: Ein Update fällt beim Fehlschlag auf das vorherige Image mit der vorherigen Definition zurück ([update-and-rollback.md](update-and-rollback.md)), und Entfernen erhält Daten im Standardweg. Bei fremdverwalteten Containern sind sie gesperrt und nennen den zuständigen Verwalter. Vorschau, Ablauf und Rückweg im Einzelnen beschreibt [update-and-rollback.md](update-and-rollback.md); die Erfolgskriterien eines Updates entscheidet #13.

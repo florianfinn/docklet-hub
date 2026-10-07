@@ -1,6 +1,7 @@
 // Container overview, settings and runtime actions, parsed at the hub boundary.
 
 import {
+  lifecycleWriteResultSchema, hubRuntimeContextSchema, type SelfHealingMaintenanceTarget, type StopIntentTarget,
   hubContainerRuntimeResultSchema, hubStackRuntimeResultSchema, hubStackActionStreamLineSchema,
   hubRuntimeErrorSchema, readNdjson, type RuntimeAction, type ExpectedContainer, type ExpectedStack,
   type HubContainerRuntimeResult, type HubStackActionStreamLine, type HubRuntimeError,
@@ -39,11 +40,11 @@ export async function runContainerAction(hostId: string, containerId: string, ac
 
 export async function runStackAction(hostId: string, containerId: string, action: RuntimeAction,
   expectedStack: ExpectedStack, onEvent: (event: HubStackActionStreamLine) => void | Promise<void>,
-  signal: AbortSignal): Promise<void> {
+  signal: AbortSignal, expectedApplyDefinition?: boolean): Promise<void> {
   const path = `/api/hosts/${encodeURIComponent(hostId)}/stacks/${encodeURIComponent(containerId)}/actions/${action}`;
   const response = await fetch(path, { method: "POST", credentials: "include", signal,
     headers: { "content-type": "application/json", accept: "application/x-ndjson" },
-    body: JSON.stringify({ expectedStack }) });
+    body: JSON.stringify({ expectedStack, ...(expectedApplyDefinition === undefined ? {} : { expectedApplyDefinition }) }) });
   if (!response.ok) throw new ApiError(response.status, await readErrorDetail(response));
   if (!response.headers.get("content-type")?.includes("application/x-ndjson")) {
     await onEvent({ kind: "result", status: response.status,
@@ -72,4 +73,28 @@ export function runtimeActionResultOf(error: unknown): HubContainerRuntimeResult
     const parsed = hubContainerRuntimeResultSchema.safeParse(JSON.parse(error.message));
     return parsed.success && !parsed.data.ok ? parsed.data : null;
   } catch { return null; }
+}
+
+export async function fetchRuntimeContext(hostId: string, containerId: string, signal?: AbortSignal) {
+  const path = `/api/hosts/${encodeURIComponent(hostId)}/stacks/${encodeURIComponent(containerId)}/context`;
+  return parseResponse(path, hubRuntimeContextSchema, await request(path, { signal }));
+}
+export async function setMaintenance(hostId: string, target: SelfHealingMaintenanceTarget, durationSeconds: number | null, signal?: AbortSignal) {
+  const path = `/api/hosts/${encodeURIComponent(hostId)}/self-healing/maintenance`;
+  return parseResponse(path, lifecycleWriteResultSchema, await request(path, { method: "PUT", headers: { "content-type": "application/json" }, signal, body: JSON.stringify({ target, durationSeconds }) }));
+}
+export async function clearMaintenance(hostId: string, target: SelfHealingMaintenanceTarget, signal?: AbortSignal) {
+  const path = `/api/hosts/${encodeURIComponent(hostId)}/self-healing/maintenance`;
+  return parseResponse(path, lifecycleWriteResultSchema, await request(path, { method: "DELETE", headers: { "content-type": "application/json" }, signal, body: JSON.stringify({ target }) }));
+}
+export async function acknowledgeIncident(hostId: string, target: StopIntentTarget, signal?: AbortSignal) {
+  const path = `/api/hosts/${encodeURIComponent(hostId)}/self-healing/incidents/acknowledge`;
+  return parseResponse(path, lifecycleWriteResultSchema, await request(path, { method: "POST", headers: { "content-type": "application/json" }, signal, body: JSON.stringify({ target }) }));
+}
+export async function fetchLifecycleHost(hostId: string, signal?: AbortSignal): Promise<HostOverview> {
+  const path = `/api/hosts/${encodeURIComponent(hostId)}/overview`;
+  const result = parseResponse(path, overviewSchema, await request(path, { signal }));
+  const host = result.hosts.find((entry) => entry.host.id === hostId);
+  if (!host) throw new ApiError(404, JSON.stringify({ error: "host-unknown" }));
+  return host;
 }

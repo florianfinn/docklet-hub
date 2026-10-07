@@ -20,7 +20,7 @@ export const hubRuntimeErrorSchema = z.enum(HUB_RUNTIME_ERRORS);
 export type HubRuntimeError = z.infer<typeof hubRuntimeErrorSchema>;
 export const hubRuntimeFailureSchema = z.object({ error: hubRuntimeErrorSchema });
 export const hubContainerActionRequestSchema = z.object({ expectedContainer: expectedContainerSchema });
-export const hubStackActionRequestSchema = z.object({ expectedStack: expectedStackSchema });
+export const hubStackActionRequestSchema = z.object({ expectedStack: expectedStackSchema, expectedApplyDefinition: z.optional(z.boolean()) });
 export const hubContainerRuntimeResultSchema = z.object({
   ...containerRuntimeResultSchema.shape, error: z.optional(hubRuntimeErrorSchema)
 });

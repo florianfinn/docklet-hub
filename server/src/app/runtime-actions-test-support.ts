@@ -53,6 +53,7 @@ export async function fixture(options: { monitorUnavailable?: boolean } = {}) {
     image: "nginx:1.27", status: "running", running: true, startedAt: EXPECTED.startedAt,
     compose: { project: "demo", service: "web" }, externalManagement: { manager: "unraid-compose" } }] }));
   agentApp.post("/containers/:id/:action", (request, response) => state.agent(request, response));
+  agentApp.get("/stacks/:id/context", (request, response) => state.agent(request, response));
   agentApp.post("/stacks/:id/actions/:action", (request, response) => state.agent(request, response));
   const agent = http.createServer(agentApp);
   await listenOnFetchablePort(agent);
