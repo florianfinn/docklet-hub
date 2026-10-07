@@ -114,6 +114,8 @@ in docs/design/ und sind dort im Index verlinkt.
 - Jedes Feature wird auf einem eigenen Feature-Branch integriert.
   Arbeitsschritte entstehen auf eigenen Branches und kommen per PR auf diesen
   Feature-Branch. Branch-Namen sind nicht vorgegeben.
+- Geteilte Grundlagen auf einem Feature-Branch (Agent-Vertragsversion samt Fingerabdruck und Test-Fixtures, Entscheidungsdokumente) haben genau einen verantwortlichen Schritt.
+  Dieser wird vor parallel darauf aufbauenden Schritten gemergt; die anderen Schritte ziehen die Grundlage per Merge nach.
 - Erst das vollständige Feature kommt mit einem Abschluss-PR auf main.
   Eigenständige Fehlerkorrekturen und Dokumentation dürfen direkt per PR dorthin.
 - Der Feature-Branch übernimmt main regelmäßig per Merge. Geteilte Historie

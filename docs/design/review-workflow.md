@@ -47,6 +47,10 @@ Fix-Commit, für verworfene die fachliche Begründung, für übernommene das Iss
 die dortige Kennung. Bei einem ungelösten Blocker bleibt das Ergebnis `fail`.
 Ein Issue ersetzt seine Behebung und Prüfung vor dem Merge nicht.
 
+Eine Korrekturrunde prüft bei jedem blockierenden Befund die Fehlerklasse über
+alle vergleichbaren Pfade. Der Korrekturauftrag verlangt eine Prüfmatrix für
+diese Pfade und Belege, dass die neuen Tests ohne die Korrektur fehlschlagen.
+
 Blocker und passende optionale Korrekturen werden in einer Korrekturrunde gesammelt
 behoben, selbst geprüft und gemeinsam gepusht. Nach einem bestandenen Review
 werden zusätzliche optionale Verbesserungen zur Nacharbeit übernommen, statt
