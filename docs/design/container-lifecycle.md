@@ -102,7 +102,7 @@ beurteilt ausschließlich der Agent.
 Der Hub übernimmt die Service-Zustände und Ergebnisse nach Schema. Fehler
 tragen eigene stabile Schlüssel aus `contract/src/api/runtime-actions.ts`,
 insbesondere `state-changed`, `action-queue-timeout`, `action-caller-disconnected`,
-`runtime-target-not-reached` und `scaled-service-unsupported`. Diagnosetexte,
+`runtime-target-not-reached`, `runtime-deadline-exceeded` und `scaled-service-unsupported`. Diagnosetexte,
 Engine-Meldungen und zusätzliche Agent-Felder gelangen nicht ins Web.
 Unbekannte Agent-Schlüssel ergeben `runtime-agent-failed`. Ein sicher vor dem
 Versand gescheiterter Verbindungsaufbau ergibt `runtime-agent-unreachable`;
@@ -118,13 +118,38 @@ Warteschlange, die längste Agent-Aktion (Maximum aus 640 Sekunden
 Container-Neustart einschließlich Startreserve und 600 Sekunden Stack-Aktion),
 30 Sekunden Nachlesereserve und 30 Sekunden Transportreserve. Die Browserfrist
 `LIFECYCLE_TIMEOUT_MS` beträgt 770 Sekunden und lässt weitere 10 Sekunden für
-die Zustellung der Hub-Antwort. Nachlese- und Transportreserven sind Budgets;
-sie ersetzen keine eigene Gesamtfrist für beliebig große Stack-Vorprüfungen.
-Die Prüfmatrix vergleicht alle sechs Aktionen mit maximalen, unbegrenzten und
-überlangen Grace-Periods gegen diese Budgets. Virtuelle Hub-Transporttests
-prüfen nach 59 Sekunden Warteschlange die maximale Aktion einschließlich beider
-Reserven: beim Container-Neustart kommt das Ergebnis nach 759 Sekunden an,
-vor Ablauf der 760 Sekunden Hub-Frist.
+die Zustellung der Hub-Antwort.
+
+Der Agent bildet beim Eingang einer Laufzeitanfrage eine absolute monotone
+Frist von 730 Sekunden: Hub-Frist abzüglich Transportreserve. Gates einschließlich
+aller Volumen- und Service-Inspects, Warteschlange, Inventar- und Image-Prüfungen,
+Compose-Konfiguration, Mutation, Fortschrittsbeobachtung und Nachlesen teilen
+sich dieses Budget. Jede asynchrone Abfrage erhält die verbleibende Zeit und
+ein Abbruchsignal. Engine- und Compose-Fristen sind zusätzlich durch ihre
+jeweiligen lokalen Grenzen begrenzt; auch die zweite Neustartphase erhält
+höchstens die tatsächlich verbleibende Zeit. Vorprüfungen dürfen deshalb die
+für eine maximale Mutation verfügbare Zeit verkürzen. Die Nachlesereserve ist
+Teil der Gesamtfrist und kein zusätzliches Budget nach deren Ablauf.
+
+Bei Ablauf beendet der Agent das Warten mit `504 runtime-deadline-exceeded`
+und liefert den zuletzt erfolgreich gelesenen Zustand, soweit vorhanden.
+Weitere Phasen beginnen dann nicht. Ein Abbruch des Enginekontakts beweist
+keinen Abbruch einer bereits angenommenen Mutation. Der genau eine Aktionsaudit
+trägt vor Mutationsbeginn `denied`, danach `error`; die Antwort behauptet
+keinen unveränderten oder garantiert nicht ausgeführten Vorgang.
+Selbstheilungsstarts verwenden dieselbe endliche Frist von 730 Sekunden ohne
+Hub-Aufrufer: Große Volumenprüfungen bleiben möglich, während ein Heilungsstart
+den gemeinsamen Projekt-Lock nicht unbegrenzt belegt.
+
+Virtuelle Integrationstests verbinden reale Agent-Handler mit dem Hub-Client
+für Container-Start, -Stopp und -Neustart sowie eigene und fremd verwaltete
+Stack-Aktionen über Stream und synchronen Rückfall. Langsame Abfragen in jeder
+Phase, kumulierte Inspects und Warteschlange teilen sich die Frist. Die Antwort
+kommt einschließlich 29 Sekunden simulierter Zustellung spätestens bei
+759 Sekunden an, vor der Hub-Frist von 760 Sekunden. Die Matrix enthält
+insbesondere Container-Neustart mit vier Volumenprüfungen und Stack-Stopp mit
+zehn Services bei jeweils 14 Sekunden pro Engine-Abfrage sowie 59 Sekunden
+Warteschlange. Gezielt entfernte Budgetweitergaben müssen die Tests verletzen.
 
 Die gemeinsame Erreichbarkeitsprüfung bestimmt, ob ein Host Aktionen annehmen
 kann; ein als offline erkannter Host erhält `503 runtime-host-offline` ohne

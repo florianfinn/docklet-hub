@@ -5,14 +5,14 @@ import { expectedContainerMatches, runtimeStateOf, runtimeTargetReached } from "
 import { runtimeReadback } from "./runtime-readback.js";
 
 export async function executeContainerRuntimeAction(
-  ops: { inspect: () => Promise<RawInspect | null>; execute: (inspect: RawInspect) => Promise<void> },
+  ops: { inspect: () => Promise<RawInspect | null>; execute: (inspect: RawInspect) => Promise<void>; lastKnownInspect?: () => RawInspect | null },
   action: RuntimeAction, expected: ExpectedContainer, before: RawInspect, signal?: AbortSignal
 ) {
   return runtimeReadback(async () => {
     if (!expectedContainerMatches(expected, runtimeStateOf(before))) throw new StackEndpointError(409, "state-changed");
     if (signal?.aborted) throw new StackEndpointError(409, "action-caller-disconnected");
     await ops.execute(before);
-  }, async () => runtimeStateOf(await ops.inspect()), () => runtimeStateOf(null, true), (state) => {
+  }, async () => runtimeStateOf(await ops.inspect()), () => runtimeStateOf(ops.lastKnownInspect?.() ?? null, true), (state) => {
     const ok = runtimeTargetReached(action, state);
     return { ok, action, outcome: ok ? "ok" as const : "failed" as const, state,
       ...(ok ? {} : { error: "runtime-target-not-reached" }) };

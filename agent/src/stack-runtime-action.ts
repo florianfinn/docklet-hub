@@ -15,6 +15,8 @@ export type StackRuntimeOps = {
   stop: (timeoutMs: number) => Promise<unknown>;
   restart: (timeoutMs: number, startWithUp: boolean) => Promise<unknown>;
   refresh: (prepared: PreparedStack) => Promise<StackContextResponse>;
+  beforeMutation?: () => Promise<void>;
+  lastKnownContext?: (prepared: PreparedStack) => StackContextResponse;
 };
 
 export function runtimeServices(action: RuntimeAction, context: StackContextResponse, external: boolean): RuntimeServiceResult[] {
@@ -59,6 +61,12 @@ export async function executeStackRuntimeAction(
     if (options.signal?.aborted) throw new StackEndpointError(409, "action-caller-disconnected");
     ops.checkRuntimeScope(prepared);
     if (creating) ops.checkCreateScope(prepared);
+    if (ops.beforeMutation) {
+      await ops.beforeMutation();
+      ops.checkRuntimeScope(prepared);
+      if (creating) ops.checkCreateScope(prepared);
+    }
+    if (options.signal?.aborted) throw new StackEndpointError(409, "action-caller-disconnected");
     mutationStarted = true;
     options.onMutation?.();
     if (creating) {
@@ -68,7 +76,7 @@ export async function executeStackRuntimeAction(
     else if (action === "start") await ops.start(timeoutMs);
     else if (action === "stop") await ops.stop(timeoutMs);
     else await ops.restart(timeoutMs, false);
-  }, () => ops.refresh(prepared), () => ({
+  }, () => ops.refresh(prepared), () => ops.lastKnownContext?.(prepared) ?? ({
     ...prepared.context, services: prepared.context.services.map((service) => ({
       ...service, containerId: null, status: "unknown", exitCode: null, health: null, startedAt: null
     }))

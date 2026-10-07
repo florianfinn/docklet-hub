@@ -22,6 +22,14 @@ Protokollbruch: Hub und Agenten müssen gemeinsam aktualisiert werden.
 
 ### Vertragsversion 12
 
+- Laufzeitanfragen teilen eine absolute monotone Frist von 730 Sekunden über
+  Gates, Volumen- und Service-Inspects, Warteschlange, Vorprüfungen, Mutation,
+  Fortschrittsbeobachtung und Nachlesen. Engine- und Compose-Aufrufe erhalten
+  höchstens das Restbudget. Das gilt für Container, Stack-Ströme, synchronen
+  Rückfall und Selbstheilungsstarts. `504 runtime-deadline-exceeded` liefert
+  den zuletzt gelesenen Zustand; genau ein Audit unterscheidet Ablehnung vor
+  und Fehler nach Mutationsbeginn. Vertragsversion 12 bleibt bestehen (#170).
+
 Protokollbruch: Hub und Agenten müssen gemeinsam aktualisiert werden.
 `CONTRACT_VERSION` steigt von 11 auf 12.
 

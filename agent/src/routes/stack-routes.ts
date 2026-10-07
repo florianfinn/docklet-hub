@@ -1,3 +1,4 @@
+import { RuntimeBudget } from "../runtime-budget.js";
 import { actionAuditReason } from "../action-audit.js";
 import { actionFailureOf } from "../action-failure.js";
 import { stackRuntimeResponder } from "../runtime/action-stream.js";
@@ -487,6 +488,7 @@ export async function handleStackContext(ctx: RouteContext, stackContextMatch: R
 }
 
 export async function handleStackAction(ctx: RouteContext, stackActionMatch: RegExpMatchArray): Promise<void> {
+  const budget = new RuntimeBudget();
   const { request, response, actor } = ctx;
   const anchorContainerId = decodeURIComponent(stackActionMatch[1]);
   const actionPath = decodeURIComponent(stackActionMatch[2]);
@@ -519,7 +521,7 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
         if (!releaseStream) throw new StackEndpointError(429, "too-many-streams");
       }
       const responder = stackRuntimeResponder(response, action, project.projectName, streaming);
-      const result = await runStackRuntimeAction(project, anchorContainerId, action, body, actor, connection.signal, { ...(streaming ? responder : {}), onMutation: () => { mutationStarted = true; }, onDelegation: (reason) => { delegation.add(reason); } });
+      const result = await runStackRuntimeAction(project, anchorContainerId, action, body, actor, connection.signal, { ...(streaming ? responder : {}), onMutation: () => { mutationStarted = true; }, onDelegation: (reason) => { delegation.add(reason); } }, budget);
       audit.write({ action: `stack-${action}`, containerId: anchorContainerId, containerName: project.anchorEntry.containerName,
         actor, outcome: result.body.ok ? "allowed" : result.mutationStarted ? "error" : "denied", reason: auditReason(result.body.error ?? result.body.outcome) });
       responder.finish(result);

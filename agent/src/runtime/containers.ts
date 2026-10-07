@@ -1,3 +1,4 @@
+import { runtimeCall, type RuntimeBudget } from "../runtime-budget.js";
 import fs from "node:fs";
 import {
   EngineError,
@@ -96,40 +97,28 @@ export function hardeningOptionsFor(containerId: string): HardeningOptions {
   return { ...hardeningOptions, secureUniverse: universe };
 }
 
-// The ONE way to turn an inspect into the shape for the hardening check
-// (security review stage 7).
-//
-// toInspectedContainer() alone does not look at named volumes. A volume with
-// `driver_opts: {type: none, o: bind, device: /}`, however, binds an arbitrary
-// host path and is reported by Docker as type "volume" — the bind rules
-// (docker-socket-mount, sensitive-host-path, bind-outside-base) would be blind
-// to it one and all. The raw editor is the first to make this spelling
-// reachable; already adopted stacks may contain it as well.
-//
-// That is why from here on EVERY hardening check goes through this function.
-// It is the reason toInspectedContainer is no longer called directly — a check
-// that can be bypassed by accident is not a check.
-export async function volumeBindsOf(raw: RawInspect): Promise<VolumeBindResolution> {
+// Named volumes can bind host paths through driver options. Every hardening
+// check resolves them; unresolved volumes remain visible to the gate.
+export async function volumeBindsOf(raw: RawInspect, budget?: RuntimeBudget): Promise<VolumeBindResolution> {
   const names = volumeNamesOf(raw);
 
   const volumes = new Map<string, RawVolume>();
   for (const name of names) {
     try {
-      const volume = await engine.inspectVolume(name);
+      const volume = await runtimeCall(budget, (options) => engine.inspectVolume(name, options));
       if (volume) volumes.set(name, volume);
     } catch (error) {
-      // The error is logged and deliberately stays in the evaluation as an
-      // unresolved name. Leaving it out would be fail-open: precisely the
-      // unknown volume could mount the host via `driver_opts.device`.
+      budget?.remaining();
+      // Keep unreadable volumes unresolved instead of dropping their risk.
       console.error(`[agent] volume ${name} not readable:`, error);
     }
   }
   return resolveVolumeBinds(raw, volumes);
 }
 
-export async function inspectedContainer(raw: RawInspect): Promise<InspectedContainer> {
+export async function inspectedContainer(raw: RawInspect, budget?: RuntimeBudget): Promise<InspectedContainer> {
   const base = toInspectedContainer(raw);
-  const resolution = await volumeBindsOf(raw);
+  const resolution = await volumeBindsOf(raw, budget);
   return {
     ...base,
     binds: [...base.binds, ...resolution.binds],

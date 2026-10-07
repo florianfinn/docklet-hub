@@ -1,3 +1,6 @@
+import { RuntimeBudget } from "../runtime-budget.js";
+import { RuntimeActionFailure } from "../action-failure.js";
+import type { RawInspect } from "../engine.js";
 import { EngineError } from "../engine.js";
 import { actionFailureOf, type ActionFailure } from "../action-failure.js";
 import type { RuntimeAction, StackActionRequest, RuntimeServiceResult } from "contract";
@@ -16,9 +19,12 @@ import {
 export async function runStackRuntimeAction(
   project: StackResolvedProject, anchor: string, action: RuntimeAction, body: StackActionRequest,
   actor: string | null, signal: AbortSignal,
-  callbacks: { onQueued?: () => void; onStart?: (applyDefinition: boolean) => void; onProgress?: (service: RuntimeServiceResult) => void; onMutation?: () => void; onDelegation?: (reason: string) => void } = {}
+  callbacks: { onQueued?: () => void; onStart?: (applyDefinition: boolean) => void; onProgress?: (service: RuntimeServiceResult) => void; onMutation?: () => void; onDelegation?: (reason: string) => void } = {},
+  budget = new RuntimeBudget()
 ) {
-  return stackLocks.runExclusive(project.projectName, async () => {
+  const lastStates = new Map<string, ReturnType<typeof runtimeStateOf>>();
+  const onInspect = (serviceName: string, inspect: RawInspect) => { lastStates.set(serviceName, runtimeStateOf(inspect)); };
+  try { return await stackLocks.runExclusive(project.projectName, async () => {
     if (!registry.isAllowed(anchor) && ![...registryEntriesByService(project).values()].some((entry) => registry.isAllowed(entry.containerId))) {
       throw new StackEndpointError(409, "state-changed");
     }
@@ -27,17 +33,25 @@ export async function runStackRuntimeAction(
     let stopped = false;
     let observationFailure: ActionFailure | undefined;
     let stopContainerIds: string[] = [];
-    const withRestartIntent = async (operation: () => Promise<unknown>) => {
-      if (action !== "restart") return operation();
+    let restartContainers: RawInspect[] = [];
+    const prepareRestartIntent = async () => {
+      if (action !== "restart") return;
       const inspected = await Promise.all(stopContainerIds.map(async (id) => {
-        try { return await engine.inspect(id); }
+        try {
+          const inspect = await budget.run((options) => engine.inspect(id, options));
+          for (const [serviceName, state] of lastStates) if (state.containerId === id) onInspect(serviceName, inspect);
+          return inspect;
+        }
         catch (error) {
           if (error instanceof EngineError && error.status === 404) return null;
           throw error;
         }
       }));
-      const containers = inspected.filter((container) => container !== null);
-      const finish = stopIntents.beginHubRestart(containers);
+      restartContainers = inspected.filter((container) => container !== null);
+    };
+    const withRestartIntent = async (operation: () => Promise<unknown>) => {
+      if (action !== "restart") return operation();
+      const finish = stopIntents.beginHubRestart(restartContainers);
       try { return await operation(); }
       finally { finish(); }
     };
@@ -49,20 +63,21 @@ export async function runStackRuntimeAction(
       callbacks.onProgress?.(service);
     };
     const observe = async (prepared: PreparedStack) => {
-      const current = await currentStackContainers(project);
+      const current = await currentStackContainers(project, budget);
       const services = [];
       for (const before of prepared.context.services) {
         const container = current.get(before.serviceName);
         // Poll only authorized containers; new ids are authorized after reanchor.
         if (container && !registry.isAllowed(container.containerId)) continue;
-        const inspect = container ? await engine.inspect(container.containerId) : null;
+        const inspect = container ? await budget.run((options) => engine.inspect(container.containerId, options)) : null;
+        lastStates.set(before.serviceName, runtimeStateOf(inspect));
         services.push({ ...before, ...runtimeStateOf(inspect) });
       }
       if (!stopped) for (const service of runtimeServices(action, { ...prepared.context, services }, prepared.externallyManaged)) progress(service);
     };
     try {
       return await executeStackRuntimeAction({
-        prepare: () => prepareStack(project, { mutating: true, action, actor, runtimeAction: true, onDelegation: callbacks.onDelegation }),
+        prepare: () => prepareStack(project, { mutating: true, action, actor, runtimeAction: true, onDelegation: callbacks.onDelegation, budget, onInspect }),
         checkRuntimeScope: (prepared) => {
           if (config.readOnly) throw new StackEndpointError(503, "agent-read-only");
           for (const service of prepared.context.services) {
@@ -76,26 +91,30 @@ export async function runStackRuntimeAction(
           ensureCreateScopeAllowlisted(prepared);
           ensureCreateScopeNotExternallyManaged(prepared);
         },
-        imageId: (ref) => engine.imageId(ref),
-        up: ({ applyDefinition, forceRecreate, timeoutMs }) => withRestartIntent(() => composeUp(project, {
+        imageId: (ref) => budget.run((options) => engine.imageId(ref, options)),
+        beforeMutation: async () => { await prepareRestartIntent(); budget.remaining(); },
+        lastKnownContext: (prepared) => ({ ...prepared.context, services: prepared.context.services.map((service) => ({
+          ...service, ...lastStates.get(service.serviceName)
+        })) }),
+        up: ({ applyDefinition, forceRecreate, timeoutMs }) => withRestartIntent(() => budget.run((options) => composeUp(project, {
           removeOrphans: false, pullNever: true, wait: false,
-          forceRecreate, noRecreate: !applyDefinition, timeoutMs
-        })),
-        start: (timeoutMs) => composeStart(project, timeoutMs),
+          forceRecreate, noRecreate: !applyDefinition, timeoutMs: Math.min(timeoutMs, options.timeoutMs), signal: options.signal
+        }))),
+        start: (timeoutMs) => budget.run((options) => composeStart(project, Math.min(timeoutMs, options.timeoutMs), options.signal)),
         stop: async (timeoutMs) => {
           const finish = stopIntents.beginHubStop(stopContainerIds, actor);
-          try { await composeStop(project, timeoutMs); }
+          try { await budget.run((options) => composeStop(project, Math.min(timeoutMs, options.timeoutMs), options.signal)); }
           finally { finish(); }
         },
-        restart: (timeoutMs, startWithUp) => withRestartIntent(() => composeDependencySafeRestart(project, timeoutMs, undefined, startWithUp ? {
+        restart: (timeoutMs, startWithUp) => withRestartIntent(() => budget.run((options) => composeDependencySafeRestart(project, Math.min(timeoutMs, options.timeoutMs), undefined, startWithUp ? {
           removeOrphans: false, pullNever: true, wait: false, noRecreate: true, forceRecreate: false
-        } : undefined)),
+        } : undefined, options.signal))),
         refresh: async (prepared) => {
           stopped = true;
           if (timer) clearInterval(timer);
           await observing;
-          await reanchorStackRegistry(prepared);
-          return (await prepareStack(project, { mutating: false, action: "stack-context", actor, runtimeAction: true })).context;
+          await reanchorStackRegistry(prepared, budget);
+          return (await prepareStack(project, { mutating: false, action: "stack-context", actor, runtimeAction: true, budget, onInspect })).context;
         }
       }, action, body, {
         signal,
@@ -119,5 +138,14 @@ export async function runStackRuntimeAction(
       if (timer) clearInterval(timer);
       await observing;
     }
-  }, { waitMs: ACTION_QUEUE_WAIT_MS, signal, onQueued: callbacks.onQueued });
+  }, { waitMs: budget.remaining(ACTION_QUEUE_WAIT_MS), signal, onQueued: callbacks.onQueued });
+  } catch (error) {
+    const failure = actionFailureOf(error, true);
+    if (error instanceof RuntimeActionFailure) throw error;
+    const services = [...lastStates].map(([serviceName, state]) => ({ serviceName, ...state, outcome: "failed" as const }));
+    throw new RuntimeActionFailure({ ...failure, body: { ...failure.body, ok: false, action,
+      applyDefinition: body.applyDefinition === true, outcome: "failed", services,
+      containerIds: Object.fromEntries(services.flatMap((service) => service.containerId ? [[service.serviceName, service.containerId]] : []))
+    } });
+  }
 }

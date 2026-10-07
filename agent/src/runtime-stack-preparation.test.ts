@@ -560,3 +560,23 @@ for (const action of ["apply", "down", "context"]) {
     assert.equal(commands[0].includes("config"), true);
   });
 }
+
+test("restart revocation during intent inspects still denies before mutation", async (t) => {
+  mockEngine(t);
+  const records = recordAudit(t);
+  const commands: string[][] = [];
+  mockCompose(t, (args, done) => { commands.push(args); done(); });
+  t.mock.method(engine, "imageId", async () => "local-image");
+  let reads = 0;
+  t.mock.method(engine, "inspect", async () => {
+    if (++reads === 2) registry.replaceAll([{ ...entry, observeOnly: true }]);
+    return inspect();
+  });
+  const req = stackRequest("restart", { expectedStack: expectedStack(), applyDefinition: false });
+  await handleStackAction(req.context, req.context.url.pathname.match(/^\/stacks\/([^/]+)\/actions\/([^/]+)$/)!);
+  assert.equal(req.response.status, 403);
+  assert.equal(req.response.body.error, "stack-service-gate-denied");
+  assert.equal(commands.some((args) => args.includes("stop") || args.includes("start") || args.includes("up")), false);
+  assert.equal(records.length, 1);
+  assert.equal(records[0].outcome, "denied");
+});
