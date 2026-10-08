@@ -16,6 +16,7 @@ let lastFailureAudit: { reason: string; at: number } | null = null;
 export const updateRecovery = new UpdateRecoveryController({
   pending: () => [...updateJournal.read(), ...dataJournal.read()].map((entry) => entry.target),
   async recover() {
+    if (stackLocks.pendingKeys()) throw new Error("recovery-jobs-active");
     await recoverDataOperations({ journal: dataJournal, locks: stackLocks, known: containerIdsForTarget,
       async inspect(id, budget) {
         const result = await gate(id, { mutating: true, action: "restore", actor: null, budget });

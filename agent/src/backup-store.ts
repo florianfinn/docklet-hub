@@ -56,6 +56,14 @@ export class BackupStore {
       await fs.promises.rename(temporary, path.join(directory, `restore-skipped-${createHash("sha256").update(sourceId).digest("hex")}.json`));
     } finally { await fs.promises.rm(temporary, { force: true }); }
   }
+  async recordRestoreFailure(target: StopIntentTarget, backupId: string, sourceId: string, failedPath: string) {
+    const archive = await this.archive(target, backupId, sourceId);
+    const temporary = path.join(path.dirname(archive.file), `restore-failure-${randomUUID()}.tmp`);
+    try {
+      await fs.promises.writeFile(temporary, JSON.stringify({ sourceId, path: failedPath, error: "restore-extract-failed" }), { mode: BACKUP_ARCHIVE_MODE, flag: "wx" });
+      await fs.promises.rename(temporary, path.join(path.dirname(archive.file), "restore-failure.json"));
+    } finally { await fs.promises.rm(temporary, { force: true }); }
+  }
   async checkSpace(target: StopIntentTarget, options: BackupOptions) {
     const root = await this.root(target);
     if (options.mounts.some((mount) => mount.estimatedBytes === null)) throw new UpdateFailure("backup-size-unavailable");

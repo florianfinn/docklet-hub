@@ -13,9 +13,11 @@ export async function recoverDataOperations(deps: {
   intentional: (raw: RawInspect) => () => void;
   interrupted: (target: StopIntentTarget, id: string, message: string) => void;
 }) {
-  for (const entry of deps.journal.read()) {
-    const key = projectLockKey(entry.target.kind === "compose" ? { projectName: entry.target.projectName } : { containerName: entry.target.containerName });
+  for (const pending of deps.journal.read()) {
+    const key = projectLockKey(pending.target.kind === "compose" ? { projectName: pending.target.projectName } : { containerName: pending.target.containerName });
     await deps.locks.runExclusive(key, async () => {
+      const entry = deps.journal.read().find((value) => targetKey(value.target) === targetKey(pending.target));
+      if (!entry) return;
       const ids = deps.known(entry.target);
       if (ids.length !== 1 || ids[0] !== entry.containerId) throw new Error("data-recovery-target-mismatch");
       const budget = new UpdateBudget(UPDATE_MUTATION_RESERVE_MS);

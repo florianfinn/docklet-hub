@@ -102,8 +102,15 @@ safe symlinks last and copy internal hardlink data through pinned descriptors.
 Archives using links as parent directories fail validation. Docker PUT restores
 omit links and record them in private restore metadata because target descriptors
 cannot be pinned. Contract 13 has no skip-count field. Visible sources use pinned descriptors,
-other sources use the Docker archive API. A restore can fail when the agent
-cannot preserve file ownership through the visible-source descriptor path.
+other sources use the Docker archive API. Directory metadata, including the mount root, is restored after its children.
+Descriptor metadata writes fall back to a checked archive PUT when permissions
+are insufficient. Numeric owners and modes are verified after PUT; mismatches
+fail with `restore-extract-failed` and a path in private `restore-failure.json`.
+Unselected mounts never request archive streams during image previews or updates.
+Selected estimates use a separate five-second preview budget; the actual backup
+still estimates selected archives and checks its free-space reserve.
+Open data journals keep blocking updates, restores and healing after startup.
+Failed resumes trigger recovery; another operation cannot replace pending state.
 
 An interrupted data operation is recorded privately before stopping. On restart,
 recovery restores the prior runtime state and reports an incident; it never

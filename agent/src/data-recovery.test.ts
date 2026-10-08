@@ -32,3 +32,13 @@ for (const failure of ["identity", "registry", "resume"] as const) test(`K21/K22
     intentional: () => () => { ended = true; }, interrupted: () => { throw new Error("failed recovery must not complete"); } }));
   assert.equal(resumed, failure === "resume"); assert.equal(ended, failure === "resume"); assert.equal(journal.read().length, 1);
 });
+test("R2: recovery does not resume an operation that completed while waiting for its lock", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "data-recovery-lock-")); t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const journal = new DataJournal(path.join(root, "pending.json")); const target = { kind: "container", containerName: "demo" } as const;
+  journal.begin(target, { Id: "original", Name: "/demo", State: { Running: true } }, "restore");
+  const locks = new KeyedMutex(); const { projectLockKey } = await import("./project-lock.js");
+  let release!: () => void; const held = locks.runExclusive(projectLockKey({ containerName: "demo" }), () => new Promise<void>((resolve) => { release = resolve; }));
+  const fail = async () => { assert.fail("completed operations must not be resumed"); };
+  const recovery = recoverDataOperations({ journal, locks, known: () => ["original"], inspect: fail, resume: fail, intentional: () => () => {}, interrupted: () => assert.fail("no incident for completed work") });
+  journal.complete(target); release(); await held; await recovery; assert.deepEqual(journal.read(), []);
+});

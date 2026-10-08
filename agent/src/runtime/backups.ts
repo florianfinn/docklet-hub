@@ -5,7 +5,8 @@ import { BACKUP_DIRECTORY_DEFAULT, BACKUP_DIRECTORY_ENV, BACKUP_COPY_TIMEOUT_MS,
   UPDATE_CREATE_TIMEOUT_MS, UPDATE_READBACK_TIMEOUT_MS, type BackupOptions, type FileSourceSelection,
   type StopIntentTarget } from "contract";
 import { BackupStore } from "../backup-store.js";
-import { archiveSize, safeBackupArchive, extractVisible, type SkippedEntry } from "../backup-archive.js";
+import { archiveSize, safeBackupArchive, extractVisible, backupTarHeader, type SkippedEntry } from "../backup-archive.js";
+import { RestorePathFailure } from "../restore-metadata.js";
 import { FileArchive } from "../file-archive.js";
 import { fileSources } from "./file-sources.js";
 import { config, engine, stopIntents } from "./state.js";
@@ -17,11 +18,11 @@ import { runtimeStateOf } from "../runtime-actions.js";
 export const dataJournal = new DataJournal(path.join(path.dirname(config.registryFile), "data-pending.json"));
 export const backupStore = new BackupStore(process.env[BACKUP_DIRECTORY_ENV]?.trim()
   || path.join(path.dirname(config.registryFile), BACKUP_DIRECTORY_DEFAULT));
-export async function backupSources(id: string, actor: string | null, budget: UpdateBudget, estimate = false) {
+export async function backupSources(id: string, actor: string | null, budget: UpdateBudget, estimate: boolean | readonly string[] = false) {
   const result = await budget.run(() => fileSources(id, actor));
   if (!result.ok) throw new UpdateFailure("source-protected");
   if (estimate) for (const item of result.resolved) {
-    if (!item.source.backupEligible) continue;
+    if (!item.source.backupEligible || Array.isArray(estimate) && !estimate.includes(item.source.sourceId)) continue;
     try { item.source.estimatedBytes = await budget.run(async ({ signal }) => archiveSize(await engine.openArchiveStream(id, item.source.target, signal))); }
     catch { item.source.estimatedBytes = null; }
   }
@@ -54,7 +55,7 @@ export async function resumeAfterData(raw: RawInspect, budget: UpdateBudget) {
 }
 export async function copyBackup(raw: RawInspect, target: StopIntentTarget, options: BackupOptions,
   actor: string | null, budget: UpdateBudget, cancelled: () => boolean, preloaded?: Awaited<ReturnType<typeof backupSources>>) {
-  const sources = preloaded ?? await backupSources(raw.Id, actor, budget, true);
+  const sources = preloaded ?? await backupSources(raw.Id, actor, budget, options.mounts.map((mount) => mount.sourceId));
   for (const selection of options.mounts) {
     const { item } = archiveAccess(sources, selection.sourceId);
     if (!item.source.backupEligible) throw new UpdateFailure("source-protected");
@@ -94,13 +95,29 @@ export async function restoreArchives(sources: Awaited<ReturnType<typeof backupS
       const stream = safeBackupArchive(handle.createReadStream({ autoClose: false, signal }), item.source.target, allowed, signal, () => {}, skipped, true, !visible && !validateOnly);
       if (validateOnly) { for await (const chunk of stream) { void chunk; } }
       else {
-        if (visible) await extractVisible(stream, visible, composeBasePath, sources.policy, item.source.target, signal);
+        if (visible) await extractVisible(stream, visible, composeBasePath, sources.policy, item.source.target, signal, async (entry, _relative, body) => {
+          if (sources.archiveBlocked) throw new RestorePathFailure(entry.name);
+          const basename = path.posix.basename(item.source.target);
+          const relative = entry.name === basename ? "" : entry.name.slice(basename.length + 1);
+          const absolute = path.posix.join(item.source.target, relative);
+          await allowed(relative);
+          await files.restoreBoundary(absolute);
+          const put = async function* () {
+            yield backupTarHeader({ ...entry, name: path.posix.basename(absolute) });
+            if (body) for await (const chunk of body) yield chunk;
+            yield Buffer.alloc((512 - entry.size % 512) % 512); yield Buffer.alloc(1024);
+          };
+          await engine.putArchiveStream(sources.inspect.Id, path.posix.dirname(absolute), put(), signal);
+        });
         else {
           if (sources.archiveBlocked) throw new UpdateFailure("source-protected");
           await engine.putArchiveStream(sources.inspect.Id, path.posix.dirname(item.source.target), stream, signal);
           await backupStore.recordRestoreSkipped(target, backupId, mount.sourceId, skipped);
         }
       }
+      } catch (error) {
+        if (error instanceof RestorePathFailure) await backupStore.recordRestoreFailure(target, backupId, mount.sourceId, error.relative);
+        throw error;
       } finally { await handle.close(); }
     }, BACKUP_COPY_TIMEOUT_MS);
   }

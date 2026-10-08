@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { updateAcceptance, UPDATE_STOP_TIMEOUT_MS, UPDATE_CREATE_TIMEOUT_MS, UPDATE_READBACK_TIMEOUT_MS,
   SELF_HEALING_RECOMMENDATION, updateDigestSchema, type UpdateServiceSelection, type UpdateResult } from "contract";
-import { updateJournal } from "./update-recovery.js";
+import { updateJournal, updateRecovery } from "./update-recovery.js";
 export { updateJournal } from "./update-recovery.js";
 import { AgentJobs } from "../agent-jobs.js";
 import { UpdateRunner, type UpdateSnapshot, type UpdateOps } from "../update-runner.js";
@@ -37,6 +37,7 @@ export const agentJobs = new AgentJobs((target) => {
 });
 
 export async function authorizeUpdateSelection(selection: UpdateServiceSelection, actor: string | null, budget: UpdateBudget) {
+  if (updateRecovery.blocks(selection.target)) throw new UpdateFailure("state-changed");
   const id = selection.expectedContainer.containerId;
   const entry = registry.get(id);
   // Stable identity is checked independently of allowlist permission (R8).
@@ -107,13 +108,13 @@ async function prepare(selection: UpdateServiceSelection, actor: string | null, 
   const blocker = scaled ? "scaled-service-unsupported" : raw.Config?.Labels?.["com.docker.compose.oneoff"]?.toLowerCase() === "true" ? "oneoff-unsupported"
     : !currentDigest ? "local-image-no-registry-digest"
       : !image?.Id || image.Id !== raw.Image ? "update-rollback-unavailable" : null;
-  const sources = raw.Mounts?.length ? await backupSources(raw.Id, actor, budget, true) : null;
+  const sources = raw.Mounts?.length ? await backupSources(raw.Id, actor, budget) : null;
   let backupBlocker = null;
   if (selection.backup) {
     for (const selected of selection.backup.mounts) {
       const source = sources?.resolved.find((item) => item.source.sourceId === selected.sourceId)?.source;
       if (!source?.backupEligible) backupBlocker = "source-protected" as const;
-      else if (source.estimatedBytes === null) backupBlocker = "backup-size-unavailable" as const;
+
     }
     if (selection.backup.mode === "live") warnings.push("live-backup-inconsistent");
     if (selection.backup.mounts.some((mount) => sources?.resolved.some((item) => item.source.sourceId === mount.sourceId && item.source.shared))) warnings.push("shared-source-writers");
@@ -215,6 +216,7 @@ function finished(result: UpdateResult, actor: string | null): void {
     });
     if (service.state.containerId) dockerEvents.notifyLifecycleChange(service.state.containerId);
   }
+  if (result.services.some((service) => service.resumeError)) updateRecovery.start();
   for (const service of result.services) rollbackTags.delete(JSON.stringify(service.target));
 }
 export const updateRuntimeOps: UpdateOps = {
@@ -223,6 +225,12 @@ export const updateRuntimeOps: UpdateOps = {
     const value = await engine.remoteManifestDigest(snapshot.preview.imageRef, undefined, options);
     return updateDigestSchema.safeParse(value).success ? value : null;
   }),
+  async estimateBackup(snapshot, budget) {
+    if (!snapshot.preview.backup) return;
+    const sources = await backupSources(snapshot.raw.Id, (snapshot.definition as Definition).actor, budget,
+      snapshot.preview.backup.mounts.map((mount) => mount.sourceId));
+    snapshot.preview.mounts = sources.resolved.map((item) => item.source);
+  },
   async pull(snapshot, budget) {
     const parsed = parseImageRef(snapshot.preview.imageRef); if (!parsed) throw new UpdateFailure("update-pull-failed");
     await budget.run((options) => engine.pull(parsed, undefined, options.signal));
@@ -231,7 +239,7 @@ export const updateRuntimeOps: UpdateOps = {
     return { imageId: image.Id, digest: localManifestDigest(image.RepoDigests, parsed.fullRef) };
   },
   async backup(snapshot, budget, cancelled) {
-    const sources = await backupSources(snapshot.raw.Id, (snapshot.definition as Definition).actor, budget, true);
+    const sources = await backupSources(snapshot.raw.Id, (snapshot.definition as Definition).actor, budget, snapshot.preview.backup!.mounts.map((mount) => mount.sourceId));
     const options = structuredClone(snapshot.preview.backup!);
     for (const selected of options.mounts) {
       const source = sources?.resolved.find((item) => item.source.sourceId === selected.sourceId)?.source;

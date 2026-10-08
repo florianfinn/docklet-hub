@@ -33,8 +33,8 @@ for (const visible of [true, false]) for (const mode of ["stop", "live"] as cons
   const entry = { name: "data", kind: "directory" as const, size: 0, content: Buffer.alloc(0), mode: 0o755,
     uid: process.getuid!(), gid: process.getgid!(), changedAt: 0, linkTarget: "" };
   const archive = Buffer.concat([backupTarHeader(entry), backupTarHeader({ ...entry, name: "data/file", kind: "file", size: 3, mode: 0o644 }), Buffer.from("new"), Buffer.alloc(509),
-    backupTarHeader({ ...entry, name: "data/current", kind: "symlink", linkTarget: "file" }),
-    backupTarHeader({ ...entry, name: "data/outside", kind: "symlink", linkTarget: "/outside" }), Buffer.alloc(1024)]);
+    backupTarHeader({ ...entry, name: "data/current", kind: "symlink", mode: 0o777, linkTarget: "file" }),
+    backupTarHeader({ ...entry, name: "data/outside", kind: "symlink", mode: 0o777, linkTarget: "/outside" }), Buffer.alloc(1024)]);
   t.mock.method(engine, "openArchiveStream", async () => (async function* () { for (let offset = 0; offset < archive.length; offset += 127) yield archive.subarray(offset, offset + 127); })());
   t.mock.method(engine, "stop", async () => { trace.push("stop"); raw.State = { ...raw.State, Running: false, Status: "exited" }; });
   t.mock.method(engine, "start", async () => { trace.push("start"); raw.State = { ...raw.State, Running: true, Status: "running" }; });
@@ -100,4 +100,32 @@ test("restore rejects a scaled Compose service before backup lookup or extractio
     State: { Status: "running", Running: true, StartedAt: "seen" }, HostConfig: {} }));
   t.mock.method(engine, "listWithComposeLabels", async () => ["first", "second"].map((id) => ({ id, name: id, image: "example/app:1.0", imageId: "image", status: "running", labels })));
   await assert.rejects(restoreRunner.preview({ target, backupId: "absent", mounts: [{ sourceId: "data" }] }, null), { code: "scaled-service-unsupported" });
+});
+test("R1: visible root metadata fallback sends a named owner header and persists a failed path", async (t) => {
+  fs.rmSync(path.join(state, "data-pending.json"), { force: true });
+  const root = path.join(base, "metadata-data"); fs.mkdirSync(root, { recursive: true });
+  const target = { kind: "container", containerName: "metadata-demo" } as const;
+  const raw = { Id: "metadata", Name: "/metadata-demo", Config: { Image: "example/app:1.0" }, State: { Status: "exited", Running: false },
+    Mounts: [{ Type: "bind", Source: root, Destination: "/data", RW: true }] };
+  registry.replaceAll([{ containerId: raw.Id, containerName: "metadata-demo", imageRef: "example/app:1.0", allowed: true }]);
+  t.mock.method(engine, "inspect", async () => raw); t.mock.method(engine, "inspectImage", async () => null);
+  t.mock.method(engine, "info", async () => ({ DockerRootDir: "/var/lib/docker" })); t.mock.method(engine, "listContainerIds", async () => [raw.Id]);
+  t.mock.method(engine, "statArchive", async () => ({ name: "data", size: 0, mode: 0x80000000, mtime: "2026-10-08T00:00:00Z", linkTarget: "" }));
+  const sources = await backupSources(raw.Id, null, new UpdateBudget(60_000)); const sourceId = sources.resolved[0].source.sourceId;
+  const entry = { name: "data", kind: "directory" as const, size: 0, content: Buffer.alloc(0), mode: 0o700, uid: 12345, gid: 12345, changedAt: 0, linkTarget: "" };
+  const saved = await backupStore.create(target, { mode: "stop", mounts: [{ sourceId, estimatedBytes: 1024 }] }, async () => ({ target: "/data",
+    stream: (async function* () { yield backupTarHeader(entry); yield Buffer.alloc(1024); })() }));
+  const originalOpen = fs.promises.open; let put = false;
+  t.mock.method(fs.promises, "open", async (...args: Parameters<typeof fs.promises.open>) => {
+    const handle = await originalOpen(...args);
+    t.mock.method(handle, "chown", async () => { throw Object.assign(new Error("denied"), { code: "EPERM" }); }); return handle;
+  });
+  t.mock.method(engine, "putArchiveStream", async (_id: string, destination: string, stream: AsyncIterable<Buffer>) => {
+    put = true; assert.equal(destination, "/"); const chunks = []; for await (const chunk of stream) chunks.push(chunk);
+    const header = archiveEntries(Buffer.concat(chunks))[0]; assert.equal(header.name, "data"); assert.equal(header.uid, 12345); assert.equal(header.gid, 12345);
+  });
+  await assert.rejects(restoreArchives(sources, target, saved.backupId, [{ sourceId }], new UpdateBudget(60_000)), { code: "restore-extract-failed" });
+  assert.equal(put, true);
+  const archive = await backupStore.archive(target, saved.backupId, sourceId);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(path.dirname(archive.file), "restore-failure.json"), "utf8")), { sourceId, path: "metadata-data", error: "restore-extract-failed" });
 });

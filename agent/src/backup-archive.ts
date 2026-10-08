@@ -4,8 +4,9 @@ import { archiveEvents, type ArchiveStream } from "./archive-stream.js";
 import type { ArchiveEntry } from "./archive-reader.js";
 import { tarHeader } from "./tar.js";
 import { UpdateFailure } from "./update-budget.js";
-import { hostBoundary, openDescriptor, verifyDescriptor } from "./file-descriptors.js";
+import { hostBoundary, openDescriptor, verifyDescriptor, sameFile } from "./file-descriptors.js";
 import type { SourcePolicy } from "./file-sources.js";
+import { applyRestoreMetadata, permissionFailure, putRestoreMetadata, RestorePathFailure, metadataMatches, type RestoreMetadataFallback } from "./restore-metadata.js";
 import { hasPathControls } from "./webftp.js";
 import { randomUUID } from "node:crypto";
 
@@ -107,22 +108,32 @@ export async function archiveSize(input: ArchiveStream): Promise<number> {
   }
   return bytes;
 }
-export async function extractVisible(input: ArchiveStream, root: string, base: string, policy: SourcePolicy, mountTarget: string, signal?: AbortSignal) {
+export async function extractVisible(input: ArchiveStream, root: string, base: string, policy: SourcePolicy, mountTarget: string, signal?: AbortSignal, fallback?: RestoreMetadataFallback) {
   const basename = path.posix.basename(mountTarget);
   const links: { entry: ArchiveEntry; relative: string }[] = [];
   const names = new Set<string>();
+  const directories: { entry: ArchiveEntry; relative: string; stat: fs.Stats }[] = [];
   let file: fs.promises.FileHandle | null = null;
   let parent: Awaited<ReturnType<typeof openDescriptor>> | null = null;
-  let temporary = ""; let destination = ""; let metadata: ArchiveEntry | null = null;
+  let activePath = mountTarget;
+  let temporary = ""; let destination = ""; let fileRelativePath = ""; let metadata: ArchiveEntry | null = null;
   const close = async () => {
     try {
       if (file && metadata) {
-        await file.chmod(metadata.mode & 0o777);
-        const current = await file.stat();
-        if (current.uid !== metadata.uid || current.gid !== metadata.gid) await file.chown(metadata.uid, metadata.gid);
-        await file.sync(); await file.close(); file = null;
+        activePath = metadata.name;
+        await file.sync();
+        let put = false;
+        try { await applyRestoreMetadata(file, metadata); }
+        catch (error) {
+          if (!permissionFailure(error)) throw error;
+          await putRestoreMetadata(parent!, metadata, fileRelativePath, fallback, file.createReadStream({ autoClose: false, start: 0 }));
+          put = true;
+        }
+        await file.close(); file = null;
         await verifyDescriptor(parent!);
-        await fs.promises.rename(temporary, destination); temporary = "";
+        if (put) await fs.promises.rm(temporary, { force: true });
+        else await fs.promises.rename(temporary, destination);
+        temporary = "";
       }
     } finally { await file?.close(); file = null; await parent?.handle.close(); parent = null; }
   };
@@ -136,7 +147,7 @@ export async function extractVisible(input: ArchiveStream, root: string, base: s
         continue;
       }
       await close();
-      const entry = event.entry;
+      const entry = event.entry; activePath = entry.name;
       if (entry.name !== basename && !entry.name.startsWith(basename + "/") || !["file", "directory", "symlink"].includes(entry.kind) && entry.tarType !== "1") throw new UpdateFailure("restore-path-unsafe");
       const relative = entry.name === basename ? "" : entry.name.slice(basename.length + 1);
       names.add(relative);
@@ -145,15 +156,37 @@ export async function extractVisible(input: ArchiveStream, root: string, base: s
         links.push({ entry, relative }); continue;
       }
       if (entry.kind === "directory") {
-        if (!relative) continue;
-        parent = await openDescriptor(root, base, (path.posix.dirname(relative) === "." ? "" : path.posix.dirname(relative)), policy, "directory", true);
-        try { await fs.promises.mkdir(path.join(parent.pinned, path.posix.basename(relative)), { mode: entry.mode & 0o777 }); }
-        catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+        const directoryRoot = relative ? root : path.dirname(root);
+        const directoryRelative = relative || path.basename(root);
+        const parentRelative = path.dirname(directoryRelative);
+        parent = await openDescriptor(directoryRoot, base, parentRelative === "." ? "" : parentRelative, policy, "directory", !!relative);
+        try { if (relative) await fs.promises.mkdir(path.join(parent.pinned, path.basename(relative)), { mode: 0o700 }); }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+            if (!permissionFailure(error)) throw error;
+            await putRestoreMetadata(parent, { ...entry, mode: 0o700, uid: process.getuid!(), gid: process.getgid!() }, directoryRelative, fallback);
+          }
+        }
+        let created;
+        try { created = await openDescriptor(root, base, relative, policy, "directory", true); }
+        catch (error) {
+          if (!permissionFailure(error)) throw error;
+          await putRestoreMetadata(parent, { ...entry, mode: 0o700, uid: process.getuid!(), gid: process.getgid!() }, directoryRelative, fallback);
+          created = await openDescriptor(root, base, relative, policy, "directory", true);
+        }
+        directories.push({ entry, relative, stat: created.stat });
+        try {
+          try { await created.handle.chmod((created.stat.mode & 0o7777) | 0o700); }
+          catch (error) {
+            if (!permissionFailure(error)) throw error;
+            await putRestoreMetadata(parent, { ...entry, mode: 0o700, uid: process.getuid!(), gid: process.getgid!() }, directoryRelative, fallback);
+          }
+        } finally { await created.handle.close(); }
         await parent.handle.close(); parent = null;
-        const created = await openDescriptor(root, base, relative, policy, "directory", true); await created.handle.close();
       } else {
         const fileRoot = relative === "" ? path.dirname(root) : root;
         const fileRelative = relative || path.basename(root);
+        fileRelativePath = fileRelative;
         await hostBoundary(fileRoot, base, fileRelative, policy, true);
         const checked = await openDescriptor(fileRoot, base, (path.dirname(fileRelative) === "." ? "" : path.dirname(fileRelative)), policy, "directory", true);
         parent = checked;
@@ -163,12 +196,12 @@ export async function extractVisible(input: ArchiveStream, root: string, base: s
           if (!existing.isFile()) throw new UpdateFailure("restore-path-unsafe");
         } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
         temporary = path.join(parent.pinned, `.restore-${randomUUID()}`);
-        file = await fs.promises.open(temporary, "wx", 0o600); metadata = entry;
+        file = await fs.promises.open(temporary, "wx+", 0o600); metadata = entry;
       }
     }
     await close();
     for (const { entry, relative } of links.sort((a, b) => Number(b.entry.tarType === "1") - Number(a.entry.tarType === "1"))) {
-      signal?.throwIfAborted();
+      activePath = entry.name; signal?.throwIfAborted();
       if ([...names].some((name) => name.startsWith(relative + "/"))) throw new UpdateFailure("restore-path-unsafe");
       await hostBoundary(root, base, relative, policy, true);
       const directory = path.posix.dirname(relative);
@@ -180,19 +213,55 @@ export async function extractVisible(input: ArchiveStream, root: string, base: s
           const stat = await fs.promises.lstat(dest);
           if (!stat.isFile() && !stat.isSymbolicLink()) throw new UpdateFailure("restore-path-unsafe");
         } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+        let put = false;
         if (entry.tarType === "1") {
           if (!entry.linkTarget.startsWith(basename + "/")) throw new UpdateFailure("restore-path-unsafe");
           const source = await openDescriptor(root, base, entry.linkTarget.slice(basename.length + 1), policy, "file");
-          try { await fs.promises.copyFile(source.pinned, temporaryLink, fs.constants.COPYFILE_EXCL); }
+          try {
+            await fs.promises.copyFile(source.pinned, temporaryLink, fs.constants.COPYFILE_EXCL);
+            const copied = await fs.promises.open(temporaryLink, fs.constants.O_RDWR | fs.constants.O_NOFOLLOW);
+            try {
+              try { await applyRestoreMetadata(copied, entry); }
+              catch (error) {
+                if (!permissionFailure(error)) throw error;
+                await putRestoreMetadata(descriptor, { ...entry, kind: "file", tarType: "0", size: (await copied.stat()).size }, relative, fallback, copied.createReadStream({ autoClose: false, start: 0 })); put = true;
+              }
+            } finally { await copied.close(); }
+          }
           finally { await source.handle.close(); }
         } else {
+          if ((entry.mode & 0o7777) !== 0o777) throw new RestorePathFailure(entry.name);
           await fs.promises.symlink(entry.linkTarget, temporaryLink);
           const stat = await fs.promises.lstat(temporaryLink);
           if (stat.uid !== entry.uid || stat.gid !== entry.gid) await fs.promises.lchown(temporaryLink, entry.uid, entry.gid);
+          if (!metadataMatches(await fs.promises.lstat(temporaryLink), entry)) throw new RestorePathFailure(entry.name);
         }
         await verifyDescriptor(descriptor);
-        await fs.promises.rename(temporaryLink, dest);
+        if (!put) await fs.promises.rename(temporaryLink, dest);
       } finally { await fs.promises.rm(temporaryLink, { force: true }); await descriptor.handle.close(); }
     }
+    for (const directory of directories.sort((a, b) => b.relative.split("/").length - a.relative.split("/").length || Number(!a.relative) - Number(!b.relative))) {
+      const { entry, relative, stat } = directory; activePath = entry.name;
+      signal?.throwIfAborted();
+      const descriptor = await openDescriptor(root, base, relative, policy, "directory", true);
+      try {
+        if (!sameFile(stat, descriptor.stat)) throw new UpdateFailure("restore-path-unsafe");
+        await verifyDescriptor(descriptor);
+        try { await applyRestoreMetadata(descriptor.handle, entry); }
+        catch (error) {
+          if (!permissionFailure(error)) throw new RestorePathFailure(entry.name);
+          const directoryRoot = relative ? root : path.dirname(root);
+          const directoryRelative = relative || path.basename(root);
+          const parentRelative = path.dirname(directoryRelative);
+          const checked = await openDescriptor(directoryRoot, base, parentRelative === "." ? "" : parentRelative, policy, "directory", !!relative);
+          try { await putRestoreMetadata(checked, entry, directoryRelative, fallback); }
+          finally { await checked.handle.close(); }
+        }
+        await verifyDescriptor(descriptor);
+      } finally { await descriptor.handle.close(); }
+    }
+  } catch (error) {
+    if (error instanceof UpdateFailure) throw error;
+    throw new RestorePathFailure(activePath);
   } finally { await file?.close(); if (temporary) await fs.promises.rm(temporary, { force: true }); await parent?.handle.close(); }
 }

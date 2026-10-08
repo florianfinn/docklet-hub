@@ -17,3 +17,13 @@ for (const kind of ["backup", "restore"] as const) test(`K21/K22: ${kind} restar
   reopened.complete(target); assert.deepEqual(reopened.read(), []);
   await fs.writeFile(file, "{}"); assert.throws(() => reopened.read(), /data-journal-invalid/);
 });
+test("R2: begin refuses overlapping backup and restore operations without changing the original state", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "data-journal-overlap-")); t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const journal = new DataJournal(path.join(root, "pending.json")); const target = { kind: "container", containerName: "demo" } as const;
+  journal.begin(target, { Id: "original", Name: "/demo", State: { Running: true, Paused: true } }, "restore");
+  journal.extracting(target); const initial = journal.read();
+  for (const kind of ["backup", "restore"] as const) assert.throws(() => journal.begin(target, { Id: "stopped", Name: "/demo", State: { Running: false } }, kind), /data-operation-pending/);
+  assert.deepEqual(journal.read(), initial);
+  journal.complete(target); journal.begin(target, { Id: "original", Name: "/demo", State: { Running: true } }, "backup");
+  assert.equal(journal.read()[0].running, true);
+});

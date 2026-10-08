@@ -436,6 +436,21 @@ Auslassungen des letzten erfolgreichen Restore je Quelle fest. Vertrag 13 hat
 kein geeignetes Feld für Auslassungszahlen; diese bleiben in den privaten
 Metadaten und werden nicht als Fehler oder Archivgröße umgedeutet.
 
+Die Image-Vorschau liest keine Mount-Archive ohne ausdrücklich gewählte
+Sicherung. Erst nach den Manifestprüfungen bekommen gewählte Mounts ein eigenes
+Umfangsbudget von höchstens fünf Sekunden pro Service. Ein unbekannter Umfang
+bleibt `estimatedBytes: null`; nur die Sicherungsauswahl des Mounts ist damit
+nicht bestätigbar. Das Update ohne Sicherung bleibt möglich. Vor der tatsächlichen
+Kopie wird der Umfang der gewählten Mounts erneut gestreamt ermittelt und die
+Platzreserve vor und während der Kopie geprüft.
+
+Offene Journaleinträge sperren ihr Ziel laufend, auch nach der Start-Recovery.
+Ein neuer Datenlauf darf den gespeicherten Vorzustand nicht ersetzen. Nach einem
+Wiederanlauffehler wird Recovery erneut gestartet; sie wartet auf das Ende
+aktiver Aufträge und prüft den Eintrag nach Erwerb seiner Sperre erneut. Erst
+nach erfolgreichem Wiederanlauf und Abschluss des Eintrags wird das Ziel frei.
+Eine Vorfallsquittierung ersetzt keinen Journalabschluss.
+
 ## Gesonderter Restore
 
 Restore ist eine eigene, gesondert bestätigte Aktion als Agent-Auftrag. Seine
@@ -463,6 +478,26 @@ Verwaltungsgrenzen wie beim Update gelten bei jedem Restore-Einstieg.
 Geteilte Quellen, Docker-Socket, Host-Systempfade, Agent-Betriebsverzeichnisse
 und das Sicherungsverzeichnis sind als Restore-Ziele gesperrt. Auch bei unklarer
 Zuordnung einer möglichen geteilten Quelle ist Restore-Schreiben gesperrt.
+Beim sichtbaren Restore werden Modus und numerische UID/GID regulärer Dateien,
+Hardlink-Kopien sowie neuer und bestehender Verzeichnisse geprüft hergestellt.
+Die Mount-Wurzel bleibt derselbe Verzeichnis-Inode; nur ihre Metadaten ändern
+sich. Verzeichnisrechte werden nach ihren Kindern gesetzt, die Mount-Wurzel
+zuletzt. Eigentümer werden vor dem Modus gesetzt, da `chown` Set-ID-Bits löschen
+kann. Verzeichnisdeskriptoren werden nicht für den gesamten Lauf offen gehalten.
+
+Fehlende lokale Rechte führen nach Prüfung des Eltern-Deskriptors zu einem
+benannten Archiv-PUT mit Header-Eigentümer. Auch danach werden die tatsächlichen
+Metadaten geprüft; eine Abweichung führt zu `restore-extract-failed`, mit Quelle
+und betroffenem Pfad in der privaten Datei `restore-failure.json`. Moby
+[führt bestehende Verzeichnisse zusammen und setzt danach Eigentümer und Modus](https://github.com/moby/moby/blob/v27.5.1/pkg/archive/archive.go#L691).
+Ein Eintrag namens `.` wird dagegen
+[übersprungen](https://github.com/moby/moby/blob/v27.5.1/pkg/archive/archive.go#L1150);
+deshalb adressiert der PUT die Mount-Wurzel mit ihrem Namen vom Elternpfad aus.
+Die anschließende Prüfung verhindert ein stilles Erfolgsergebnis bei einer
+abweichenden Engine-Implementierung oder fehlenden Daemon-Rechten. Symlinks
+haben unter Linux den festen Modus 0777; ein davon abweichender Archivmodus
+führt beim sichtbaren Restore zum Fehler. Sie werden niemals durchschrieben.
+
 Agentenseitige Pfad-, Symlink- und Rechteprüfungen gelten auch beim Entpacken; ein Archiv darf
 keine Daten außerhalb seiner bestätigten Ziele verändern. Der gestoppte
 Container allein ist keine Berechtigung zum Schreiben.

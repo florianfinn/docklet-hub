@@ -22,7 +22,9 @@ export class DataJournal {
     });
   }
   begin(target: StopIntentTarget, raw: RawInspect, kind: DataOperation["kind"]) {
-    this.write([...this.read().filter((entry) => key(entry.target) !== key(target)), { target, kind,
+    const entries = this.read();
+    if (entries.some((entry) => key(entry.target) === key(target))) throw new Error("data-operation-pending");
+    this.write([...entries, { target, kind,
       containerId: raw.Id, containerName: raw.Name, running: !!raw.State?.Running, restarting: !!raw.State?.Restarting,
       paused: !!raw.State?.Paused, extractStarted: false }]);
   }

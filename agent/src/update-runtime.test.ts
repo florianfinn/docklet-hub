@@ -229,3 +229,52 @@ for (const compose of [false, true]) test(`a competing host-wide retag is detect
   assert.equal(f.trace.includes("start"), false);
   const restored = await ops.rollback(snapshot, new UpdateBudget(60_000)); assert.equal(restored.Image, "old-image");
 });
+for (const kind of ["large", "slow"] as const) test(`R3: ${kind} unselected mounts never request archives during preview or update`, async (t) => {
+  const f = fixture(t); f.change({ Mounts: [{ Type: "bind", Source: "/synthetic/data", Destination: "/data", RW: true }] });
+  t.mock.method(engine, "info", async () => ({ DockerRootDir: "/var/lib/docker" }));
+  t.mock.method(engine, "listContainerIds", async () => ["old"]);
+  t.mock.method(engine, "statArchive", async () => ({ name: "data", size: 0, mode: 0x80000000, mtime: "2026-10-08T00:00:00Z", linkTarget: "" }));
+  let archiveCalls = 0;
+  t.mock.method(engine, "openArchiveStream", async () => {
+    archiveCalls++; throw new Error(`${kind} archive must never be opened`);
+  });
+  let complete!: (result: import("contract").UpdateResult) => void;
+  const completed = new Promise<import("contract").UpdateResult>((resolve) => { complete = resolve; });
+  const runner = new UpdateRunner(new AgentJobs(() => true), new KeyedMutex(), { ...ops,
+    manifest: async () => offered,
+    exchange: async (snapshot, imageId, _budget, verify, begin) => { begin(); verify(); f.change({ Image: imageId }); return f.get(); },
+    finished: (result) => complete(result) });
+  const preview = await runner.preview({ target: f.selection.target, services: [f.selection] }, null);
+  assert.equal(preview.services[0].blocker, null); assert.equal(preview.services[0].offeredDigest, offered);
+  assert.equal(preview.services[0].mounts[0].estimatedBytes, null); assert.equal(archiveCalls, 0);
+  runner.start({ confirmed: true, target: preview.target, previewId: preview.previewId, services: preview.services.map((service) => ({ ...service, offeredDigest: service.offeredDigest! })) }, null);
+  assert.equal((await completed).outcome, "updated"); assert.equal(archiveCalls, 0);
+});
+test("R3: selected slow mount times out separately after manifest and leaves the image update usable", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] }); const f = fixture(t);
+  f.change({ Mounts: ["data", "cache"].map((name) => ({ Type: "bind", Source: `/synthetic/${name}`, Destination: `/${name}`, RW: true })) });
+  t.mock.method(engine, "info", async () => ({ DockerRootDir: "/var/lib/docker" }));
+  t.mock.method(engine, "listContainerIds", async () => ["old"]);
+  t.mock.method(engine, "statArchive", async () => ({ name: "data", size: 0, mode: 0x80000000, mtime: "2026-10-08T00:00:00Z", linkTarget: "" }));
+  const archives: string[] = []; const trace: string[] = [];
+  t.mock.method(engine, "openArchiveStream", async () => (async function* () { yield Buffer.alloc(1024); })());
+  const initial = await ops.prepare(f.selection, null, new UpdateBudget(60_000));
+  assert.equal(initial.preview.mounts[0].backupEligible, true, JSON.stringify(initial.preview.mounts));
+  const sourceId = initial.preview.mounts.find((mount) => mount.target === "/data")!.sourceId;
+  t.mock.method(engine, "openArchiveStream", async (_id: string, target: string, signal: AbortSignal) => {
+    archives.push(target); trace.push("archive");
+    return (async function* () {
+      await new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true })); yield Buffer.alloc(1024);
+    })();
+  });
+  const selected = { ...f.selection, backup: { mode: "stop" as const, mounts: [{ sourceId, estimatedBytes: null }] } };
+  const runner = new UpdateRunner(new AgentJobs(() => true), new KeyedMutex(), { ...ops, manifest: async () => { trace.push("manifest"); return offered; } });
+  const pending = runner.preview({ target: selected.target, services: [selected] }, null);
+  for (let attempt = 0; !archives.length && attempt < 2000; attempt++) await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(trace, ["manifest", "archive"]); t.mock.timers.tick(5000);
+  const preview = await pending;
+  assert.deepEqual(archives, ["/data"]); assert.equal(preview.services[0].mounts.find((mount) => mount.sourceId === sourceId)!.estimatedBytes, null);
+  assert.equal(preview.services[0].blocker, null); assert.equal(preview.services[0].offeredDigest, offered);
+  const withoutBackup = await runner.preview({ target: f.selection.target, services: [f.selection] }, null);
+  assert.equal(withoutBackup.services[0].blocker, null); assert.deepEqual(archives, ["/data"]);
+});

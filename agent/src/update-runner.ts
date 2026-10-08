@@ -17,6 +17,7 @@ export const UPDATE_PREVIEW_RETENTION_MS = 5 * 60_000;
 export type UpdateSnapshot = { preview: UpdateServicePreview; raw: RawInspect; definition: unknown; dependencies: string[] };
 export type UpdateOps = {
   prepare(selection: UpdatePreviewRequest["services"][number], actor: string | null, budget: UpdateBudget): Promise<UpdateSnapshot>;
+  estimateBackup?(snapshot: UpdateSnapshot, budget: UpdateBudget): Promise<void>;
   manifest(snapshot: UpdateSnapshot, budget: UpdateBudget): Promise<string | null>;
   pull(snapshot: UpdateSnapshot, budget: UpdateBudget): Promise<{ imageId: string; digest: string | null }>;
   backup?(snapshot: UpdateSnapshot, budget: UpdateBudget, cancelled: () => boolean): Promise<string>;
@@ -51,8 +52,10 @@ export class UpdateRunner {
   constructor(private readonly jobs: AgentJobs, private readonly locks: KeyedMutex, private readonly ops: UpdateOps,
     private readonly now = Date.now) {}
   async preview(request: UpdatePreviewRequest, actor: string | null, budget = new UpdateBudget(UPDATE_PREVIEW_TIMEOUT_MS)): Promise<UpdatePreviewResponse> {
+    const snapshots: UpdateSnapshot[] = [];
     const services = await budget.run(() => Promise.all(request.services.map(async (selection) => {
       const snapshot = await this.ops.prepare(selection, actor, budget);
+      snapshots.push(snapshot);
       const preview = snapshot.preview;
       if (!preview.blocker) {
         try { preview.offeredDigest = await this.ops.manifest(snapshot, budget); }
@@ -61,6 +64,10 @@ export class UpdateRunner {
       }
       return preview;
     })));
+    await Promise.all(snapshots.filter((snapshot) => snapshot.preview.backup).map(async (snapshot) => {
+      try { await this.ops.estimateBackup?.(snapshot, new UpdateBudget(UPDATE_PREVIEW_TIMEOUT_MS / 12)); }
+      catch { for (const mount of snapshot.preview.mounts) if (snapshot.preview.backup!.mounts.some((selected) => selected.sourceId === mount.sourceId)) mount.estimatedBytes = null; }
+    }));
     const response: UpdatePreviewResponse = { previewId: randomUUID(), target: request.target, digestSource: "registry-manifest", services };
     for (const [id, value] of this.previews) if (this.now() - value.at >= UPDATE_PREVIEW_RETENTION_MS) this.previews.delete(id);
     if (this.previews.size >= 64) this.previews.delete(this.previews.keys().next().value!);

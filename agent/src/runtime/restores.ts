@@ -8,6 +8,7 @@ import { containerIdsForTarget } from "../routes/contract-route-stubs.js";
 import { engine, stackLocks, audit } from "./state.js";
 import { runtimeStateOf } from "../runtime-actions.js";
 import { appendRecoveryIncident } from "../update-recovery.js";
+import { updateRecovery } from "./update-recovery.js";
 import { selfHealingState, dockerEvents } from "./state.js";
 
 async function prepare(request: RestorePreviewRequest, actor: string | null, budget: UpdateBudget): Promise<RestoreSnapshot> {
@@ -57,6 +58,7 @@ function finished(result: RestoreResult, actor: string | null) {
   if (result.resumeError) {
     appendRecoveryIncident(selfHealingState, result.target, result.state.containerId ?? "unresolved", `restore-resume-failed: ${result.resumeError}`);
     dockerEvents.notifyLifecycleChange(result.state.containerId ?? "unresolved");
+    updateRecovery.start();
   }
 }
 export const restoreRunner = new RestoreRunner(agentJobs, stackLocks, {

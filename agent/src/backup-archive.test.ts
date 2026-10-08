@@ -7,7 +7,7 @@ import { archiveEntries, type ArchiveEntry } from "./archive-reader.js";
 import { backupTarHeader, safeBackupArchive, extractVisible, archiveSize, type SkippedEntry } from "./backup-archive.js";
 import { archivePolicy } from "./archive-test-support.js";
 function entry(name: string, content = Buffer.alloc(0), kind: ArchiveEntry["kind"] = "file"): ArchiveEntry {
-  return { name, content, kind, size: content.length, changedAt: 0, mode: kind === "directory" ? 0o755 : 0o644, uid: process.getuid!(), gid: process.getgid!(), linkTarget: "" };
+  return { name, content, kind, size: content.length, changedAt: 0, mode: kind === "directory" ? 0o755 : kind === "symlink" ? 0o777 : 0o644, uid: process.getuid!(), gid: process.getgid!(), linkTarget: "" };
 }
 function tar(entries: ArchiveEntry[]) {
   return Buffer.concat([...entries.flatMap((item) => [backupTarHeader(item), item.content, Buffer.alloc((512 - item.size % 512) % 512)]), Buffer.alloc(1024)]);

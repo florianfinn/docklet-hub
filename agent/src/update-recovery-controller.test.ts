@@ -6,7 +6,7 @@ const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 test("recovery retries with backoff until success while only journal targets are blocked", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] }); let attempts = 0; const failures: number[] = [];
-  const controller = new UpdateRecoveryController({ pending: () => [target], recover: async () => { if (++attempts < 3) throw new Error("offline"); },
+  const controller = new UpdateRecoveryController({ pending: () => attempts >= 3 ? [] : [target], recover: async () => { if (++attempts < 3) throw new Error("offline"); },
     failed: (_error, delay) => failures.push(delay) }); t.after(() => controller.stop());
   assert.equal(controller.isReady(), false); controller.start(); controller.start(); await settle();
   assert.equal(attempts, 1); assert.equal(controller.blocks(target), true); assert.equal(controller.blocks({ kind: "container", containerName: "other" }), false);
@@ -30,4 +30,11 @@ test("backoff is bounded and shutdown cancels retries", async (t) => {
   for (let attempt = 0; attempt < 9; attempt++) { t.mock.timers.tick(failures.at(-1)!); await settle(); }
   assert.equal(failures.at(-1), 60_000); assert.equal(failures.every((delay) => delay <= 60_000), true);
   controller.stop(); t.mock.timers.tick(600_000); await settle(); assert.equal(failures.length, 10); assert.equal(controller.isReady(), false);
+});
+test("R2: a ready controller keeps checking live journal targets and can recover new failures", async (t) => {
+  let pending: (typeof target)[] = []; let recoveries = 0;
+  const controller = new UpdateRecoveryController({ pending: () => pending, recover: async () => { recoveries++; pending = []; }, failed: () => assert.fail("recovery must succeed") });
+  t.after(() => controller.stop()); controller.start(); await settle(); assert.equal(controller.isReady(), true);
+  pending = [target]; assert.equal(controller.blocks(target), true); assert.equal(controller.blocks({ kind: "container", containerName: "other" }), false);
+  controller.start(); await settle(); assert.equal(recoveries, 2); assert.equal(controller.blocks(target), false);
 });
