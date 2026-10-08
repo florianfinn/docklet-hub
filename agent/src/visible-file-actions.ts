@@ -1,3 +1,4 @@
+import { openDescriptor } from "./file-descriptors.js";
 import fs from "node:fs";
 import path from "node:path";
 import { definitionBlocked, protectionOf, within, type SourcePolicy } from "./file-sources.js";
@@ -27,23 +28,9 @@ export class VisibleFileActions {
     return valid.absolute;
   }
   private async directory(absolute: string) {
-    if (process.platform !== "linux") throw new Denied("not-writable");
-    let handle = await fs.promises.open(this.base, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
-    try {
-      for (const segment of path.relative(this.base, absolute).split(path.sep).filter(Boolean)) {
-        const next = await fs.promises.open(`/proc/self/fd/${handle.fd}/${segment}`,
-          fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
-        await handle.close();
-        handle = next;
-      }
-      const pinned = `/proc/self/fd/${handle.fd}`;
-      const real = await fs.promises.realpath(pinned);
-      if (real !== absolute || !within(real, this.root)) throw new Denied("path-outside");
-      const stat = await handle.stat();
-      if (!same(stat, await fs.promises.lstat(absolute))) throw new Denied("file-replaced");
-      await fs.promises.access(pinned, fs.constants.W_OK | fs.constants.X_OK);
-      return { handle, pinned, absolute, stat };
-    } catch (error) { await handle.close(); throw error; }
+    const parent = await openDescriptor(this.root, this.base, path.relative(this.root, absolute), this.policy, "directory", true);
+    try { await fs.promises.access(parent.pinned, fs.constants.W_OK | fs.constants.X_OK); return parent; }
+    catch (error) { await parent.handle.close(); throw error; }
   }
   async available(relative: string): Promise<boolean> {
     try {

@@ -17,7 +17,7 @@
 
 export const deFiles = {
   filesBlockerSourceUnknown: "Die Quelle ist nicht bekannt.",
-  filesBlockerSourceProtected: "Die Quelle ist geschützt.",
+  filesBlockerSourceProtected: "Die Quelle oder ein beschreibbarer Mount dieses Containers ist geschützt.",
   filesBlockerSourceShared: "Andere Container verwenden diese Quelle.",
   filesBlockerSourceOwnershipUnknown: "Die Zuordnung der Quelle ist unklar.",
   filesBlockerSourceReadOnly: "Die Quelle ist nur lesbar.",
@@ -232,4 +232,7 @@ export const deFiles = {
     "Diese Aktion ist für die Quelle gesperrt. Umbenennen und Löschen benötigen eine im Arm sichtbare Quelle unter dem Basispfad und Schreibrechte am Verzeichnis.",
   filesWriteUnknown:
     "Ob hier geschrieben werden darf, ist ungeklärt — der Arm konnte dieses Verzeichnis nicht beurteilen. Der Versuch geht trotzdem hinaus; entschieden wird er dort.",
+  filesArchiveReplaceWarning: "Wenn die Quelle im Arm nicht sichtbar ist, ersetzt Speichern die Datei. Andere Hardlinks behalten den alten Inhalt; ACLs und erweiterte Attribute gehen verloren. Sichtbare Quellen werden im selben Inode geschrieben.",
+  filesArchiveReplaceConfirm: "Eine im Arm nicht sichtbare Datei wird beim Speichern ersetzt. Hardlinks werden nicht mitgeändert; ACLs und erweiterte Attribute gehen verloren. Speichern bestätigen?",
+
 };

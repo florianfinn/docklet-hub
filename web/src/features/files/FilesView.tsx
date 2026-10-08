@@ -167,10 +167,11 @@ export function FilesView({ hostId, containerId }: { hostId: string; containerId
   if (share.data === null && !sourceId) return <><SourceChooser sources={sources.data?.sources ?? []} pathname={pathname} />{candidateChoice()}</>;
 
   const selectedSource = sources.data?.sources.find((source) => source.sourceId === sourceId);
+  const activeSource = selectedSource ?? sources.data?.sources.find((source) => source.kind === "project" && source.source === share.data?.path);
   if (selectedSource?.estimatedBytes !== null && selectedSource?.estimatedBytes !== undefined) {
     return <FileSourceContext value={sourceId}>
       <SourceChooser sources={sources.data?.sources ?? []} pathname={pathname} selected={sourceId} />
-      {editing !== null ? <FileEditor hostId={hostId} containerId={containerId} path="" syntaxPath={selectedSource.target} writable={selectedSource.writable}
+      {editing !== null ? <FileEditor hostId={hostId} containerId={containerId} path="" syntaxPath={selectedSource.target} writable={selectedSource.writable} replacementWarning={false}
         onClose={closeEditor} onSaved={() => { void sources.refetch(); }} />
         : <Button onClick={() => { void navigate(editHrefFor("")); }}>{t("filesEditorLabel")}</Button>}
     </FileSourceContext>;
@@ -238,7 +239,8 @@ export function FilesView({ hostId, containerId }: { hostId: string; containerId
       {editing === null || editing === "" ? null : (
         <FileEditor
           sourceIdentity={sourceId ?? share.data?.path ?? "unknown"}
-          writable={sourceId ? sources.data?.sources.find((source) => source.sourceId === sourceId)?.writable === true : shown.listing.diagnostics?.uploadable !== false}
+          writable={activeSource ? activeSource.writable : shown.listing.diagnostics?.uploadable !== false}
+          replacementWarning={shown.listing.diagnostics?.deletable !== true}
           hostId={hostId}
           containerId={containerId}
           path={editing}

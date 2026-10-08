@@ -38,3 +38,34 @@ test("HEAD, GET and PUT target stopped containers without exec or running-state 
   assert.equal(query.get("noOverwriteDirNonDir"), "1");
   assert.equal(query.has("copyUIDGID"), false);
 });
+
+test("archive streaming exposes transport chunks and closes rejected responses without collecting bodies", async (t) => {
+  const { Readable } = await import("node:stream");
+  let status = 200;
+  let destroyed: boolean;
+  const calls: http.RequestOptions[] = [];
+  t.mock.method(http, "request", (options: http.RequestOptions, callback: (response: http.IncomingMessage) => void) => {
+    calls.push(options);
+    const request = new EventEmitter() as http.ClientRequest;
+    request.end = (() => {
+      const response = Object.assign(Readable.from([Buffer.from("first"), Buffer.from("second")]), { statusCode: status });
+      response.on("close", () => { destroyed = true; });
+      callback(response as unknown as http.IncomingMessage);
+      return request;
+    }) as typeof request.end;
+    return request;
+  });
+  const engine = new DockerEngine({ socketPath: "/unused.sock" });
+  const signal = new AbortController().signal;
+  const stream = await engine.openArchiveStream("target", "/data", signal);
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk.toString());
+  assert.deepEqual(chunks, ["first", "second"]);
+  assert.equal(calls[0].signal, signal);
+  assert.equal(calls[0].method, "GET");
+  assert.equal(new URL(String(calls[0].path), "http://docker").searchParams.get("path"), "/data");
+  status = 404; destroyed = false;
+  await assert.rejects(engine.openArchiveStream("target", "/missing"), { message: "archive-read-failed", status: 404 });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(destroyed, true);
+});

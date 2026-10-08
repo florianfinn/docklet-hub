@@ -170,12 +170,16 @@ async function installFakeDocker(modules: AgentModules, projectDir: string): Pro
       if (archive.length > limit) throw new Error("archive-limit");
       return archive;
     },
+    async openArchiveStream(id: string, target: string) {
+      const archive = await (engine as unknown as { getArchive(id: string, target: string, limit: number): Promise<Buffer> }).getArchive(id, target, Infinity);
+      return (async function* () { yield archive; })();
+    },
     async putArchive(id: string, target: string, archive: Buffer) {
       if (!known(id)) throw gone();
       for (const entry of archiveEntries(archive)) {
         const local = path.join(localPath(target), entry.name);
         if (entry.kind === "directory") fs.mkdirSync(local, { mode: entry.mode });
-        else fs.writeFileSync(local, entry.content, { mode: entry.mode });
+        else { fs.rmSync(local, { force: true }); fs.writeFileSync(local, entry.content, { mode: entry.mode }); }
       }
     },
     async execAvailable() {

@@ -99,13 +99,12 @@ export async function resolveFileSources(input: {
       : protection !== "none" ? "source-protected" : ownership === "shared" ? "source-shared"
         : ownership === "unknown" ? "source-ownership-unknown" : !approved ? "source-read-only"
           : input.writeBlocker ? input.writeBlocker : input.readOnly ? "agent-read-only" : readOnly ? "source-read-only" : !readable ? "not-readable" : null;
-    const effectiveBlocker = writeBlocker;
-    const writable = effectiveBlocker === null;
+    const writable = writeBlocker === null;
     const estimatedBytes = null;
     result.push({ absolute, source: {
       service, kind, source: mount.Type === "volume" ? mount.Name ?? null : kind === "project" && absolute ? path.relative(input.projectDir, absolute) || "." : mount.Source ?? null,
       target: kind === "project" && absolute && mount.Source ? path.posix.join(mount.Destination, path.relative(path.resolve(mount.Source), absolute)) : mount.Destination, readOnly, shared: ownership === "shared", protection, ownership, readable, writable,
-      writeBlocker: effectiveBlocker, estimatedBytes, backupEligible: protection === "none" && readable,
+      writeBlocker: writeBlocker, estimatedBytes, backupEligible: protection === "none" && readable,
       restoreEligible: writable,
       sourceId: createHash("sha256").update(JSON.stringify([input.containerId, mount.Type, mount.Source, mount.Name, mount.Destination, absolute])).digest("hex")
     } });
@@ -128,4 +127,15 @@ export async function resolveFileSources(input: {
     }
   }
   return expanded;
+}
+export async function protectedWritableMount(mounts: NonNullable<RawInspect["Mounts"]>, policy: SourcePolicy,
+  volumeRoots: readonly string[] = [], volumeDevices: ReadonlyMap<string, string> = new Map()): Promise<boolean> {
+  for (const mount of mounts) {
+    if (mount.RW === false) continue;
+    if (!mount.Source) return true;
+    const host = volumeDevices.get(mount.Name ?? "") ?? mount.Source;
+    if (await definitionBlocked(host, policy) || await protectionOf(host, policy,
+      mount.Type === "volume" && volumeRoots.includes(mount.Source)) !== "none") return true;
+  }
+  return false;
 }

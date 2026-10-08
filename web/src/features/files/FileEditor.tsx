@@ -10,8 +10,8 @@ import { useEditorDocument } from "../../platform/editor/useEditorDocument";
 import { fileEditorAdapterFor } from "./editor-adapter";
 import { fileChangedHash, fileErrorKey } from "./file-errors";
 import { useFileSource } from "./source-context";
-export function FileEditor({ hostId, containerId, path, onClose, onSaved, writable = true, sourceIdentity, syntaxPath }: {
-  hostId: string; containerId: string; path: string; writable?: boolean; sourceIdentity?: string; syntaxPath?: string; onClose: () => void; onSaved: () => void;
+export function FileEditor({ hostId, containerId, path, onClose, onSaved, writable = true, sourceIdentity, syntaxPath, replacementWarning = true }: {
+  hostId: string; containerId: string; path: string; writable?: boolean; sourceIdentity?: string; syntaxPath?: string; replacementWarning?: boolean; onClose: () => void; onSaved: () => void;
 }) {
   const t = useTranslations();
   const fileEditorAdapter = fileEditorAdapterFor(syntaxPath ?? path);
@@ -22,6 +22,7 @@ export function FileEditor({ hostId, containerId, path, onClose, onSaved, writab
   const document = useEditorDocument(JSON.stringify([hostId, containerId, sourceIdentity ?? sourceId, path]), text.data, fileEditorAdapter.maxBytes);
   const save = (expectedHash: string) => {
     if (!writable || !document.valid || !expectedHash) return;
+    if (replacementWarning && !window.confirm(t("filesArchiveReplaceConfirm"))) return;
     setBusy(true);
     void document.save((content, hash) => saveFileText(hostId, containerId, path, content, hash, sourceId), fileChangedHash, expectedHash)
       .then((saved) => { if (saved) onSaved(); }).finally(() => setBusy(false));
@@ -37,6 +38,7 @@ export function FileEditor({ hostId, containerId, path, onClose, onSaved, writab
   if (text.isError && !document.hasDraft) return shell(<p data-testid="files-editor-error">{t(fileErrorKey(text.error))}</p>);
   if (text.data === undefined && !document.hasDraft) return shell(<p>{t("loading")}</p>);
   return shell(<>
+    {writable && replacementWarning ? <p data-testid="files-editor-replacement-warning">{t("filesArchiveReplaceWarning")}</p> : null}
     {document.conflict === null ? null : <EditorConflict testId="files-editor" busy={busy}
       onReload={() => { document.discard(); setRound((current) => current + 1); }}
       onOverwrite={() => save(document.conflict!)}>

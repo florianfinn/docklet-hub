@@ -1,3 +1,8 @@
+export type EngineOptions = {
+  socketPath: string;
+  timeoutMs?: number;
+};
+
 import type { InspectedContainer } from "./hardening.js";
 import type { ParsedImageRef } from "./image-ref.js";
 

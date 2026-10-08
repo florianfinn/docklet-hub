@@ -1,3 +1,4 @@
+import { openArchiveStream } from "./archive-request.js";
 import { containerActionTimeoutMs } from "./runtime-actions.js";
 import http from "node:http";
 import type { RuntimeCallOptions } from "./runtime-budget.js";
@@ -17,6 +18,7 @@ import {
   parsePullProgress,
   type RawStats,
   type EngineInfo,
+  type EngineOptions,
   type DockerMonitorEvent,
   monitorEventOf,
   type RawInspect,
@@ -31,10 +33,6 @@ import {
 // child_process — string concatenation into a shell is a non-starter on this
 // attack surface (stage plan 3.2).
 
-export type EngineOptions = {
-  socketPath: string;
-  timeoutMs?: number;
-};
 
 // The socket's idle window has expired. Not a type of its own, but a `code` in
 // the same form node attaches to its own socket failures (ECONNREFUSED,
@@ -255,6 +253,9 @@ export class DockerEngine {
     catch { throw new EngineError("archive-stat-invalid", 502); }
     if (!stat || !Number.isSafeInteger(stat.mode) || stat.mode < 0 || stat.mode > 0xffffffff || !Number.isSafeInteger(stat.size) || stat.size < 0 || typeof stat.linkTarget !== "string") throw new EngineError("archive-stat-invalid", 502);
     return stat;
+  }
+  openArchiveStream(containerId: string, target: string, signal?: AbortSignal) {
+    return openArchiveStream(this.options, containerId, target, signal);
   }
   async getArchive(containerId: string, target: string, maxResponseBytes: number): Promise<Buffer> {
     const query = new URLSearchParams({ path: target });
@@ -922,6 +923,7 @@ export {
   parsePullProgress,
   type RawStats,
   type EngineInfo,
+  type EngineOptions,
   type DockerMonitorEvent,
   monitorEventOf,
   type RawInspect,

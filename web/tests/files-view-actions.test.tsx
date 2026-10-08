@@ -591,3 +591,32 @@ test("beim Wechsel des Verzeichnisses steht die alte Liste nicht weiter da", asy
     server.restore();
   }
 });
+
+test("Archiv-Ersetzen erklärt den Verlust und speichert erst nach Bestätigung", async () => {
+  const server = stubHub({
+    listings: { "": listing({ entries: [entry({ name: "archive.txt" })], diagnostics: { readable: true, deletable: false, uid: 2100, gid: 2200, uploadable: true } }) },
+    texts: { "archive.txt": { content: "old", hash: "actual-hash" } }, saves: [{ ok: "new-hash" }]
+  });
+  const original = window.confirm;
+  let confirmed = false;
+  const questions: string[] = [];
+  window.confirm = (message) => { questions.push(message ?? ""); return confirmed; };
+  const mounted = await mountAt(`/container/${HOST_ID}/demo/files?edit=archive.txt`);
+  try {
+    assert.equal(at("files-editor-replacement-warning") !== null, true);
+    assert.equal(saysEither(de.filesArchiveReplaceWarning, en.filesArchiveReplaceWarning), true);
+    const field = at("files-editor-input");
+    assert.ok(field instanceof HTMLTextAreaElement);
+    await typeInto(field, "draft");
+    await click(at("files-editor-save")!);
+    assert.equal(asked(server, "PUT", "/file-text").length, 0);
+    assert.equal(field.value, "draft");
+    assert.equal(questions.length, 1);
+    assert.equal([de.filesArchiveReplaceConfirm, en.filesArchiveReplaceConfirm].includes(questions[0]), true);
+    confirmed = true;
+    await click(at("files-editor-save")!);
+    assert.equal(asked(server, "PUT", "/file-text").length, 1);
+    assert.equal(asked(server, "PUT", "/file-text")[0].body, "draft");
+    assert.equal(questions.length, 2);
+  } finally { await mounted.unmount(); window.confirm = original; server.restore(); }
+});

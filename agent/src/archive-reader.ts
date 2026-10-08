@@ -20,7 +20,7 @@ function number(block: Buffer, start: number, size: number): number {
   if (!Number.isSafeInteger(parsed)) throw new Error("not-readable");
   return parsed;
 }
-function pax(content: Buffer): Record<string, string> {
+export function pax(content: Buffer): Record<string, string> {
   const fields: Record<string, string> = {};
   let offset = 0;
   while (offset < content.length) {
@@ -34,6 +34,25 @@ function pax(content: Buffer): Record<string, string> {
     offset += length;
   }
   return fields;
+}
+export function archiveHeader(block: Buffer, extensions: Record<string, string> = {}) {
+  const checksum = block.reduce((sum, byte, index) => sum + (index >= 148 && index < 156 ? 32 : byte), 0);
+  if (checksum !== number(block, 148, 8)) throw new Error("not-readable");
+  const size = number(block, 124, 12);
+  const flag = string(block, 156, 1);
+  const name = (extensions.path ?? [string(block, 345, 155), string(block, 0, 100)].filter(Boolean).join("/")).replace(/\/$/, "");
+  if (!name || name.startsWith("/") || hasPathControls(name) || name.includes("\\") || name.split("/").some((part) => part === ".." || part === "")) throw new Error("path-outside");
+  if (extensions.size && Number(extensions.size) !== size) throw new Error("not-readable");
+  const owner = (key: "uid" | "gid", offset: number) => {
+    if (extensions[key] === undefined) return number(block, offset, 8);
+    const value = Number(extensions[key]);
+    if (!/^[0-9]+$/.test(extensions[key]) || !Number.isSafeInteger(value) || value > 0xffffffff) throw new Error("not-readable");
+    return value;
+  };
+  const entry: ArchiveEntry = { name, size, kind: flag === "5" ? "directory" : flag === "2" ? "symlink" : flag === "0" || flag === "" ? "file" : "other",
+    changedAt: number(block, 136, 12), mode: number(block, 100, 8), uid: owner("uid", 108), gid: owner("gid", 116),
+    linkTarget: extensions.linkpath ?? string(block, 157, 100), content: Buffer.alloc(0) };
+  return { flag, size, entry };
 }
 // Docker emits ustar with optional PAX or GNU long-name metadata.
 export function archiveEntries(archive: Buffer): ArchiveEntry[] {

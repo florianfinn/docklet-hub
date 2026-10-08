@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -64,6 +66,10 @@ test("Dateien: Liste, Text, Speichern, Upload, Download und die drei Aktionen tr
   assert.deepEqual(listing.entries.map((entry) => entry.name), ["index.html"]);
 
   const file = { sourceId: sources[0].sourceId, path: "index.html" };
+  const inodePath = path.join(agent.projectDir, SHARE, "index.html");
+  const hardlinkPath = path.join(agent.projectDir, SHARE, "index-link.html");
+  await fs.link(inodePath, hardlinkPath);
+  const before = await fs.stat(inodePath);
   const text = await readFileText(agent.target, CONTAINER_ID, file, options);
   const written = await writeFileText(
     agent.target,
@@ -73,8 +79,12 @@ test("Dateien: Liste, Text, Speichern, Upload, Download und die drei Aktionen tr
     options
   );
   assert.equal(written.ok, true);
+  const afterWrite = await fs.stat(inodePath);
+  assert.deepEqual([afterWrite.dev, afterWrite.ino, afterWrite.uid, afterWrite.gid], [before.dev, before.ino, before.uid, before.gid]);
+  assert.equal(await fs.readFile(hardlinkPath, "utf8"), "<h1>hallo</h1>\n");
+  await fs.unlink(hardlinkPath);
 
-  // Archive writes change the fake container; downloads return those bytes.
+  // Descriptor saves and daemon-based creation share the fake container filesystem.
   await uploadFile(agent.target, CONTAINER_ID, { ...root, name: "robots.txt" }, new TextEncoder().encode("x"), options);
   const download = await downloadFile(agent.target, CONTAINER_ID, file, options);
   assert.equal(await new Response(download.stream).text(), "<h1>hallo</h1>\n");
@@ -91,5 +101,8 @@ test("Dateien: Liste, Text, Speichern, Upload, Download und die drei Aktionen tr
   assert.equal(after.diagnostics?.deletable, true);
   assert.deepEqual(after.entries.map((entry) => entry.name), ["robots.txt"]);
 
+  await assert.rejects(downloadFile(agent.target, CONTAINER_ID, { ...root, path: "missing" }, options), (error: unknown) => {
+    assert.equal((error as { status: number }).status, 404); return true;
+  });
   assert.deepEqual(schemaRefusals(agent), []);
 });

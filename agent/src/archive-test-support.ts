@@ -20,6 +20,10 @@ export class MemoryArchive implements ArchiveEngine {
   entries = new Map<string, TarEntry & { linkTarget?: string }>();
   calls: { method: string; target: string; id: string }[] = [];
   lastWrite: Buffer | null = null;
+  mountFiles = new Set<string>();
+  inodes = new Map<string, number>();
+  attributes = new Map<string, { acl: string; xattrs: Record<string, string> }>();
+  private nextInode = 1;
   constructor() { this.directory("/data"); }
   directory(target: string, uid = 2100, gid = 2200, mode = 0o775) {
     for (const part of target.split("/").filter(Boolean).map((_, index, parts) => "/" + parts.slice(0, index + 1).join("/")))
@@ -27,6 +31,7 @@ export class MemoryArchive implements ArchiveEngine {
   }
   file(target: string, content: Buffer | string, uid = 3100, gid = 3200, mode = 0o640) {
     this.directory(path.posix.dirname(target));
+    this.inodes.set(target, this.nextInode++);
     this.entries.set(target, { name: path.posix.basename(target), kind: "file", content: Buffer.from(content), uid, gid, mode, mtime: 123 });
   }
   async statArchive(id: string, target: string): Promise<ArchiveStat | null> {
@@ -41,10 +46,34 @@ export class MemoryArchive implements ArchiveEngine {
     if (tar.length > limit) throw new Error("archive-limit");
     return tar;
   }
+  async openArchiveStream(id: string, target: string, signal?: AbortSignal) {
+    const tar = await this.getArchive(id, target, Infinity);
+    return (async function* () {
+      for (let offset = 0; offset < tar.length; offset += 65536) {
+        if (signal?.aborted) throw new Error("aborted");
+        yield tar.subarray(offset, offset + 65536);
+      }
+    })();
+  }
   async putArchive(id: string, target: string, archive: Buffer) {
     this.calls.push({ method: "PUT", target, id });
     this.lastWrite = archive;
-    for (const entry of archiveEntries(archive)) this.entries.set(path.posix.join(target, entry.name), { ...entry, kind: entry.kind === "directory" ? "directory" : "file", mtime: entry.changedAt });
+    for (const entry of archiveEntries(archive)) {
+      const destination = path.posix.join(target, entry.name);
+      const existing = this.entries.get(destination);
+      if (existing && (existing.kind === "directory") !== (entry.kind === "directory")) throw new Error("no-overwrite-dir-non-dir");
+      if (existing && entry.kind !== "directory") {
+        if (this.mountFiles.has(destination)) throw Object.assign(new Error("mountpoint busy"), { code: "EBUSY" });
+        // Moby removes existing non-directory entries before extracting replacements.
+        for (const name of this.entries.keys()) if (name === destination || name.startsWith(destination + "/")) {
+          this.entries.delete(name);
+          this.inodes.delete(name);
+          this.attributes.delete(name);
+        }
+      }
+      if (!existing || entry.kind !== "directory") this.inodes.set(destination, this.nextInode++);
+      this.entries.set(destination, { ...entry, kind: entry.kind === "directory" ? "directory" : "file", mtime: entry.changedAt });
+    }
   }
 }
 export function archiveFixture(hostRoot = "/invisible/external") {

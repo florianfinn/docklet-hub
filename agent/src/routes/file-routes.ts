@@ -1,3 +1,5 @@
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { fileSourcePolicy } from "../runtime/file-sources.js";
 import { protectionOf, definitionBlocked } from "../file-sources.js";
 import { projectLockKey } from "../project-lock.js";
@@ -189,7 +191,7 @@ export async function handleFileList(ctx: ContainerRouteContext): Promise<void> 
     path: checked.relative,
     entries: listing.list.entries,
     truncated: listing.list.truncated,
-    diagnostics: { ...listing.diagnostics, deletable: await before.entryActions.available(checked.relative), uploadable: before.writable }
+    diagnostics: { ...listing.diagnostics, deletable: await before.entryActions.available(checked.relative), uploadable: before.uploadable }
   });
   return;
 }
@@ -242,11 +244,13 @@ async function handleFileUnlocked(ctx: ContainerRouteContext): Promise<void> {
     );
     if (!checked.ok) return void reject(400, checked.reason);
 
-    const loaded = await before.files.read(checked.absolute);
-    if (!loaded.ok) return void reject(400, loaded.reason);
+    const loaded = await before.files.download(checked.absolute);
+    if (!loaded.ok) return void reject("missing" in loaded && loaded.missing ? 404 : 400, loaded.reason);
     audit.write({ action: auditAction, containerId, containerName: before.containerName, actor, outcome: "allowed", reason: checked.relative });
-    response.writeHead(200, { "content-type": "application/octet-stream", "content-length": String(loaded.content.length), "cache-control": "no-store" });
-    response.end(loaded.content);
+    response.writeHead(200, { "content-type": "application/octet-stream", "content-length": String(loaded.size), "cache-control": "no-store" });
+    try { await pipeline(Readable.from(loaded.stream), response); }
+    catch { response.destroy(); }
+    finally { await loaded.cancel(); }
     return;
   }
 
@@ -467,7 +471,7 @@ async function handleFileActionUnlocked(ctx: ContainerRouteContext): Promise<voi
     const result = await writeIntoShare({
       files: before.files,
       targetDirectory: checked.absolute,
-        name: validatedName.name
+      name: validatedName.name
     });
     if (!result.ok) return void reject(result.status, result.reason);
     confirm(`${[checked.relative, validatedName.name].filter(Boolean).join("/")} (uid=${result.uid})`);
@@ -479,12 +483,12 @@ async function handleFileActionUnlocked(ctx: ContainerRouteContext): Promise<voi
     const name = checkName(body.name);
     if (!name.ok) return void reject(400, name.reason);
   }
-  const boundary = await before.files.mutationBoundary(checked.absolute);
+  const boundary = await before.files.boundary(checked.absolute, true);
   if (!boundary.ok) return void reject(403, boundary.reason);
   if (body.action === "rename") {
     const target = checkEntryPath([checked.relative.split("/").slice(0, -1).join("/"), body.name].filter(Boolean).join("/"), before.shareAbsolute);
     if (!target.ok) return void reject(400, target.reason);
-    const destination = await before.files.mutationBoundary(target.absolute);
+    const destination = await before.files.boundary(target.absolute, true);
     if (!destination.ok) return void reject(403, destination.reason);
   }
   const result = body.action === "rename" ? await before.entryActions.rename(checked.relative, body.name)

@@ -1,3 +1,4 @@
+import { VisibleFiles } from "../visible-files.js";
 import { protectionOf, within } from "../file-sources.js";
 import {
   EngineError,
@@ -105,7 +106,8 @@ export type WebftpPrecheck =
       shareRelative: string;
       shareAbsolute: string;
       writable: boolean;
-      files: FileArchive;
+      uploadable: boolean;
+      files: FileArchive | VisibleFiles;
       entryActions: VisibleFileActions;
     }
   | { ok: false; status: number; reason: string };
@@ -130,10 +132,12 @@ export async function checkWebftpAccess(
     if (!fresh.ok) return fresh;
     if (JSON.stringify(fresh.inspect.Mounts) !== JSON.stringify(sources.inspect.Mounts))
       return { ok: false, status: 409, reason: "file-replaced" };
+    const archive = new FileArchive(engine, { containerId, root: selected.source.target, hostRoot: selected.absolute, policy: sources.policy, mounts: fresh.inspect.Mounts ?? [], volumeRoots: sources.volumeRoots, volumeDevices: sources.volumeDevices });
+    const visibleRoot = sources.visibleRoots.get(selected.source.sourceId);
     return { ok: true, inspect: fresh.inspect, containerName: (fresh.inspect.Name ?? "").replace(/^\//, ""),
-      projectDir: sources.context?.projectDir ?? "", shareRelative: selected.source.sourceId, shareAbsolute: selected.source.target, writable: selected.source.writable,
-      entryActions: new VisibleFileActions(selected.absolute, composeBasePath, sources.policy, selected.source.writable),
-      files: new FileArchive(engine, { containerId, root: selected.source.target, hostRoot: selected.absolute, policy: sources.policy, mounts: fresh.inspect.Mounts ?? [], volumeRoots: sources.volumeRoots, volumeDevices: sources.volumeDevices }) };
+      projectDir: sources.context?.projectDir ?? "", shareRelative: selected.source.sourceId, shareAbsolute: selected.source.target, writable: selected.source.writable, uploadable: selected.source.writable && !sources.archiveBlocked,
+      entryActions: new VisibleFileActions(visibleRoot ?? selected.absolute, composeBasePath, sources.policy, !!visibleRoot && selected.source.writable),
+      files: visibleRoot ? new VisibleFiles(archive, visibleRoot, composeBasePath, sources.policy, selected.source.writable) : archive };
   }
   const result = await gate(containerId, {
     mutating: options.mutating,
@@ -189,15 +193,18 @@ export async function checkWebftpAccess(
   const resolved = selected[0];
   const target = containerPathFor(share.absolute, sources.inspect.Mounts ?? []);
   if (!target.ok) return { ok: false, status: 409, reason: "not-mounted" };
+  const archive = new FileArchive(engine, { containerId, root: target.absolutePath, hostRoot: share.absolute, policy: sources.policy, mounts: sources.inspect.Mounts ?? [], volumeRoots: sources.volumeRoots, volumeDevices: sources.volumeDevices });
+  const visibleSource = sources.visibleRoots.get(resolved.source.sourceId);
+  const visibleRoot = visibleSource ? `${visibleSource}${share.absolute.slice(resolved.absolute!.length)}` : undefined;
   return { ok: true, inspect: sources.inspect, containerName, projectDir: composeContext.projectDir,
-    shareRelative: share.relative, shareAbsolute: target.absolutePath, writable: resolved.source.writable,
-    entryActions: new VisibleFileActions(share.absolute, composeBasePath, sources.policy, resolved.source.writable),
-    files: new FileArchive(engine, { containerId, root: target.absolutePath, hostRoot: share.absolute, policy: sources.policy, mounts: sources.inspect.Mounts ?? [], volumeRoots: sources.volumeRoots, volumeDevices: sources.volumeDevices }) };
+    shareRelative: share.relative, shareAbsolute: target.absolutePath, writable: resolved.source.writable, uploadable: resolved.source.writable && !sources.archiveBlocked,
+    entryActions: new VisibleFileActions(visibleRoot ?? share.absolute, composeBasePath, sources.policy, !!visibleRoot && resolved.source.writable),
+    files: visibleRoot ? new VisibleFiles(archive, visibleRoot, composeBasePath, sources.policy, resolved.source.writable) : archive };
 }
 
 export type ShareWriteResult = { ok: true; uid: number } | { ok: false; status: number; reason: string; hash?: string };
 export async function writeIntoShare(input: {
-  files: FileArchive; targetDirectory: string; name: string; content?: Buffer; expectedHash?: string;
+  files: FileArchive | VisibleFiles; targetDirectory: string; name: string; content?: Buffer; expectedHash?: string;
 }): Promise<ShareWriteResult> {
   const result = await input.files.write(input.targetDirectory, input.name, input.content, input.expectedHash);
   return result.ok ? result : { ...result, status: result.reason === "file-changed-externally" || result.reason === "already-exists" ? 409 : 403 };

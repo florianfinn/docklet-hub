@@ -31,7 +31,7 @@ test("new files and directories inherit parent owners without world-write permis
   for (const [name, content] of [["binary", Buffer.from([0, 255, 10, 13, 128])], ["folder", undefined]] as const) {
     assert.equal((await files.write("/data", name, content)).ok, true);
     const entry = engine.entries.get(`/data/${name}`)!;
-    assert.deepEqual([entry.uid, entry.gid, entry.mode], [2100, 2200, 0o775]);
+    assert.deepEqual([entry.uid, entry.gid, entry.mode], [2100, 2200, content === undefined ? 0o775 : 0o664]);
     if (content) assert.deepEqual((await files.read(`/data/${name}`)).ok && entry.content, content);
   }
 });
@@ -134,7 +134,7 @@ test("a nested mount cannot bypass the selected source boundary or readonly mode
   const f = archiveFixture();
   const files = new FileArchive(f.engine, { ...f.scope, mounts: [...f.scope.mounts, { Type: "bind", Source: "/other", Destination: "/data/nested", RW: false }] });
   assert.deepEqual(await files.read("/data/nested/value"), { ok: false, reason: "path-outside" });
-  assert.deepEqual(await files.mutationBoundary("/data/nested/value"), { ok: false, reason: "path-outside" });
+  assert.deepEqual(await files.boundary("/data/nested/value", true), { ok: false, reason: "path-outside" });
   assert.equal(f.engine.calls.length, 0);
 });
 test("independent policies remain isolated across concurrent requests", async () => {
@@ -145,11 +145,16 @@ test("independent policies remain isolated across concurrent requests", async ()
   assert.deepEqual(denied, { ok: false, reason: "backup-directory-protected" });
 });
 
-test("content access stays on archives; descriptors serve only rename and delete without exec", async () => {
+test("the agent selects the backend and neither file backend executes container tools", async () => {
   for (const source of ["file-archive.ts", "webftp.ts", "runtime/access.ts", "routes/file-routes.ts", "file-sources.ts"]) {
     const text = await fs.readFile(new URL(source, import.meta.url), "utf8");
     assert.doesNotMatch(text, /from "node:fs(?:\/promises)?"|openBelow|writePinned|descriptorPath|execCreate/);
   }
+  for (const source of ["file-descriptors.ts", "visible-files.ts", "visible-file-actions.ts", "file-archive.ts"]) {
+    assert.doesNotMatch(await fs.readFile(new URL(source, import.meta.url), "utf8"), /node:child_process|execCreate|execFile/);
+  }
+  const archive = await fs.readFile(new URL("file-archive.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(archive, /\.getArchive\(/);
   const actions = await fs.readFile(new URL("visible-file-actions.ts", import.meta.url), "utf8");
   assert.doesNotMatch(actions, /readFile|writeFile|createReadStream|getArchive|putArchive|execCreate/);
   const routes = await fs.readFile(new URL("routes/file-routes.ts", import.meta.url), "utf8");
@@ -180,15 +185,17 @@ test("a new target appearing during parent lookup conflicts without PUT", async 
   assert.equal(f.engine.entries.get("/data/new")!.content?.toString(), "external");
 });
 
-test("directory archives never transport known backup, agent or nested mount subtrees", async () => {
+test("header-only listings hide protected and nested mount subtrees without returning contents", async () => {
   const f = archiveFixture();
-  for (const [policy, mounts, reason] of [
-    [{ ...archivePolicy, backupDirectory: f.scope.hostRoot + "/backup" }, f.scope.mounts, "backup-directory-protected"],
-    [{ ...archivePolicy, agentPaths: [f.scope.hostRoot + "/state"] }, f.scope.mounts, "source-protected"],
-    [archivePolicy, [...f.scope.mounts, { Source: "/backup", Destination: "/data/nested", Type: "bind" }], "path-outside"]
-  ] as const) {
-    const files = new FileArchive(f.engine, { ...f.scope, policy, mounts: [...mounts] });
-    assert.deepEqual(await files.list("/data"), { ok: false, reason });
-    assert.equal(f.engine.calls.length, 0);
-  }
+  f.engine.directory("/data/backup"); f.engine.file("/data/backup/value", "SECRET_BACKUP_CONTENT");
+  f.engine.directory("/data/state"); f.engine.file("/data/state/value", "SECRET_AGENT_CONTENT");
+  f.engine.directory("/data/nested"); f.engine.file("/data/nested/value", "SECRET_MOUNT_CONTENT");
+  const files = new FileArchive(f.engine, { ...f.scope, policy: { ...archivePolicy, backupDirectory: f.scope.hostRoot + "/backup", agentPaths: [f.scope.hostRoot + "/state"] },
+    mounts: [...f.scope.mounts, { Source: "/backup", Destination: "/data/nested", Type: "bind" }] });
+  const listing = await files.list("/data");
+  assert.equal(listing.ok, true);
+  if (!listing.ok) return;
+  assert.deepEqual(listing.list.entries, []);
+  assert.equal(listing.root.content.length, 0);
+  assert.doesNotMatch(JSON.stringify(listing), /SECRET_/);
 });
