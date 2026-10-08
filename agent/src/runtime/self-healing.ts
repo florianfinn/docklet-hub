@@ -10,7 +10,8 @@ import { gate } from "./gate.js";
 
 export const selfHealing = new SelfHealingController(selfHealingState, {
   config: () => selfHealingConfig.read(),
-  eligible: (container) => !config.readOnly && registry.checkAccess(container.Id, true) === "allowed"
+  intentional: (container) => stopIntents.updateIntentActive(container),
+  eligible: (container) => !stopIntents.updateIntentActive(container) && !config.readOnly && registry.checkAccess(container.Id, true) === "allowed"
     && forcedManagement(container.Config?.Labels?.["com.docker.compose.project.working_dir"] ?? "") !== "read-only",
   restartInProgress: (id) => stopIntents.isHubRestartActive(id),
   onIncident: (id) => dockerEvents.notifyLifecycleChange(id),
@@ -18,7 +19,7 @@ export const selfHealing = new SelfHealingController(selfHealingState, {
     try {
       // Eligibility is observation; any later action gathers its own delegation evidence once.
       const result = await gate(id, { mutating: true, action: "start", actor: SELF_HEALING_SYSTEM_ACTOR, onDelegation: () => {} });
-      return result.ok ? result.inspect : null;
+      return result.ok && !stopIntents.updateIntentActive(result.inspect) ? result.inspect : null;
     } catch (error) {
       const failure = actionFailureOf(error, true);
       audit.write({ action: "start", containerId: id, containerName: null, actor: SELF_HEALING_SYSTEM_ACTOR,

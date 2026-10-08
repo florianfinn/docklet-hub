@@ -1,3 +1,5 @@
+import { MUTATION_QUEUE_POLICY } from "contract";
+import { ActionQueueError } from "../concurrency.js";
 import {
   EngineError
 } from "../engine.js";
@@ -487,22 +489,16 @@ function managedDenial(
 
 export async function executeRaw(
   operation: RawExecution & {
-    // Called as soon as the project lock is held — and only then (#86).
-    //
-    // ⚠️ This is the seam at which the observable path sends its first line,
-    // and its position is not a matter of taste. Before the lock the answer
-    // is still available as an HTTP STATUS: if the stack is currently busy,
-    // `runExclusive` throws a KeyedMutexBusyError, which the outer error
-    // handler translates into the same `409 stack-busy` that the
-    // synchronous path delivers. If the header went out earlier, this would
-    // turn into a stream with a start line and no result — the caller would
-    // get its only named reason as silence.
+    // Streaming starts only after the bounded shared queue grants the lock.
     onLocked?: () => void;
   }
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   return stackLocks.runExclusive(rawLockKey(operation), async () => {
     operation.onLocked?.();
     return executeRawLocked(operation);
+  }, { waitMs: MUTATION_QUEUE_POLICY.composeApply }).catch((error: unknown) => {
+    if (error instanceof ActionQueueError) return { status: 409, body: { error: error.code } };
+    throw error;
   });
 }
 

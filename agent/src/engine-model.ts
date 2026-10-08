@@ -196,6 +196,7 @@ export type RawInspect = {
     // loop — the state changes constantly. Without this field a restart loop
     // looks like a successful start.
     Restarting?: boolean;
+    Paused?: boolean;
     ExitCode?: number;
     Error?: string;
     StartedAt?: string;

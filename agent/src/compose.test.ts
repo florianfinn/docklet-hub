@@ -555,3 +555,12 @@ test("a missing port binding is reported as 0.0.0.0, not glossed over", () => {
   if (!read.ok) return;
   assert.equal(read.spec.ports[0].hostIp, "0.0.0.0");
 });
+test("temporary update snapshot preserves the single original anchor and rejects arbitrary overrides", () => {
+  const projectDir = "/srv/apps/demo";
+  const labels = { "com.docker.compose.project": "demo", "com.docker.compose.service": "web",
+    "com.docker.compose.project.working_dir": projectDir, "com.docker.compose.project.config_files": `${projectDir}/compose.yaml,${projectDir}/.docklet-update-12345678-1234-1234-1234-123456789abc.json` };
+  assert.equal(composeContextOf(labels, "/srv/apps")?.composeFileName, "compose.yaml");
+  for (const suffix of ["override.yaml", ".docklet-update-invalid.json", "../.docklet-update-12345678-1234-1234-1234-123456789abc.json"]) {
+    assert.equal(composeContextOf({ ...labels, "com.docker.compose.project.config_files": `${projectDir}/compose.yaml,${projectDir}/${suffix}` }, "/srv/apps"), null);
+  }
+});

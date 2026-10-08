@@ -120,7 +120,9 @@ export class DockerEventWatcher {
               if (connection.signal.aborted) return;
               const restarting = this.intents.restartRequested(event);
               const classification = this.intents.observe(event, container);
-              this.updateLifecycle((observer) => observer.observe(event, container, classification, restarting));
+              if (!this.intents.updateIntentActive(container, event.atMs)) {
+                this.updateLifecycle((observer) => observer.observe(event, container, classification, restarting));
+              }
               if (event.action === "die") containers.delete(event.containerId);
             }
             // kill is local evidence; the existing monitor stream keeps its shape.

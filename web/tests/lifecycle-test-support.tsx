@@ -43,6 +43,8 @@ export async function fixture({ kind = "container", current = host(), role = "ad
   const state = { host: current, context: context(current) };
   globalThis.fetch = async (input, init = {}) => {
     const call: Call = { path: String(input), method: init.method ?? "GET", body: init.body ? JSON.parse(String(init.body)) : null, signal: init.signal };
+    if (call.path.includes("/jobs?")) return Response.json({ active: [], recent: [] });
+    if (call.path.includes("/update-settings")) return Response.json({ startDeadlineSeconds: 120 });
     calls.push(call);
     if (call.path.endsWith("/overview")) return Response.json({ hosts: [state.host] });
     if (call.path.endsWith("/context")) return Response.json(state.context);

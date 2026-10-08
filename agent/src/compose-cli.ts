@@ -23,7 +23,7 @@
 import { RESTART_START_RESERVE_MS } from "./runtime-actions.js";
 import { performance } from "node:perf_hooks";
 import { execFile } from "node:child_process";
-import { COMPOSE_FILE_NAME, UPDATE_ROLLBACK_OVERRIDE_FILE_NAME } from "./compose.js";
+import { COMPOSE_FILE_NAME, UPDATE_ROLLBACK_OVERRIDE_FILE_NAME, isUpdateSnapshotOverrideFileName } from "./compose.js";
 
 const DOCKER_BINARY = "docker";
 
@@ -108,7 +108,7 @@ export function ownProject(projectDir: string): ComposeProject {
 // All calls bind to ONE project directory and ONE file. The project name
 // comes from the directory name (compose default) — that is exactly the
 // anchor that replaces the container id (6.3.1).
-function projectArgs(project: ComposeProject, includeRollbackOverride = false): string[] {
+function projectArgs(project: ComposeProject, includeRollbackOverride = false, snapshotOverrideFileName?: string): string[] {
   const args = [
     "compose",
     "--project-directory",
@@ -118,6 +118,10 @@ function projectArgs(project: ComposeProject, includeRollbackOverride = false): 
   ];
   if (includeRollbackOverride) {
     args.push("--file", `${project.projectDir}/${UPDATE_ROLLBACK_OVERRIDE_FILE_NAME}`);
+  }
+  if (snapshotOverrideFileName) {
+    if (!isUpdateSnapshotOverrideFileName(snapshotOverrideFileName)) throw new Error("Invalid update override");
+    args.push("--file", `${project.projectDir}/${snapshotOverrideFileName}`);
   }
   if (project.projectName) args.push("--project-name", project.projectName);
   return args;
@@ -183,11 +187,13 @@ export type UpOptions = {
   // service to the previous image id on rollback. No free path: the file name
   // is a constant under the checked project directory.
   rollbackOverride?: boolean;
+  snapshotOverrideFileName?: string;
 
   // On rollback Compose should restore the previous digest even if it
   // mistakenly considers the current state identical.
   forceRecreate?: boolean;
   noRecreate?: boolean;
+  noStart?: boolean;
   wait?: boolean;
   timeoutMs?: number;
   signal?: AbortSignal;
@@ -201,12 +207,13 @@ export function buildUpArgs(project: ComposeProject, options: UpOptions): string
   // `build:` in a hand-edited file would otherwise execute arbitrary code from
   // a Dockerfile on the host.
   const args = [
-    ...projectArgs(project, options.rollbackOverride === true),
+    ...projectArgs(project, options.rollbackOverride === true, options.snapshotOverrideFileName),
     "up",
     "--detach",
     "--no-build"
   ];
   if (options.wait !== false) args.push("--wait");
+  if (options.noStart) args.push("--no-start");
   if (options.noRecreate) args.push("--no-recreate");
   if (options.removeOrphans) args.push("--remove-orphans");
   if (options.pullNever) args.push("--pull", "never");

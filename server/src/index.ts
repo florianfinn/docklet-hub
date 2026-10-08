@@ -1,3 +1,4 @@
+import { createUpdateRecovery } from "./features/updates/index.js";
 import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
@@ -143,6 +144,7 @@ async function main(): Promise<void> {
 
   // Live connections and their health probes deliver the current configuration.
   const selfHealingSync = createRuntimeSettingsSync({ pool, repository, agentSecret: config.agentSecret });
+  const updateRecovery = createUpdateRecovery({ pool, connect: createHostAccess({ pool, repository, agentSecret: config.agentSecret }).connect });
   const hostCycle = startHostCycleService({
     pool,
     repository,
@@ -165,9 +167,9 @@ async function main(): Promise<void> {
     },
     onConnected: async (hostId) => {
       const record = await repository.find(hostId);
-      if (record) await selfHealingSync.syncHost(record, true);
+      if (record) { await Promise.all([selfHealingSync.syncHost(record, true), updateRecovery.syncHost(record)]); }
     },
-    onHostReachable: async (record) => { await selfHealingSync.syncHost(record); },
+    onHostReachable: async (record) => { await Promise.all([selfHealingSync.syncHost(record), updateRecovery.syncHost(record)]); },
     onError: (error) => console.error("Live-Ereignisse:", error)
   });
   liveEvents.start();

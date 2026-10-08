@@ -6,6 +6,7 @@ import { runStackRuntimeAction } from "../runtime/stack-action.js";
 import { actionConnection } from "../runtime/action-connection.js";
 import { sendLine } from "../ndjson-line.js";
 import {
+  MUTATION_QUEUE_POLICY,
   containerCreateRequestSchema,
   stackActionRequestSchema,
   stackRuntimeActionRequestSchema,
@@ -610,7 +611,7 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
         });
       }
       return { context: after.context, containerIds };
-    });
+    }, { waitMs: MUTATION_QUEUE_POLICY.composeApply, signal: connection.signal });
 
     audit.write({
       action: `stack-${action}`,
@@ -627,7 +628,8 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
       context: outcome.context
     });
   } catch (error) {
-    if (action !== "start" && action !== "stop" && action !== "restart" && !(error instanceof StackEndpointError)) throw error;
+    if (action !== "start" && action !== "stop" && action !== "restart" && !(error instanceof StackEndpointError)
+      && !(error instanceof Error && error.message === "action-queue-timeout")) throw error;
     const failure = actionFailureOf(error, true);
     audit.write({
       action: `stack-${action}`, containerId: anchorContainerId, containerName: null, actor,
