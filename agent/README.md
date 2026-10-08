@@ -76,3 +76,31 @@ The runtime uses zod and operating-system Docker/WireGuard tools. Image
 scan and dependency-update PRs complement explicit release builds. The
 runtime image removes package-management tooling that the service does not
 need. Apache-2.0 covers this workspace; adopted notices remain intact.
+
+## Data backups and restore
+
+Updates can optionally back up selected eligible mounts in stop or live mode.
+Live copies can be inconsistent; stopping the selected container does not stop
+other writers of shared data. File copies do not guarantee database consistency.
+Image rollback never restores data.
+
+Complete runs are stored below `backups` in the agent data directory, or at
+`DOCKER_AGENT_BACKUP_DIR` when set. Directories use mode `0700`, archives `0600`.
+The latest three complete runs are retained per Compose project/service or
+standalone container name, including after container replacement. Each copy
+requires its estimated size plus the contract's fixed 1 GiB free-space reserve.
+Unknown size or a failed copy prevents that container's exchange.
+
+Restore is a separate previewed and confirmed job. It stops the container,
+extracts selected archives and restores its prior runtime state. Cancellation
+is possible only before extraction. Shared, ambiguous and protected sources
+cannot be restored. Compose files, `.env` and protected subpaths are excluded.
+Only regular files and directories with representable ustar paths are accepted;
+links and special files fail safely. Visible sources use pinned descriptors,
+other sources use the Docker archive API. A restore can fail when the agent
+cannot preserve file ownership through the visible-source descriptor path.
+
+An interrupted data operation is recorded privately before stopping. On restart,
+recovery restores the prior runtime state and reports an incident; it never
+repeats extraction automatically. Failures keep the journal and block affected
+operations until recovery succeeds.

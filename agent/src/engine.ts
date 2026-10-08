@@ -1,4 +1,4 @@
-import { openArchiveStream } from "./archive-request.js";
+import { openArchiveStream, putArchiveStream } from "./archive-request.js";
 import { containerActionTimeoutMs } from "./runtime-actions.js";
 import http from "node:http";
 import type { RuntimeCallOptions } from "./runtime-budget.js";
@@ -256,6 +256,9 @@ export class DockerEngine {
   }
   openArchiveStream(containerId: string, target: string, signal?: AbortSignal) {
     return openArchiveStream(this.options, containerId, target, signal);
+  }
+  putArchiveStream(containerId: string, target: string, input: AsyncIterable<Buffer>, signal?: AbortSignal) {
+    return putArchiveStream(this.options, containerId, target, input, signal);
   }
   async getArchive(containerId: string, target: string, maxResponseBytes: number): Promise<Buffer> {
     const query = new URLSearchParams({ path: target });

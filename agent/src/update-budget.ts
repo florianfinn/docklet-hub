@@ -1,9 +1,9 @@
 import { performance } from "node:perf_hooks";
 import { RuntimeBudget, type RuntimeCallOptions } from "./runtime-budget.js";
-import type { UpdateError } from "contract";
+import type { UpdateResult } from "contract";
 
 export class UpdateFailure extends Error {
-  constructor(readonly code: UpdateError) { super(code); }
+  constructor(readonly code: NonNullable<UpdateResult["updateError"]>) { super(code); }
 }
 export class UpdateBudget extends RuntimeBudget {
   private readonly updateDeadline: number;

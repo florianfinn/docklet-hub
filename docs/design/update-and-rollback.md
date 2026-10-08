@@ -198,7 +198,13 @@ auflösen lässt; der betroffene Austausch gilt dann als fehlgeschlagen.
 Die Erkennung unterbrochener Updates läuft unabhängig vom Agent-Start und
 wiederholt Fehler mit Backoff bis zum ersten erfolgreichen Durchlauf.
 Bis dahin werden neue Update-Starts mit `update-rollback-unavailable` abgelehnt;
-die Selbstheilung lässt Journal-Ziele aus. Ein unlesbares Journal wird mit
+die Selbstheilung lässt Journal-Ziele aus. Solange das Journal unlesbar ist,
+lässt sie alle Ziele aus. Wiederholte Recovery-Audits derselben Fehlerklasse
+werden auf höchstens einen Eintrag je 15 Minuten begrenzt. Ein beschädigter Erkennungsverlauf (`update-pending.json.seen`) wird mit
+Dateiname im Log beiseitegelegt; höchstens drei solcher Dateien und 512
+Erkennungsschlüssel bleiben erhalten. Der Journal-Vorfall verwendet
+`@update-journal`, das kein gültiger Docker-Containername ist.
+Ein unlesbares Journal wird mit
 Zeitstempel und Rechten 0600 beiseitegelegt und als Vorfall gemeldet.
 Die Erkennung berücksichtigt nur Journal-Einträge oder bekannte Registry-Ziele.
 Sie erhält die Ursache eines offenen Vorfalls und ergänzt allenfalls Kontext.
@@ -405,6 +411,16 @@ Container erhält dabei seinen vorherigen Laufzustand zurück, soweit dies
 möglich ist; ein Wiederanlauffehler wird zusätzlich gemeldet. Auch ein späterer
 Platzfehler während der Kopie darf keinen Austausch auslösen. So bleibt die
 gewählte Sicherung eine Vorbedingung des Auftrags.
+
+Der Agent protokolliert den Vorzustand vor einem Daten-Stopp in einem privaten
+Journal. Nach einem Agent-Neustart stellt er diesen Laufzustand wieder her und
+meldet den unterbrochenen Lauf; ein begonnenes Restore wird nicht automatisch
+erneut entpackt. Bis zur Recovery bleiben Starts und Selbstheilung für betroffene
+Ziele gesperrt. Das Datenjournal enthält keine Definition und keine Dateiinhalte.
+
+Die Archivprüfung akzeptiert reguläre Dateien und Verzeichnisse. Links und
+Spezialdateien sowie nicht im ustar-Namensbereich darstellbare Pfade führen zum
+Fehler, statt unvollständig gesichert oder ungeprüft wiederhergestellt zu werden.
 
 ## Gesonderter Restore
 

@@ -95,7 +95,7 @@ for (const mismatch of ["target", "status", "startedAt"]) test(`R8 rejects ${mis
   if (mismatch === "target") selection.target = { kind: "container", containerName: "other" }; else selection.expectedContainer[mismatch as "status" | "startedAt"] = "changed";
   await assert.rejects(authorizeUpdateSelection(selection, null, new UpdateBudget(60_000)), { code: "state-changed" }); assert.equal(f.trace.length, 0);
 });
-for (const mode of ["local", "oneoff", "foreign", "scaled", "backup", "system"] as const) test(`preview rejects unsupported ${mode} before mutation`, async (t) => {
+for (const mode of ["local", "oneoff", "foreign", "scaled", "backup", "system"] as const) test(`preview rejects ineligible ${mode} before mutation`, async (t) => {
   const f = fixture(t, "running", mode === "scaled");
   if (mode === "local") t.mock.method(engine, "inspectImage", async () => ({ Id: "old-image", RepoDigests: [] }));
   if (mode === "oneoff") f.change({ Config: { ...f.original.Config, Labels: { "com.docker.compose.oneoff": "True" } } });
@@ -105,7 +105,7 @@ for (const mode of ["local", "oneoff", "foreign", "scaled", "backup", "system"] 
   if (mode === "system") registry.replaceAll([{ ...registry.get("old")!, imageRef: "example/docklet-hub:1.0" }]);
   if (["foreign", "system"].includes(mode)) await assert.rejects(ops.prepare(f.selection, null, new UpdateBudget(60_000)));
   else { const snapshot = await ops.prepare(f.selection, null, new UpdateBudget(60_000));
-    assert.equal(snapshot.preview.blocker, mode === "local" ? "local-image-no-registry-digest" : mode === "oneoff" ? "oneoff-unsupported" : mode === "scaled" ? "scaled-service-unsupported" : "backup-incomplete"); }
+    assert.equal(snapshot.preview.blocker, mode === "local" ? "local-image-no-registry-digest" : mode === "oneoff" ? "oneoff-unsupported" : mode === "scaled" ? "scaled-service-unsupported" : "source-protected"); }
   assert.deepEqual(f.trace, []);
 });
 for (const status of ["unhealthy", "paused", "restarting"]) test(`preview warns about initial ${status}`, async (t) => {

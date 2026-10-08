@@ -1,3 +1,4 @@
+import { backupStore, dataJournal, backupSources, copyBackup, stopForData, resumeAfterData } from "./backups.js";
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -104,11 +105,22 @@ async function prepare(selection: UpdateServiceSelection, actor: string | null, 
   if (initialState.health === "unhealthy") warnings.push("unhealthy");
   if (initialState.status === "paused" || initialState.status === "restarting") warnings.push(initialState.status);
   const blocker = scaled ? "scaled-service-unsupported" : raw.Config?.Labels?.["com.docker.compose.oneoff"]?.toLowerCase() === "true" ? "oneoff-unsupported"
-    : selection.backup !== null ? "backup-incomplete" : !currentDigest ? "local-image-no-registry-digest"
+    : !currentDigest ? "local-image-no-registry-digest"
       : !image?.Id || image.Id !== raw.Image ? "update-rollback-unavailable" : null;
+  const sources = raw.Mounts?.length ? await backupSources(raw.Id, actor, budget, true) : null;
+  let backupBlocker = null;
+  if (selection.backup) {
+    for (const selected of selection.backup.mounts) {
+      const source = sources?.resolved.find((item) => item.source.sourceId === selected.sourceId)?.source;
+      if (!source?.backupEligible) backupBlocker = "source-protected" as const;
+      else if (source.estimatedBytes === null) backupBlocker = "backup-size-unavailable" as const;
+    }
+    if (selection.backup.mode === "live") warnings.push("live-backup-inconsistent");
+    if (selection.backup.mounts.some((mount) => sources?.resolved.some((item) => item.source.sourceId === mount.sourceId && item.source.shared))) warnings.push("shared-source-writers");
+  }
   return { raw: structuredClone(raw), dependencies, definition: { project, normalized, currentId: raw.Id, actor } satisfies Definition,
     preview: { ...selection, imageRef, currentDigest, offeredDigest: null, rollbackImageId: raw.Image ?? null,
-      definitionHash: hash(normalized ?? buildCreatePayload(raw, { imageRef })), initialState, warnings, blocker, mounts: [],
+      definitionHash: hash(normalized ?? buildCreatePayload(raw, { imageRef })), initialState, warnings, blocker: blocker ?? backupBlocker, mounts: sources?.resolved.map((item) => item.source) ?? [],
       acceptance: updateAcceptance(initialState.status, completion, restart, selection.target.kind) } };
 }
 async function read(snapshot: UpdateSnapshot, budget: UpdateBudget): Promise<RawInspect> {
@@ -218,10 +230,30 @@ export const updateRuntimeOps: UpdateOps = {
     if (!image?.Id) throw new UpdateFailure("update-pull-failed");
     return { imageId: image.Id, digest: localManifestDigest(image.RepoDigests, parsed.fullRef) };
   },
+  async backup(snapshot, budget, cancelled) {
+    const sources = await backupSources(snapshot.raw.Id, (snapshot.definition as Definition).actor, budget, true);
+    const options = structuredClone(snapshot.preview.backup!);
+    for (const selected of options.mounts) {
+      const source = sources?.resolved.find((item) => item.source.sourceId === selected.sourceId)?.source;
+      if (!source?.backupEligible) throw new UpdateFailure("source-protected");
+      selected.estimatedBytes = source.estimatedBytes;
+    }
+    await backupStore.checkSpace(snapshot.preview.target, options);
+    if (snapshot.preview.backup!.mode === "stop") {
+      dataJournal.begin(snapshot.preview.target, snapshot.raw, "backup");
+      await stopForData(snapshot.raw, budget);
+    }
+    return (await copyBackup(snapshot.raw, snapshot.preview.target, options,
+      (snapshot.definition as Definition).actor, budget, cancelled, sources)).backupId;
+  },
+  async resume(snapshot, budget) {
+    const raw = await resumeAfterData(snapshot.raw, budget); dataJournal.complete(snapshot.preview.target); return raw;
+  },
   async exchange(snapshot, image, budget, verify, beginExchange) {
     const definition = snapshot.definition as Definition;
     beginExchange();
     updateJournal.begin({ target: snapshot.preview.target, containerId: snapshot.raw.Id, containerName: snapshot.raw.Name.replace(/^\//, "") });
+    dataJournal.complete(snapshot.preview.target);
     const started = await mutate(snapshot, image, budget, false); verify();
     await verifyUpdate(() => read(snapshot, budget), snapshot.preview, image, budget, started);
     let raw = await read(snapshot, budget);

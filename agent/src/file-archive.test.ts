@@ -199,3 +199,13 @@ test("header-only listings hide protected and nested mount subtrees without retu
   assert.equal(listing.root.content.length, 0);
   assert.doesNotMatch(JSON.stringify(listing), /SECRET_/);
 });
+
+test("restore boundaries permit missing descendants but reject existing symlink and non-directory ancestors", async () => {
+  const f = archiveFixture();
+  await f.files.restoreBoundary("/data/new/directory/file");
+  f.engine.file("/data/parent", "regular file");
+  await assert.rejects(f.files.restoreBoundary("/data/parent/file"), /wrong-kind/);
+  f.engine.entries.set("/data/link", { name: "link", kind: "file", mode: 0o644, uid: 1000, gid: 1000, mtime: 0, linkTarget: "/outside" });
+  await assert.rejects(f.files.restoreBoundary("/data/link/file"), /path-outside/);
+  await assert.rejects(f.files.restoreBoundary("/data/.env"), /path-blocked/);
+});

@@ -69,3 +69,23 @@ test("archive streaming exposes transport chunks and closes rejected responses w
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(destroyed, true);
 });
+
+test("restore PUT streams chunks under backpressure without copying ownership or buffering the archive", async (t) => {
+  let total = 0; let calls = 0; let seen: http.RequestOptions | null = null;
+  t.mock.method(http, "request", (options: http.RequestOptions, callback: (response: http.IncomingMessage) => void) => {
+    seen = options; const request = new EventEmitter() as http.ClientRequest;
+    request.write = ((chunk: Buffer) => { total += chunk.length; calls++; queueMicrotask(() => request.emit("drain")); return false; }) as typeof request.write;
+    request.end = (() => {
+      const response = Object.assign(new EventEmitter(), { statusCode: 200, resume() {} }) as unknown as http.IncomingMessage;
+      callback(response); response.emit("end"); return request;
+    }) as typeof request.end;
+    return request;
+  });
+  const engine = new DockerEngine({ socketPath: "/unused.sock" });
+  await engine.putArchiveStream("stopped", "/data", (async function* () {
+    const chunk = Buffer.alloc(65536); for (let index = 0; index < 1024; index++) yield chunk;
+  })());
+  assert.equal(total, 64 * 1024 * 1024); assert.equal(calls, 1024);
+  const query = new URL(String((seen as unknown as http.RequestOptions).path), "http://docker").searchParams;
+  assert.equal(query.get("path"), "/data"); assert.equal(query.get("noOverwriteDirNonDir"), "1"); assert.equal(query.has("copyUIDGID"), false);
+});

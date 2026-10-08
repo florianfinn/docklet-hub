@@ -44,13 +44,24 @@ export class UpdateJournal {
   }
   remember(entry: PendingExchange, name: string, fingerprint: string): void {
     const history = this.history(); history[`identity:${name}`] = entry.journalId!; history[`${entry.journalId}:${name}`] = fingerprint;
-    this.atomicWrite(`${this.file}.seen`, history);
+    this.atomicWrite(`${this.file}.seen`, Object.fromEntries(Object.entries(history).slice(-512)));
   }
   private history(): Record<string, string> {
     if (!fs.existsSync(`${this.file}.seen`)) return {};
-    const value = JSON.parse(fs.readFileSync(`${this.file}.seen`, "utf8"));
-    if (!value || typeof value !== "object" || Object.values(value).some((item) => typeof item !== "string")) throw new Error("Invalid recovery history");
-    return value;
+    try {
+      const value = JSON.parse(fs.readFileSync(`${this.file}.seen`, "utf8"));
+      if (!value || typeof value !== "object" || Array.isArray(value) || Object.values(value).some((item) => typeof item !== "string")) throw new Error("Invalid recovery history");
+      return value;
+    } catch (error) {
+      if (error instanceof Error && "code" in error) throw error;
+      const destination = `${this.file}.seen.invalid-${Date.now()}-${randomUUID()}`;
+      fs.chmodSync(`${this.file}.seen`, 0o600); fs.renameSync(`${this.file}.seen`, destination);
+      console.warn(`[agent] recovery history quarantined: ${path.basename(destination)}`);
+      const prefix = path.basename(this.file) + ".seen.invalid-";
+      const files = fs.readdirSync(path.dirname(this.file)).filter((file) => file.startsWith(prefix)).sort().reverse();
+      for (const file of files.slice(3)) fs.rmSync(path.join(path.dirname(this.file), file));
+      return {};
+    }
   }
   begin(entry: PendingExchange): void {
     this.write([...this.read().filter((e) => key(e.target) !== key(entry.target)), { ...entry, journalId: entry.journalId ?? randomUUID() }]);
@@ -77,7 +88,7 @@ export async function recoverUpdateRemnants(deps: {
   catch (error) {
     if (!(error instanceof InvalidUpdateJournal)) throw error;
     const quarantined = deps.journal.quarantine();
-    appendRecoveryIncident(deps.state, { kind: "container", containerName: "update-journal" }, "unresolved", `update-journal-invalid: ${quarantined}`);
+    appendRecoveryIncident(deps.state, { kind: "container", containerName: "@update-journal" }, "unresolved", `update-journal-invalid: ${quarantined}`);
     deps.notify("unresolved"); throw error;
   }
   const base = fs.realpathSync(deps.basePath);
