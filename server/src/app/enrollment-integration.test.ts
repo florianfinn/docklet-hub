@@ -569,6 +569,11 @@ test("Admin legt einen Arm an, packt sein Archiv aus, der Agent meldet sich an",
       assert.ok(readFileSync(join(unpacked.directory, name), "utf8").length > 0, `${name} fehlt im Archiv`);
     }
 
+    assert.equal(
+      unpacked.env.get("DOCKER_AGENT_IMAGE"),
+      `ghcr.io/florianfinn/docklet-hub-agent:v${AGENT_VERSION}`
+    );
+
     const secret = unpacked.env.get("DOCKER_AGENT_SECRET");
     assert.ok(secret && secret.length >= MIN_REGISTRATION_TOKEN_LENGTH);
     assert.equal(unpacked.env.get("DOCKER_AGENT_HOST"), "127.0.0.1");

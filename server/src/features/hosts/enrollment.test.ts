@@ -173,22 +173,22 @@ test("der ListenPort der Hub-Seite ist der Port IM Container, nicht der veröffe
   );
 });
 
-test("das Image im Archiv ist dasselbe, das die docker-compose.yml als Vorgabe führt", () => {
+test("the archive image uses the complete hub release version", () => {
+  const { version } = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { version: string };
+  assert.equal(ARM_AGENT_IMAGE, `ghcr.io/florianfinn/docklet-hub-agent:v${version}`);
+  assert.equal(isAgentOutdated(version), false);
+});
+
+test("installation defaults pin a supported agent release", () => {
   const compose = readFileSync(join(ROOT, "docker-compose.yml"), "utf8");
-  const match = /\$\{DOCKER_AGENT_IMAGE:-([^}]+)\}/.exec(compose);
-  assert.ok(match, "in der docker-compose.yml steht keine Vorgabe für DOCKER_AGENT_IMAGE mehr");
-  assert.equal(
-    ARM_AGENT_IMAGE,
-    match[1],
-    "Hub-Seite und Arm-Seite des Tunnels liefen sonst auf verschiedenen Fassungen desselben Images"
-  );
-  // Pinned to a SemVer tag in the new repository (#279), never `latest`. The
-  // digest follows once the release workflow has run for the first time. The
-  // tag must not stand below the mark: an arm on an older agent counts as
-  // `outdated`, and the arm this hub ships would be one of them.
-  const tag = /^ghcr\.io\/florianfinn\/docklet-hub-agent:v(\d+\.\d+\.\d+)(@sha256:[0-9a-f]{64})?$/.exec(ARM_AGENT_IMAGE);
-  assert.ok(tag, `der Verweis ist nicht auf einen SemVer-Tag im Repository docklet-hub-agent gepinnt: ${ARM_AGENT_IMAGE}`);
-  assert.equal(isAgentOutdated(tag[1]), false, "der Pin steht unter der Marke MIN_AGENT_VERSION");
+  const defaults = [...compose.matchAll(/\$\{DOCKER_AGENT_IMAGE:-([^}]+)\}/g)].map((match) => match[1]);
+  assert.equal(defaults.length, 2);
+  assert.equal(defaults[0], defaults[1]);
+  const tag = /^ghcr\.io\/florianfinn\/docklet-hub-agent:v(\d+\.\d+\.\d+(?:-rc\.\d+)?)(@sha256:[0-9a-f]{64})?$/.exec(defaults[0]);
+  assert.ok(tag, "the install default must pin a release tag");
+  assert.equal(isAgentOutdated(tag[1]), false);
+  const remoteEnv = readFileSync(join(ROOT, "agent/deploy/remote-wireguard/.env.example"), "utf8");
+  assert.ok(remoteEnv.includes(`DOCKER_AGENT_IMAGE=${defaults[0]}\n`));
 });
 
 // ── Die Peer-Liste ────────────────────────────────────────────────────────

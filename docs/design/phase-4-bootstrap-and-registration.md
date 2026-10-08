@@ -12,6 +12,12 @@ Das generische Installationspaket enthält die benötigte Compose-Definition und
 
 Registrierung und Laufzeitstatus sind getrennt: ein gespeicherter Host kann vorübergehend nicht erreichbar sein. Vertrag und Mindestversion beschreiben, welche Aktionen zulässig sind. Hub und Agent tragen im Release dieselbe Version; Hub-Updates können die erforderliche Mindestversion anheben. Agenten-Updates verwenden den Watcher und bleiben von fremden Containerdefinitionen getrennt.
 
+Das erzeugte Host-Archiv und angebotene Agentenupdates verwenden die vollständige
+Release-Version aus dem Wurzelmanifest des Hubs, einschließlich `-rc.N`.
+Der Release-Workflow veröffentlicht beide Images unter diesem Tag. Die
+Installationsvorlagen tragen einen veröffentlichten Agenten-Tag als Vorgabe;
+für eine andere Hub-Version wird dieser über `DOCKER_AGENT_IMAGE` übersteuert.
+
 ## 4. Zugriff
 
 Bedienwege wählen den tatsächlichen Agenten aus der vertrauenswürdigen Hostregistrierung. Frei übermittelte URLs dürfen keinen beliebigen Zugriff auf andere Dienste erlauben. Auch registrierte Verbindungen benötigen begrenzte Wartezeiten und verständliche Fehler.

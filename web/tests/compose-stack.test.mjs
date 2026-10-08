@@ -70,7 +70,7 @@ test("der Agent und der Sidecar sind auf einen SemVer-Tag im Agent-Repository ge
   for (const name of [AGENT, WIREGUARD]) {
     assert.match(
       defaultOf(name),
-      /^ghcr\.io\/florianfinn\/docklet-hub-agent:v\d+\.\d+\.\d+(@sha256:[0-9a-f]{64})?$/,
+      /^ghcr\.io\/florianfinn\/docklet-hub-agent:v\d+\.\d+\.\d+(?:-rc\.\d+)?(@sha256:[0-9a-f]{64})?$/,
       `Dienst „${name}" ist nicht auf einen SemVer-Tag von docklet-hub-agent gepinnt`
     );
   }

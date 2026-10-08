@@ -184,7 +184,7 @@ services:
     build:
       context: .
       dockerfile: agent/Dockerfile
-    image: ${DOCKER_AGENT_IMAGE:-ghcr.io/florianfinn/docklet-hub-agent:v0.32.0}
+    image: ${DOCKER_AGENT_IMAGE:-ghcr.io/florianfinn/docklet-hub-agent:v0.32.0-rc.3@sha256:d26aace4f15ef6b8d7f78c9fc2f214239d42d36bfc20f4ec1a8e8d75e6f152c3}
     restart: unless-stopped
     # ⚠️ Kein `ports`. Der Agent ist ausschließlich unter seinem Dienstnamen im
     # Compose-Netz erreichbar. Ein veröffentlichter Port wäre ein Weg zum
@@ -262,7 +262,7 @@ services:
     # des Tunnels bewegen sich damit zwangsläufig gemeinsam. Zwei Einträge, die
     # man einzeln hochziehen kann, wären zwei Fassungen von `wg`, die sich erst
     # im Betrieb widersprechen.
-    image: ${DOCKER_AGENT_IMAGE:-ghcr.io/florianfinn/docklet-hub-agent:v0.32.0}
+    image: ${DOCKER_AGENT_IMAGE:-ghcr.io/florianfinn/docklet-hub-agent:v0.32.0-rc.3@sha256:d26aace4f15ef6b8d7f78c9fc2f214239d42d36bfc20f4ec1a8e8d75e6f152c3}
     # The same build fallback as the agent: both services run this one image.
     build:
       context: .
