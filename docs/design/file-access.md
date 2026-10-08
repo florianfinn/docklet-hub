@@ -34,6 +34,17 @@ bearbeitbaren Textdateien. Ist die Quelle oder ihr Schutzbedarf nicht sicher
 zuordenbar, wird kein Schreibzugriff freigegeben. Damit gefährdet die
 Bearbeitung weder andere Container noch den Host oder den Agenten selbst.
 
+Das Sicherungsverzeichnis des Agenten ist vollständig ausgeblendet und über
+keinen Dateibrowser-Einstieg erreichbar, auch nicht über einen Alias, Symlink
+oder ein Volume. Sicherung und Restore verwenden dieselbe Quellenklassifikation
+nach [update-and-rollback.md](update-and-rollback.md): Docker-Socket,
+Host-Systempfade, Agent-Betriebsverzeichnisse und das Sicherungsverzeichnis
+sind dafür nie auswählbar. Geteilte Quellen sind für Sicherung mit Hinweis
+auf weitere Schreiber wählbar, für Restore gesperrt. Die unterschiedlichen
+Aktionen teilen damit die Zuordnung, behalten aber ihre jeweiligen Lese- und
+Schreibgrenzen. Update, Sicherung und Restore erzwingen zusätzlich
+Systemcontainer- und Fremdverwaltungsschutz bei jedem Einstieg.
+
 Eine im Container schreibbare Quelle ist nicht automatisch im Hub schreibbar:
 Mount-Modus, Dateirechte, Allowlist, Nur-Lese-Modus, Selbstverwaltungssperre und
 Quellenschutz können weiter einschränken. Der Browser zeigt die daraus abgeleitete
@@ -71,7 +82,7 @@ Definitionsprüfung noch den Geheimnisschutz umgehen.
 ## Genau ein Editor-Baustein
 
 Compose-Editor und Datei-Editor verwenden genau einen gemeinsamen Editor-Kern
-in der Plattformschicht. Er umfasst Textfläche, Zeilenanzeige,
+in `web/src/platform`, ohne Fachabhängigkeit. Er umfasst Textfläche, Zeilenanzeige,
 Tastaturbedienung und Einrücken sowie austauschbare Hervorhebung für YAML,
 `.env` und Klartext. Die vorhandene Textfläche über einem eingefärbten `pre`
 aus [ComposeEditor.tsx](../../web/src/features/compose/ComposeEditor.tsx) und
@@ -79,9 +90,12 @@ Einrückungslogik dienen als Grundlage; Laden, Speichern und Hash-Konflikte des
 [FileEditor.tsx](../../web/src/features/files/FileEditor.tsx) gehen in die
 von beiden Features verwendete gemeinsame Hülle ein.
 
-Diese Hülle verantwortet Laden, Speichern mit Inhaltshash-Konflikt,
-Entwurfsschutz bei Navigation und Maskierung sensibler Werte. Die Features
-binden ihre jeweiligen Lese- und Schreibverträge an dieselbe Hülle an;
+Die Hülle liegt ebenfalls in `web/src/platform` und verantwortet Laden,
+Speichern mit Inhaltshash-Konflikt, Entwurfsschutz bei Navigation und Maskierung
+sensibler Werte. Jedes Feature steckt seine eigenen Lese- und Schreib-Adapter ein;
+die Hülle importiert keine Fachlogik, und Features importieren sich nicht
+gegenseitig. Dies folgt [feature-architecture.md](feature-architecture.md).
+Die Features binden ihre jeweiligen Verträge an dieselbe Hülle an;
 Compose-spezifische Vorschau und Validierung bleiben beim Compose-Feature.
 Die vorhandene Compose-Vorschau wird wiederverwendet. Eine gewöhnliche Datei
 löst dadurch keine Compose-Anwendung aus. Gemeinsame Bedienung und Schutzregeln
@@ -96,14 +110,24 @@ Die Bedienbarkeit an der Grenze wird mit dem gemeinsamen Kern geprüft.
 
 ## Textgrenze und Inhaltshash
 
-Bearbeitbar sind reguläre Textdateien bis einschließlich 1 MiB
-(1.048.576 UTF-8-Bytes), die verlustfrei als UTF-8 gelesen und geschrieben werden
-können und keine Nullbytes enthalten. Die Grenze gilt beim Laden und Speichern,
-nicht nur für die Anzahl sichtbarer Zeichen. Dateiendungen wählen die
-Hervorhebung, sind aber kein Beleg für Text. Dies entspricht der Grenze
-`MAX_TEXT_BYTES` in [contract/src/agent/limits.ts](../../contract/src/agent/limits.ts)
-und der Inhaltsprüfung in `readTextFile`. So werden Binärdaten nicht durch eine
-Textkonvertierung zerstört, und große Logs belasten nicht den Editor.
+Die Größengrenze ist je Feature ein Parameter der gemeinsamen Hülle. Für
+Dateien gelten bis einschließlich 1 MiB (1.048.576 UTF-8-Bytes) gemäß
+`MAX_TEXT_BYTES`. Compose behält `MAX_COMPOSE_BYTES` mit 256 KiB
+(262.144 UTF-8-Bytes), beide aus
+[contract/src/agent/limits.ts](../../contract/src/agent/limits.ts).
+Dieselbe Zahl 256 × 1.024 begrenzt in
+[contract/src/stream/ndjson.ts](../../contract/src/stream/ndjson.ts) eine
+NDJSON-Zeile über `NDJSON_MAX_LINE_CHARS`; dort wird in UTF-16-Einheiten
+gezählt, nicht in UTF-8-Bytes. Der gemeinsame Editor erweitert weder das
+Compose-Limit noch die Stream-Grenze. So bleibt die fachliche Grenze trotz
+gemeinsamer Bedienung erhalten.
+
+Bearbeitbar sind reguläre Textdateien, die verlustfrei als UTF-8 gelesen und
+geschrieben werden können und keine Nullbytes enthalten, entsprechend der
+Inhaltsprüfung in `readTextFile`. Die jeweilige Grenze gilt beim Laden und
+Speichern, nicht nur für die Anzahl sichtbarer Zeichen. Dateiendungen wählen
+die Hervorhebung, sind aber kein Beleg für Text. So werden Binärdaten nicht
+durch eine Textkonvertierung zerstört, und große Logs belasten nicht den Editor.
 
 Beim Laden erhält die Hülle den Inhaltshash der tatsächlichen Datei. Speichern
 verlangt diesen erwarteten Hash; der Agent vergleicht ihn mit der aktuellen
@@ -125,12 +149,13 @@ bearbeiteten Entwurf. Eine dauerhafte Speicherung sensibler Entwürfe im
 Browser ist nicht Voraussetzung dieses Schutzes; ungeschützte Browserablagen
 werden dafür nicht verwendet.
 
-Sensible Werte, etwa Werte zu Schlüsseln mit `PASSWORD`, `SECRET`, `TOKEN` oder
-`KEY` in `.env`, werden standardmäßig maskiert. Die Erkennung berücksichtigt
-Groß- und Kleinschreibung; diese Beispiele sind keine Zusage, alle Geheimnisse
-allein am Namen erkennen zu können. Der Betreiber gibt einen Wert gezielt zum
-Anzeigen beziehungsweise Bearbeiten frei. Die normale Ansicht, Hervorhebung
-und ungefragte Vorschau dürfen den Klartext nicht neben der Maske offenlegen.
+Die Maskierung gilt für `.env` über den geschützten Bearbeitungsweg und für
+Inline-Werte unter `environment` im Compose-Editor, jeweils bei Schlüsseln mit
+`PASSWORD`, `SECRET`, `TOKEN` oder `KEY`, unabhängig von Groß- und Kleinschreibung.
+Sie gilt nicht für beliebige andere Dateien und ist keine Zusage, alle
+Geheimnisse allein am Namen erkennen zu können. Der Betreiber gibt einen Wert
+gezielt zum Anzeigen beziehungsweise Bearbeiten frei. Die normale Ansicht,
+Hervorhebung und ungefragte Vorschau dürfen den Klartext nicht neben der Maske offenlegen.
 Maskierung wird deshalb vor der gewöhnlichen Inhaltsanzeige wirksam; eine bloße
 optische Überdeckung von ansonsten sichtbarem Klartext reicht nicht.
 
@@ -139,6 +164,14 @@ dürfen weder Geheimnisse ersetzen noch als neue Werte in die Datei gelangen;
 der Hash bezieht sich auf die tatsächliche Fassung, nicht auf die maskierte
 Ansicht. Das schützt zugleich gegen unbeabsichtigten Datenverlust und gegen
 Konflikte, die nur durch die Darstellung verborgen werden.
+
+Downloads bleiben bewusst byteidentisch, wie in
+[agent/src/routes/file-routes.ts](../../agent/src/routes/file-routes.ts).
+Sie maskieren Inhalte nicht: Der Download ist eine gezielte Dateiaktion,
+keine geschützte Editoransicht. Die Quellen-, Pfad- und Namenssperren gelten
+weiter, insbesondere für `.env` und Compose-Dateien. So wird weder eine
+beliebige Datei durch Maskierungszeichen verändert noch ein geschützter
+Bearbeitungsweg über den Download umgangen.
 
 Dateiinhalte, Geheimnisse und freigegebene Werte gelangen nicht in Logs, Audit,
 Fehlerbelege oder Benachrichtigungen. Fehler nennen einen bereinigten Grund,
@@ -155,29 +188,42 @@ Beleg einschließlich Screenshots.
 - Geteilte Quellen sind nur lesend; Systemquellen und Agent-Verzeichnisse sind
   nur lesend oder ausgeblendet. Ein Volume über einen geschützten Host-Pfad
   umgeht diese Grenze nicht. Unklare Zuordnung gibt keinen Schreibzugriff frei.
+  Das Sicherungsverzeichnis ist auch über Aliasse, Symlinks und Volumes unerreichbar.
+- Sicherung und Restore teilen die Quellenklassifikation des Dateibrowsers.
+  Docker-Socket, Host-Systempfade, Agent-Betriebsverzeichnisse und das
+  Sicherungsverzeichnis sind nie Sicherungs- oder Restore-Ziele. Geteilte Quellen
+  sind für Sicherung mit Hinweis wählbar, für Restore gesperrt. Alle Update-,
+  Sicherungs- und Restore-Einstiege erzwingen ihre Verwaltungsgrenzen.
 - Alle Quellarten verwenden dieselben vorhandenen CRUD-Wege. Direkte Anfragen
   erzwingen dieselben Verwaltungs-, Rechte-, Symlink- und Traversalgrenzen;
   ausgetauschte Pfade und Zielkonflikte umgehen sie nicht.
 - Allgemeiner Dateizugriff umgeht weder Compose-Prüfung noch den geschützten
-  `.env`-Weg. Sensible Inhalte erscheinen nicht ungefragt in Vorschauen,
-  Downloads, Diagnoseausgaben oder öffentlichen Fehlerbelegen.
-- Compose- und Datei-Feature verwenden denselben Plattformkern und dieselbe
-  Hülle für Laden, Hash-Konflikte, Entwurfsschutz und Maskierung. YAML, `.env`
-  und Klartext erhalten austauschbare Hervorhebung. Nach der Umsetzung
-  existiert kein zweiter Editor-Baustein mehr.
+  `.env`-Weg. Maskierte Werte erscheinen nicht ungefragt in Vorschauen,
+  Diagnoseausgaben oder öffentlichen Fehlerbelegen. Downloads sind bewusst
+  byteidentisch und ohne Inhaltsmaskierung, unter den Quellen-, Pfad- und Namenssperren.
+- Compose- und Datei-Feature verwenden denselben Kern und dieselbe Hülle in
+  `web/src/platform` für Laden, Hash-Konflikte, Entwurfsschutz und Maskierung.
+  Beide sind ohne Fachabhängigkeit; Lese-/Schreib-Adapter werden je Feature
+  eingesteckt, ohne gegenseitige Feature-Imports. YAML, `.env` und Klartext erhalten
+  austauschbare Hervorhebung. Nach der Umsetzung existiert kein zweiter
+  Editor-Baustein mehr.
 - Compose-Vorschau und Validierung werden wiederverwendet und bleiben beim
   Compose-Feature. Der gemeinsame Editor führt keine neue Editor-Abhängigkeit
   ein, solange der vorhandene Ansatz bis zur Grenze bedienbar bleibt.
-- Dateien bis einschließlich 1.048.576 UTF-8-Bytes werden angenommen, größere
-  Dateien abgelehnt; ungültiges UTF-8, Nullbytes und nicht reguläre Dateien
-  werden nicht als Text bearbeitet. Die Grenzen gelten auch beim Speichern.
+- Die Hülle erhält die Grenze als Feature-Parameter: Dateien bis einschließlich
+  1.048.576 UTF-8-Bytes (`MAX_TEXT_BYTES`), Compose bis einschließlich 262.144
+  UTF-8-Bytes (`MAX_COMPOSE_BYTES`). Größere Inhalte werden beim Laden und Speichern
+  abgelehnt; die NDJSON-Zeilengrenze bleibt unverändert. Ungültiges UTF-8,
+  Nullbytes und nicht reguläre Dateien werden nicht als Text bearbeitet.
 - Externe Änderungen erzeugen beim Speichern einen Inhaltshash-Konflikt,
   ohne die Datei oder den Entwurf zu überschreiben. Auch nach einer bewussten
   Auflösung wird eine weitere externe Änderung erkannt.
 - Navigation erhält den Entwurf oder verlangt ausdrückliches Verwerfen.
   Zielwechsel, Ladefehler und Nachladen verlieren keinen Entwurf und ordnen
   ihn keiner anderen Datei zu.
-- Sensible Werte sind standardmäßig maskiert und gezielt freigebbar, auch in
-  der gemeinsamen Hülle des Compose-Editors. Speichern erhält unveränderte
+- `.env` im geschützten Weg und Inline-Werte unter Compose-`environment` werden
+  bei Schlüsseln mit `PASSWORD`, `SECRET`, `TOKEN` oder `KEY` unabhängig von
+  Groß- und Kleinschreibung standardmäßig maskiert und gezielt freigegeben.
+  Beliebige andere Dateien werden nicht maskiert. Speichern erhält unveränderte
   Geheimnisse ohne Maskenplatzhalter; Logs, Audit und Fehlerbelege bleiben
   auch nach Freigabe frei von Geheimnissen und Dateiinhalt.
