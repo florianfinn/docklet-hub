@@ -1,63 +1,8 @@
 import { CONTRACT_VERSION } from "contract";
 
-// Welche Fassung des Agenten dieser Hub voraussetzt.
-//
-// Der Hub trägt eine Mindestversion, der Agent meldet seine im `/health`, und
-// ein Host darunter wird rot und schreibgesperrt (#21, concept-and-plan.md §2,
-// „Betrieb über die Zeit"). Diese Datei ist der eine Ort, an dem die Marke
-// steht — die Schreibsperre der Welle 3 liest sie hier und nicht noch einmal.
-//
-// Warum ohne Bibliothek: der Vergleich ist drei Zahlen tief und die Regel
-// passt in zwanzig Zeilen. AGENTS.md („Abhängigkeiten") verlangt genau diese
-// Abwägung, und `semver` brächte Bereichsausdrücke mit, die hier niemand
-// braucht.
-
-// Die Marke selbst.
-//
-// ⚠️ SIE STEHT SEIT #130 AUF 0.24.0 UND NICHT MEHR AUF 0.18.1, und das ist der
-// erste Anstieg dieser Zahl. Der Grund ist die Regel im Absatz darunter, nicht
-// der Nachzug an sich: der Hub sendet in jedem Eintrag der Allowlist
-// `origin: "adopted"` (`HUB_REGISTRY_ORIGIN`, `contract/src/agent/`), und dieses
-// Wort kennt erst v0.24.0. Ein Arm darunter prüft `origin` wörtlich, verwirft
-// jeden Eintrag mit Compose-Anker und quittiert trotzdem mit `200` — jeder
-// Container auf ihm wäre für jede Aktion gesperrt.
-//
-// Aufgefangen würde das auch ohne die Marke: `syncRegistry` hält die
-// zurückgemeldete Zahl gegen die gesendete und wirft. Nur läge der Fehler dann
-// an einer anderen Stelle als seine Ursache — ein geworfener Abgleich im
-// Hintergrunddurchlauf statt eines roten Arms in der Übersicht. Die Marke
-// bringt beides zusammen: der Arm wird rot und schreibgesperrt, BEVOR der
-// Abgleich ihn trifft, und der nächste Schritt steht daneben.
-//
-// 0.18.1 stand hier bis dahin: die Fassung, die die letzten deutschen Namen im
-// Agenten ausräumt (`dashboard-docker-agent#50`) und ihre Version aus der
-// package.json meldet statt aus einer Konstanten.
-//
-// ⚠️ Die Marke ist NICHT der Pin des Stacks. Die docker-compose.yml zieht den
-// mitgelieferten Agenten auf eine eigene Fassung; die Marke folgt ihr nicht,
-// sondern steigt genau dann, wenn der Hub etwas braucht, das eine ältere
-// Fassung nicht kann. Bis #130 war das nie der Fall — v0.19.x bis v0.23.0
-// haben auf der Leitung dieser Phase nichts geändert, das der Hub BRAUCHT.
-//
-// ⚠️⚠️ DER PIN DARF NIE UNTER DER MARKE STEHEN. Zwischen #130 und #180 tat er
-// es: der Pin in `docker-compose.yml` fuhr v0.19.1, die Marke hier 0.24.0, und
-// der mitgelieferte Arm galt seinem eigenen Hub als `outdated` — zu v0.24.0 gab
-// es bis dahin kein Image. Seit #180 stehen der Pin und `ARM_AGENT_IMAGE`
-// (seit #7 in server/src/domain/hosts/arm-agent-image.ts) auf v0.24.0, getaggt und am 2026-09-29 per
-// `docker buildx imagetools inspect` nachgesehen.
-//
-// Wer die Marke wieder senkt, muss `HUB_REGISTRY_ORIGIN` im selben Zug auf
-// `adoptiert` zurücknehmen — die beiden hängen aneinander, und die Marke allein
-// zu senken ergäbe einen Hub, der jedem Arm eine Allowlist schickt, die dieser
-// verwirft.
-//
-// ⚠️ 0.24.0 stood here until #279. The mark is now 0.32.0, the first version
-// hub and agent share: from there one tag `v<semver>` builds both images, and
-// the agent image is named `docklet-hub-agent`. An agent below that
-// still runs from the old repository name and cannot move to the new one by
-// itself (`target-foreign-repository`, `agent/src/self-update.ts`), so it counts
-// as `outdated` until its `DOCKER_AGENT_IMAGE` has been changed once by hand —
-// the host list shows that step (`SELF_UPDATE_TARGET_MIN_VERSION`).
+// Minimum agent implementation for writable operations. Protocol compatibility
+// is checked separately; the archive image follows the hub release version.
+// Older image repositories require a manual image-reference change.
 export const MIN_AGENT_VERSION = "0.32.0";
 
 export type AgentVersion = readonly [number, number, number];
