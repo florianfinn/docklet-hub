@@ -94,14 +94,13 @@ export async function relayAgentBytes(
       return;
     }
 
-    // ⚠️ FROM HERE THE STATUS IS GIVEN. Everything that can be translated is
-    // translated above; a failure after this can only be the end of the answer.
-    // A `response.status(…)` here throws.
+    // Once headers are flushed, failures can only abort the response.
     response.status(200);
     for (const [name, value] of Object.entries(options.headers)) response.setHeader(name, value);
     // Only if the agent named it: a guessed length is worse than none, the
     // browser would cut the file at the wrong place.
     if (bytes.size !== null) response.setHeader("content-length", String(bytes.size));
+    response.flushHeaders();
 
     await pump(bytes.stream, response, controller.signal);
   } finally {
