@@ -481,7 +481,7 @@ export {
   BACKUP_DIRECTORY_MODE, BACKUP_ARCHIVE_MODE, BACKUP_DEFAULT_MODE, BACKUP_ERRORS,
   backupErrorSchema, backupModeSchema, backupOptionsSchema, backupArchiveSchema,
   backupEntrySchema, backupListRequestSchema, backupListResponseSchema,
-  restorePreviewRequestSchema, restorePreviewQuerySchema, restorePreviewResponseSchema, restoreStartRequestSchema, restoreResultSchema
+  restorePreviewRequestSchema, restorePreviewResponseSchema, restoreStartRequestSchema, restoreResultSchema
 } from "./agent/backups.js";
 export type { BackupError, BackupOptions, BackupEntry, RestoreStartRequest, RestoreResult } from "./agent/backups.js";
 

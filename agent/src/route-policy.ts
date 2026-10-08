@@ -61,11 +61,10 @@ export const ROUTES: readonly Route[] = [
 
   // --- Updates, restore and persistent jobs -------------------------------
   { methods: ["GET"], pattern: "/containers/:id/file-sources", mutating: false, audit: "file-sources", gate: "file-sources" },
-  { methods: ["GET"], pattern: "/containers/:id/update-preview", mutating: false, audit: "update-preview", gate: "update" },
-  { methods: ["GET"], pattern: "/projects/:project/update-preview", mutating: false, audit: "update-preview", gate: "update" },
+  { methods: ["POST"], pattern: "/update-previews", mutating: false, audit: "update-preview", gate: "update" },
   { methods: ["POST"], pattern: "/updates", mutating: true, audit: "update", gate: "update" },
   { methods: ["GET"], pattern: "/containers/:id/backups", mutating: false, audit: "backups", gate: "backups" },
-  { methods: ["GET"], pattern: "/containers/:id/restore-preview", mutating: false, audit: "restore-preview", gate: "restore" },
+  { methods: ["POST"], pattern: "/restore-previews", mutating: false, audit: "restore-preview", gate: "restore" },
   { methods: ["POST"], pattern: "/restores", mutating: true, audit: "restore", gate: "restore" },
   { methods: ["GET"], pattern: "/jobs", mutating: false, audit: "jobs" },
   { methods: ["GET"], pattern: "/jobs/:jobId", mutating: false, audit: "job-progress" },

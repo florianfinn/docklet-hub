@@ -1,6 +1,7 @@
 import { agentJobRequestSchema, agentJobsQuerySchema } from "contract";
+import { config, registry, audit } from "../runtime/state.js";
 import { queryObject } from "../request-keys.js";
-import { parseRequest, rejectRequest, type RouteContext } from "../runtime/http.js";
+import { parseRequest, rejectRequest, send, type RouteContext } from "../runtime/http.js";
 import { unavailableRoute } from "./contract-route-stubs.js";
 
 export async function handleJobs(ctx: RouteContext): Promise<void> {
@@ -27,6 +28,16 @@ export async function handleJob(ctx: RouteContext, match: RegExpMatchArray, canc
     rejectRequest(ctx, { action, containerId: null, containerName: null }, parsed.rejection);
     return;
   }
-  // Until the job store resolves targets, cancellation fails closed in gate().
-  await unavailableRoute(ctx, action, action, cancel, cancel ? [null] : []);
+  if (cancel) {
+    // Without stored job targets, any observer entry prevents proving write access.
+    const denial = config.readOnly ? { status: 503, error: "agent-read-only" }
+      : registry.knownIds().some((id) => registry.isObserveOnly(id)) ? { status: 403, error: "observe-only" } : null;
+    if (denial) {
+      audit.write({ action, containerId: null, containerName: null, actor: ctx.actor,
+        outcome: "denied", reason: denial.error });
+      send(ctx.response, denial.status, { error: denial.error });
+      return;
+    }
+  }
+  await unavailableRoute(ctx, action, action, cancel);
 }

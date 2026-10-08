@@ -1,5 +1,5 @@
 import { handleFileSources } from "./routes/file-source-routes.js";
-import { handleUpdatePreview, handleProjectUpdatePreview, handleUpdateStart } from "./routes/update-routes.js";
+import { handleUpdatePreview, handleUpdateStart } from "./routes/update-routes.js";
 import { handleBackups, handleRestorePreview, handleRestoreStart } from "./routes/restore-routes.js";
 import { handleJobs, handleJob } from "./routes/job-routes.js";
 import { handleStopIntents } from "./routes/stop-intent-routes.js";
@@ -392,9 +392,12 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
       await handleJobs(ctx);
       return;
     }
-    const projectUpdateMatch = url.pathname.match(/^\/projects\/([^/]+)\/update-preview$/);
-    if (request.method === "GET" && projectUpdateMatch) {
-      await handleProjectUpdatePreview(ctx, projectUpdateMatch);
+    if (request.method === "POST" && url.pathname === "/update-previews") {
+      await handleUpdatePreview(ctx);
+      return;
+    }
+    if (request.method === "POST" && url.pathname === "/restore-previews") {
+      await handleRestorePreview(ctx);
       return;
     }
     const jobMatch = url.pathname.match(/^\/jobs\/([^/]+)$/);
@@ -422,16 +425,8 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
         await handleFileSources({ ...ctx, containerId, action });
         return;
       }
-      if (request.method === "GET" && action === "update-preview") {
-        await handleUpdatePreview({ ...ctx, containerId, action });
-        return;
-      }
       if (request.method === "GET" && action === "backups") {
         await handleBackups({ ...ctx, containerId, action });
-        return;
-      }
-      if (request.method === "GET" && action === "restore-preview") {
-        await handleRestorePreview({ ...ctx, containerId, action });
         return;
       }
 

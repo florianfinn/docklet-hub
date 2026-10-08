@@ -281,6 +281,11 @@ export class AgentRegistry {
     return changesDefinition && this.isExternallyManaged(containerId) ? "externally-managed" : "allowed";
   }
 
+  // Includes observer entries for read scopes and conservative stub checks.
+  knownIds(): string[] {
+    return [...this.entries.keys()];
+  }
+
   allowedIds(): string[] {
     return [...this.entries.keys()].filter((id) => this.isAllowed(id));
   }

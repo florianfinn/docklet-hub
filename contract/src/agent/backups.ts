@@ -49,7 +49,6 @@ export const restorePreviewRequestSchema = z.object({
   mounts: z.array(fileSourceSelectionSchema).check(z.minLength(1), z.refine((mounts) =>
     new Set(mounts.map((mount) => mount.sourceId)).size === mounts.length))
 });
-export const restorePreviewQuerySchema = z.object({ backupId: backupEntrySchema.shape.backupId });
 
 export const restorePreviewResponseSchema = z.object({
   ...restorePreviewRequestSchema.shape, previewId: z.string().check(z.minLength(1)),
