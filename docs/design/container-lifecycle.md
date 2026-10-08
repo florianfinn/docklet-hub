@@ -47,7 +47,20 @@ Ersteinrichtung erneut zu öffnen. Der Wert steht in der Hub-Datenbank und wird
 
 ### Ergebnis und Abschluss
 
-Ein Vorgang ist abgeschlossen, wenn der Agent den Laufzustand jedes betroffenen Containers nachgelesen hat. Erfolgreich ist er, wenn jeder Container den Zielzustand `running` oder `exited` erreicht hat. Ein Container, der nach dem Start mit Exit-Code 0 endet, hat einen Einmalauftrag erledigt und zählt beim Start als erfolgreich; ein anderer Exit-Code ist ein Fehler. Health meldet der Agent mit, macht sie aber nicht zum Erfolgskriterium; deshalb fehlt `--wait`. Nur wo `depends_on` mit `service_healthy` die Reihenfolge bestimmt, wartet Compose vor dem Start des abhängigen Service auf die Health seiner Voraussetzung. Ein Health-Kriterium würde Start und Neustart an Zeitgrenzen binden, die zum Update-Erfolg gehören (#13).
+Ein Vorgang ist abgeschlossen, wenn der Agent den Laufzustand jedes betroffenen Containers nachgelesen hat. Erfolgreich ist er, wenn jeder Container den Zielzustand `running` oder `exited` erreicht hat. Ein Container, der nach dem Start mit Exit-Code 0 endet, zählt beim Start als erfolgreich; ein anderer Exit-Code ist ein Fehler. Als erledigter Einmalauftrag gilt er bei Laufzeitaktionen jedoch ausschließlich mit dem Label `com.docker.compose.oneoff=True`. Exit-Code 0 allein lässt bei einem regulären Service das Startangebot weiterhin offen, wie in [lifecycle-controls.md](lifecycle-controls.md). Health meldet der Agent mit, macht sie aber nicht zum Erfolgskriterium; deshalb fehlt `--wait`. Nur wo `depends_on` mit `service_healthy` die Reihenfolge bestimmt, wartet Compose vor dem Start des abhängigen Service auf die Health seiner Voraussetzung. Ein Health-Kriterium würde Start und Neustart an Zeitgrenzen binden, die zum Update-Erfolg gehören (#13).
+
+Die Update-Abnahme folgt einem anderen Vertrag: Ein Compose-Service ist dort
+nur ohne Restart-Policy beziehungsweise mit `restart: "no"` und mit mindestens
+einem abhängigen Service desselben Projekts unter
+`condition: service_completed_successfully` ein Abschlussauftrag.
+Er muss innerhalb der Startfrist mit Exit 0 enden; alle anderen Services und
+Einzelcontainer sind Dienste, bei denen jeder Exit scheitert. `compose run`-
+Container mit dem oneoff-Label sind keine Update-Ziele. Prüfkriterium für die
+Abgrenzung: Ein Exit 0 ohne oneoff-Label schließt bei Laufzeitaktionen das
+Startangebot nicht; beim Update genügt er nur für einen anhand beider
+Compose-Bedingungen erkannten Abschlussauftrag innerhalb der Startfrist.
+Die vollständigen Kriterien für Update und Rückweg stehen in
+[update-and-rollback.md](update-and-rollback.md).
 
 Ein fehlender Service erfüllt beim Stopp bereits den Zielzustand, auch bei Fremdverwaltung. Beim Start oder Neustart bleibt er ein Teilfehler; bei Fremdverwaltung wird er als nicht erzeugt gemeldet.
 

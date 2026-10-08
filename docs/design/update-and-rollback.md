@@ -12,23 +12,36 @@ Ziele sind Hub-verwaltete Compose-Services und Einzelcontainer. Bei Compose ist
 die Definition die geltende Compose-Definition; bei Einzelcontainern ist sie
 die aus Inspect übernommene Erzeugungskonfiguration, wie in
 [agent/src/recreate.ts](../../agent/src/recreate.ts). Fremdverwaltete Ziele bleiben
-gesperrt. Damit erhält jedes Ziel eine verlässliche Grundlage für Austausch
-und Rückweg, ohne fremde Definitionen zu übernehmen.
+gesperrt. `compose run`-Container mit dem Label
+`com.docker.compose.oneoff=True` sind keine Update-Ziele. Damit erhält jedes Ziel
+eine verlässliche Grundlage für Austausch und Rückweg, ohne fremde Definitionen
+oder vorübergehende Ausführungen zu übernehmen.
 
 Ein Update wird ausdrücklich angefordert und immer vorab mit Vorschau bestätigt.
 Die Vorschau nennt Ziel, betroffene Services, bisherige und angebotene Digests,
-den Rückweg und die gewählte Sicherung. Das Update zieht dieselbe Image-Referenz
-aus der geltenden Definition neu und ersetzt einen Container nur, wenn der
-Digest vom bisherigen Image abweicht. Bei gleichem Digest endet der Auftrag ohne
-Austausch. Das vor dem Austausch gezogene Image muss dem bestätigten Ziel
-entsprechen; eine Abweichung verlangt eine neue Vorschau und Bestätigung.
-Ein Tag- oder Versionswechsel erfolgt ausschließlich über eine Änderung der
-Definition. Eine Versionsauswahl gehört nicht zum Update; sie ist Gegenstand von
-#70. So bleibt die Definition die Quelle der Wahrheit, und ein Update wechselt
-nicht unbemerkt auf eine andere Versionslinie.
+den Rückweg und die gewählte Sicherung. Bei einem vor dem Update `unhealthy`
+gemeldeten Dienst zeigt sie zusätzlich eine Warnung. Den angebotenen Digest
+ermittelt sie per Registry-Manifest-Abfrage ohne Pull.
 
-Vor dem Austausch hält der Agent die vorherige Definition, den vorherigen
-Laufzustand und das tatsächlich verwendete Image als unveränderliche Image-ID
+Die Reihenfolge ist: Digest prüfen, dieselbe Image-Referenz ziehen, dann sichern
+und im Stoppmodus stoppen, dann austauschen. Nur ein vom bisherigen Image
+abweichender Digest führt zum Austausch. Bei gleichem Digest endet der Auftrag
+ohne Sicherung, Stopp oder Austausch. Das gezogene Image muss dem bestätigten
+Digest entsprechen. Eine Abweichung bricht den Lauf vor jeder Daten- oder
+Containeränderung ab und verlangt eine neue Vorschau. Bei einem Stack werden
+alle benötigten Images gezogen und ihre Digests geprüft, bevor die erste
+Sicherung oder der erste Stopp beginnt. Damit bleibt bei einem Pull-Fehler oder
+abweichenden Angebot der bisherige Containerzustand unberührt.
+
+Ein Tag- oder Versionswechsel erfolgt ausschließlich über eine Änderung der
+Definition. Eine Versionsauswahl gehört nicht zum Update. #70 behandelt die
+Anzeige und Erklärung von Pins und Versionen. So bleibt die Definition die
+Quelle der Wahrheit, und ein Update wechselt nicht unbemerkt auf eine andere
+Versionslinie.
+
+Vor der ersten Containeränderung hält der Agent die vorherige Definition,
+den vorherigen Laufzustand einschließlich Health, Pause und Neustartzustand
+sowie das tatsächlich verwendete Image als unveränderliche Image-ID
 beziehungsweise Digest fest. Ein beweglicher Tag genügt für den Rückweg nicht:
 Nach dem Ziehen kann er schon auf das neue Image zeigen. Fehlt eine verlässlich
 verwendbare Rückweggrundlage, findet kein Austausch statt. Ein nur für die
@@ -62,20 +75,46 @@ nicht neu begonnen. Auch ein Exit mit Code 0 scheitert bei einem Dienst. Ein
 einmaliges Nachlesen von `running` würde eine Startschleife übersehen. Das
 Fenster ist keine Zusage fachlicher Erreichbarkeit und ersetzt keinen Healthcheck.
 
-Einmalaufträge im Sinne von [container-lifecycle.md](container-lifecycle.md)
-bestehen dagegen mit Exit-Code 0 als erledigt; für sie ist ein solcher Exit
-kein Update-Fehler. Ein anderer Exit-Code scheitert. Die Unterscheidung zwischen
-Dienst und Einmalauftrag gilt auch bei der Stack-Prüfung und beim Rückweg.
+Ein Compose-Service gilt im Update als Abschlussauftrag, wenn beide Bedingungen
+aus der aufgelösten Compose-Definition erfüllt sind: Er hat keine Restart-Policy
+oder `restart: "no"`, und mindestens ein anderer Service im selben Projekt hängt
+mit `condition: service_completed_successfully` von ihm ab. Ein Abschlussauftrag
+besteht mit Exit-Code 0 innerhalb der Startfrist. Für ihn gilt dieselbe je
+Container konfigurierte und mit dem Auftrag übertragene Startfrist; sie beginnt
+mit seinem Start. Ein anderer Exit-Code oder Zeitüberschreitung ist ein Fehlschlag. Jeder andere Service und jeder
+Einzelcontainer gilt als Dienst; bei ihm ist jeder Exit ein Fehlschlag,
+auch Exit-Code 0. Die Regel für ursprünglich gestoppte Ziele hat Vorrang:
+Sie werden aktualisiert, bleiben gestoppt und erhalten keine Laufprüfung.
+So beruht eine erfolgreiche Beendigung auf einer ausdrücklichen
+Compose-Abhängigkeit und nicht auf der Vermutung, ein Exit-Code 0 reiche aus.
+
+Laufzeitaktionen erkennen Einmalaufträge ausschließlich am Label
+`com.docker.compose.oneoff=True`, wie in
+[container-lifecycle.md](container-lifecycle.md) und
+[lifecycle-controls.md](lifecycle-controls.md). Diese Label-Regel bestimmt
+nicht die Update-Abnahme; die so gekennzeichneten Container sind gerade
+keine Update-Ziele. Die Update-Regel für Abschlussaufträge gilt für die
+Abnahme jedes aktualisierten Service im Stack.
 
 Scheitert der Austausch oder die Ergebnisprüfung, setzt der Agent automatisch
 auf das festgehaltene vorherige Image und die vorherige Definition zurück und
-stellt den vorherigen Laufzustand wieder her. Der Rückweg wird ebenfalls anhand
-des tatsächlichen Images und der jeweiligen Erfolgskriterien geprüft: gestoppte
-Ziele ohne Laufprüfung, laufende Dienste mit Health- beziehungsweise
-Stabilitätsprüfung, Einmalaufträge mit Exit-Code 0 als erledigt. Ein erfolgreicher
+stellt den vorherigen Laufzustand wieder her. Erfolgreich ist der Rückweg,
+wenn dieselbe Image-ID, dieselbe Definition und derselbe Laufzustand wie vor
+dem Update wiederhergestellt sind. Maßstab ist der erfasste Vorzustand,
+nicht eine erneute Update-Abnahme als Dienst oder Abschlussauftrag.
+Ein vorher gestopptes Ziel bleibt gestoppt; ein erledigter Abschlussauftrag
+wird nicht allein für eine erneute Prüfung gestartet.
+
+War ein Dienst vorher `unhealthy`, `paused` oder `restarting`, verlangt der
+Rückweg kein `healthy`, sondern einen wie vorher laufenden Container.
+`restarting` zählt dabei wie bei Laufzeitaktionen als laufend; eine
+Neustartschleife muss für einen erfolgreichen Rückweg nicht erzeugt werden.
+Ein vorher pausierter Dienst wird nach dem Rückweg wieder pausiert.
+Damit setzt der Rückweg einen mangelhaften, aber bekannten Ausgangszustand
+nicht mit einem zusätzlichen Rollback-Fehler gleich. Ein erfolgreicher
 Rückweg macht das Update nicht erfolgreich: Das Ergebnis unterscheidet
 Update-Fehler, erfolgreichen Rollback und fehlgeschlagenen Rollback. So ist
-erkennbar, ob wieder der vorherige Zustand läuft oder Betreiberhandeln nötig ist.
+erkennbar, ob wieder der vorherige Zustand besteht oder Betreiberhandeln nötig ist.
 
 Ein Image-Rollback stellt keine Nutzerdaten zurück. Ein neues Image kann Daten
 oder ein Datenbankschema bereits verändert haben; auch das vorherige Image kann
@@ -91,10 +130,15 @@ noch nicht aktualisierte Services werden nicht ausgetauscht. Alle bereits
 ausgetauschten Services, einschließlich des fehlgeschlagenen Service, werden in
 umgekehrter Reihenfolge auf ihr jeweiliges vorheriges Image, die vorherige
 Definition und den vorherigen Laufzustand zurückgesetzt. Services mit
-unverändertem Digest werden nicht unnötig ersetzt. Der Stack ist erst
-erfolgreich, wenn alle aktualisierten Services ihre jeweiligen Erfolgskriterien
-bestehen. Damit bleibt ein Fehler nicht als unbeabsichtigte Mischung alter und
-neuer Images stehen, und abhängige Services werden geordnet zurückgesetzt.
+unverändertem Digest werden nicht unnötig ersetzt. Jeder Service wird direkt
+vor seinem eigenen Austausch gesichert, sofern gewählt. Ein Fehler dieser
+Sicherung beendet ebenfalls die Vorwärtsfolge und löst den Rückweg für bereits
+ausgetauschte Services aus. Der Stack ist erst erfolgreich, wenn alle
+aktualisierten Dienste ihre Laufprüfung und alle ausgeführten Abschlussaufträge
+Exit-Code 0 innerhalb der Startfrist erreichen; ursprünglich gestoppte Services
+bleiben ohne Laufprüfung gestoppt. Der Rückweg bewertet jeden Service anhand
+seines festgehaltenen Vorzustands. Damit bleibt ein Fehler nicht als
+unbeabsichtigte Mischung alter und neuer Images stehen, und abhängige Services werden geordnet zurückgesetzt.
 
 Scheitert der Rückweg eines Service, prüft und meldet der Agent trotzdem den
 Zustand aller betroffenen Services. Der Hub eskaliert den fehlgeschlagenen
@@ -110,7 +154,9 @@ konfigurierten oder erreichbaren Meldekanal erforderlich.
 ## Sperren, Abbruch und Fortschritt
 
 Der gesamte Update-Lauf einschließlich Sicherung, Prüfung und Rückweg verwendet
-die vorhandene Projekt- beziehungsweise Containersperre. Parallele Aktionen
+dieselbe Projekt- und Containersperre wie Dateischreiben, Compose-Apply
+und Restore. Alle vier Wege koordinieren sich über diese gemeinsame Sperre,
+einschließlich direkter Agent-Anfragen. Parallele Aktionen
 am selben Ziel dürfen währenddessen keine Mutation ausführen. Für einen Stack
 umfasst die Sperre sein Projekt und dessen Services. Wartende Aktionen müssen
 anschließend den erwarteten Zustand erneut prüfen; ein überholter Auftrag darf
@@ -146,7 +192,7 @@ So begrenzt der Vertrag einzelne Arbeiten, ohne HTTP-Fristen mit der fachlichen
 Prüfung zu verwechseln.
 
 Der Fortschritt nennt Ziel und beim Stack den Service sowie die Phasen
-„prüfen“ (Vorbedingungen), „sichern“ (falls gewählt), „ziehen“, „austauschen“,
+„prüfen“ (Digest und Vorbedingungen), „ziehen“, „sichern“ (falls gewählt), „austauschen“,
 „prüfen“ (Ergebnis) und gegebenenfalls „zurücksetzen“. Das Abschlussresultat
 nennt den nachgelesenen Zustand und die Fehler von Update und Rückweg getrennt.
 So sind ein unveränderter Digest, eine fehlgeschlagene Sicherung und ein
@@ -168,9 +214,12 @@ Update-Abnahme und dauerhafte Betriebsüberwachung nicht vermischt.
 Im Update-Dialog wird eine Datensicherung bewusst gewählt; sie ist optional.
 Für jeden zulässigen Bind-Mount und jedes zulässige benannte Volume gibt es einen
 eigenen Schalter. Die Auswahl nennt Quelle, Zuordnung zum Container und Umfang.
-Sie gilt beim Stack je betroffenem Container und ist vor Beginn der Kopie
-festgelegt. Dadurch werden große oder anderweitig gesicherte Daten nicht
-ungefragt mitkopiert.
+Sie gilt beim Stack je betroffenem Service und ist vor Beginn der Kopie
+festgelegt. Gesichert wird nach dem Ziehen und der Digest-Prüfung, beim Stack
+je Service direkt vor dessen eigenem Austausch. Im Stoppmodus wird dieser
+Service für seine Kopie gestoppt; im Live-Modus erfolgt die Kopie ohne diesen
+Stopp. Dadurch werden große oder anderweitig gesicherte Daten nicht ungefragt
+mitkopiert und ein Service nicht schon während des Pulls stillgelegt.
 
 Sicherung und Restore verwenden dieselbe Quellenklassifikation wie der
 [Dateizugriff](file-access.md). Docker-Socket, Host-Systempfade, Agent-
@@ -178,7 +227,9 @@ Betriebsverzeichnisse und das Sicherungsverzeichnis selbst sind nie auswählbar.
 Das gilt auch für Volumes mit solchen tatsächlichen Quellen, für Pfad-Aliasse
 und für geschützte Unterpfade innerhalb einer ausgewählten Quelle.
 Geteilte Quellen sind für Sicherung mit sichtbarem Hinweis auf weitere Schreiber
-wählbar, für Restore gesperrt. Die Quellenauswahl allein erzwingt diese Grenzen nicht:
+wählbar, für Restore gesperrt. Ist eine mögliche geteilte Nutzung nicht sicher
+zuordenbar, bleibt Restore wie der Dateibrowser für Schreibzugriffe gesperrt.
+Die Quellenauswahl allein erzwingt diese Grenzen nicht:
 Der Agent prüft sie bei jeder Anfrage. Eine Datenkopie darf weder Host- oder
 Agent-Geheimnisse erfassen noch eine Wiederherstellung über fremde Daten erlauben.
 
@@ -191,22 +242,33 @@ jeweiligen Anwendung nötig. Der gewählte Modus und geteilte Quellen werden vor
 der Bestätigung sichtbar, damit die Einschränkung nicht hinter „Sicherung“
 verschwindet.
 
-Der Agent legt die Sicherung als tar in seinem Sicherungsverzeichnis ab. Das
-Verzeichnis ist per Umgebungsvariable einstellbar; der konkrete technische
+Der Agent legt die Sicherung als tar in seinem Sicherungsverzeichnis ab.
+Standardort ist das Unterverzeichnis `backups` im Agent-Datenpfad. Das
+Verzeichnis ist per Umgebungsvariable übersteuerbar; der konkrete technische
 Schlüssel wird bei der Umsetzung in der generischen `.env.example` dokumentiert.
 Archive sind nur für den Agenten lesbar (Rechte `0600`), das Verzeichnis hat
 Rechte `0700`. Das Sicherungsverzeichnis ist über den Dateibrowser nicht
 erreichbar. Damit wird eine Sicherung nicht zur ungeprüften zweiten Quelle
 sensibler Dateiinhalte.
 
-Je Container werden die letzten drei erfolgreich abgeschlossenen Sicherungen
-aufbewahrt. Ältere Sicherungen werden erst nach erfolgreichem Abschluss einer
-neuen entfernt. Unvollständige Archive gelten nicht als Sicherung und verdrängen
+Der stabile Sicherungsschlüssel ist bei Compose Projekt plus Service,
+bei Einzelcontainern der Containername, analog zur
+[Stopp-Absicht](self-healing.md). Er bestimmt die Aufbewahrung der letzten
+drei erfolgreich abgeschlossenen Sicherungen und die Zuordnung beim Restore.
+Eine neue Container-ID nach einem Austausch beginnt keine neue Sicherungsreihe.
+Damit bleiben Sicherungen über Updates hinweg beim selben fachlichen Ziel.
+Ältere Sicherungen werden erst nach erfolgreichem Abschluss einer neuen entfernt.
+Unvollständige Archive gelten nicht als Sicherung und verdrängen
 keine brauchbare ältere Sicherung. Die begrenzte Aufbewahrung hält den
 Platzbedarf verständlich und bewahrt mehrere Rückgriffsmöglichkeiten.
 
 Vor der Kopie prüft der Agent den verfügbaren Platz am Sicherungsziel gegen den
-ermittelten Sicherungsumfang. Bei zu wenig Platz bricht er ohne Update ab.
+ermittelten Sicherungsumfang und hält zusätzlich eine feste Reserve frei,
+damit der Agent-Zustand schreibbar bleibt. Den Reservewert legt der Vertragsschritt
+in `contract/` fest. Reicht der Platz nicht für Sicherung plus Reserve oder ist
+die Reserve bereits unterschritten, wird keine Sicherung angelegt und das
+Update nicht gestartet. Das gilt vor jedem Sicherungsschritt im Stack; bereits
+ausgetauschte Services gehen bei einem solchen Fehler in den Rückweg.
 Scheitert die Sicherung, startet das Update nicht stillschweigend ohne sie;
 der Lauf meldet den Fehler und beendet sich. Ein für die Sicherung gestoppter
 Container erhält dabei seinen vorherigen Laufzustand zurück, soweit dies
@@ -217,8 +279,10 @@ gewählte Sicherung eine Vorbedingung des Auftrags.
 ## Gesonderter Restore
 
 Restore ist eine eigene, gesondert bestätigte Aktion. Die Vorschau nennt
-Container, Sicherung und die ausgewählten zulässigen Mount-Ziele sowie die
-betroffenen vorhandenen Daten. Der Agent stoppt den Container selbst; erst nach
+Ziel anhand des stabilen Schlüssels, zugehörige Sicherung und die ausgewählten
+zulässigen Mount-Ziele sowie die betroffenen vorhandenen Daten. Die Zuordnung
+verwendet Compose-Projekt plus Service beziehungsweise den Einzelcontainernamen,
+keine überholte Container-ID. Der Agent stoppt den Container selbst; erst nach
 bestätigtem Stopp wird entpackt. Nach Ende des Restore-Laufs stellt er den
 vorherigen Laufzustand wieder her: Ein vorher laufender Container wird
 gestartet, ein vorher gestoppter bleibt gestoppt.
@@ -229,8 +293,9 @@ Erfolg eines Image-Rollbacks ist.
 Die Quellenklassifikation aus [file-access.md](file-access.md) und dieselben
 Verwaltungsgrenzen wie beim Update gelten bei jedem Restore-Einstieg.
 Geteilte Quellen, Docker-Socket, Host-Systempfade, Agent-Betriebsverzeichnisse
-und das Sicherungsverzeichnis sind als Restore-Ziele gesperrt. Agentenseitige
-Pfad-, Symlink- und Rechteprüfungen gelten auch beim Entpacken; ein Archiv darf
+und das Sicherungsverzeichnis sind als Restore-Ziele gesperrt. Auch bei unklarer
+Zuordnung einer möglichen geteilten Quelle ist Restore-Schreiben gesperrt.
+Agentenseitige Pfad-, Symlink- und Rechteprüfungen gelten auch beim Entpacken; ein Archiv darf
 keine Daten außerhalb seiner bestätigten Ziele verändern. Der gestoppte
 Container allein ist keine Berechtigung zum Schreiben.
 
@@ -243,13 +308,22 @@ Dateikopien versprechen auch beim Restore keine Datenbankkonsistenz.
 ## Umsetzungskriterien
 
 - Ziele sind Hub-verwaltete Compose-Services und Einzelcontainer mit aus Inspect
-  übernommener Erzeugungskonfiguration. Fremdverwaltete Ziele bleiben gesperrt.
+  übernommener Erzeugungskonfiguration. Fremdverwaltete Ziele und Container mit
+  `com.docker.compose.oneoff=True` sind keine Update-Ziele.
 - Jedes Update verlangt vorab Vorschau und Bestätigung von Ziel, Services,
   betroffenen Digests, Rückweg und gewählter Sicherung. Es zieht dieselbe
   Image-Referenz; gleicher Digest führt zu keinem Austausch. Ein abweichender
-  Zieldigest verlangt neue Bestätigung. Versionswechsel sind Definitionsänderungen.
+  Zieldigest bricht vor jeder Daten- oder Containeränderung ab und verlangt eine
+  neue Vorschau. Sie ermittelt das Angebot per Registry-Manifest-Abfrage ohne Pull
+  und warnt bei vorher `unhealthy`. Versionswechsel sind Definitionsänderungen;
+  #70 behandelt Anzeige und Erklärung von Pins und Versionen.
+- Nach Digest-Prüfung und Bestätigung werden zuerst alle benötigten Images
+  gezogen und mit den bestätigten Digests verglichen. Erst danach wird gesichert
+  und im Stoppmodus gestoppt, dann ausgetauscht; bei gleichem Digest entfallen
+  Sicherung, Stopp und Austausch.
 - Vor dem Austausch sind vorheriges Image als Image-ID oder Digest, vorherige
-  Definition und Laufzustand als verwendbare Rückweggrundlage festgehalten.
+  Definition und Laufzustand einschließlich Health, Pause und Neustartzustand
+  als verwendbare Rückweggrundlage vor der ersten Containeränderung festgehalten.
 - Ein ursprünglich gestopptes Ziel wird mit dem neuen Image und der übernommenen
   Definition erzeugt und bleibt gestoppt; es erhält keine Laufprüfung.
 - Für laufende Dienste mit wirksamem Healthcheck gelten 120 Sekunden als Standard,
@@ -259,17 +333,34 @@ Dateikopien versprechen auch beim Restore keine Datenbankkonsistenz.
 - Ein laufender Dienst mit Healthcheck muss innerhalb der Startfrist `healthy`
   werden und laufen. Ohne Healthcheck muss er 30 Sekunden ohne Neustart und Exit
   laufen. Ein Neustart im Stabilitätsfenster beendet die Prüfung als Fehlschlag;
-  auch Exit-Code 0 scheitert bei Diensten. Einmalaufträge bestehen mit Exit 0.
-- Ein Fehler löst den geprüften Rückweg auf vorheriges Image, Definition und
-  Laufzustand aus. Gestoppte Ziele und Einmalaufträge behalten ihre besonderen
-  Erfolgskriterien; Update-Fehler und Rollback-Ergebnis werden getrennt gemeldet.
-- Stack-Services werden nacheinander in Compose-Abhängigkeitsreihenfolge geprüft.
-  Beim ersten Fehler endet die Vorwärtsfolge; alle ausgetauschten Services werden
-  in umgekehrter Reihenfolge zurückgesetzt. Rückwegfehler verhindern die Prüfung
+  auch Exit-Code 0 scheitert bei Diensten.
+- Ein Update-Abschlussauftrag wird nur aus der aufgelösten Compose-Definition
+  erkannt: keine Restart-Policy oder `restart: "no"`, und mindestens ein anderer
+  Service desselben Projekts hängt von ihm mit
+  `condition: service_completed_successfully` ab. Er besteht nur mit Exit 0
+  innerhalb derselben je Container konfigurierten und übertragenen Startfrist
+  ab seinem Start; anderer Exit-Code und Zeitüberschreitung scheitern. Alle übrigen Services
+  und Einzelcontainer sind Dienste. Laufzeitaktionen verwenden stattdessen
+  ausschließlich das oneoff-Label; das macht keinen Container zum Update-Ziel.
+- Ein Fehler löst den Rückweg aus; erfolgreich ist er nur mit derselben
+  Image-ID, Definition und demselben Laufzustand wie vor dem Update. Gestoppte
+  Ziele bleiben gestoppt, erledigte Abschlussaufträge werden nicht zur Prüfung
+  gestartet. Bei zuvor `unhealthy`, `paused` oder `restarting` ist kein `healthy`
+  nötig, sondern laufend wie vorher; `paused` wird wieder pausiert. Update-Fehler
+  und Rollback-Ergebnis werden getrennt gemeldet.
+- Stack-Services werden nacheinander in Compose-Abhängigkeitsreihenfolge geprüft:
+  Dienste mit Laufprüfung, Abschlussaufträge mit Exit 0 innerhalb der Startfrist,
+  ursprünglich gestoppte Services ohne Laufprüfung. Jeder Service wird bei gewählter
+  Sicherung direkt vor seinem eigenen Austausch gesichert. Beim ersten Fehler,
+  auch einem Sicherungsfehler, endet die Vorwärtsfolge; alle ausgetauschten Services
+  werden in umgekehrter Reihenfolge auf ihren jeweiligen Vorzustand zurückgesetzt.
+  Rückwegfehler verhindern die Prüfung
   der übrigen nicht und erzeugen einen sichtbaren Vorfall samt Meldeversuch über
   konfigurierte Kanäle, ohne Geheimnisse weiterzureichen.
-- Ein konkurrierender Auftrag am selben Container oder Projekt mutiert während
-  Update oder Restore nicht. Nach dem Warten wird sein erwarteter Zustand geprüft.
+- Dateischreiben, Compose-Apply, Update und Restore teilen dieselbe Projekt-
+  und Containersperre, auch bei direkten Agent-Anfragen. Kein konkurrierender
+  Weg mutiert dasselbe Ziel während eines Laufs; nach dem Warten wird sein
+  erwarteter Zustand geprüft.
 - Stopp, Entfernen und Tod des Ersatzcontainers während Update oder Restore sind
   für die Selbstheilung beabsichtigt: kein Budgetverbrauch, keine vorgemerkte
   Heilung, kein Selbstheilungsvorfall. Fehler meldet allein der zuständige Lauf.
@@ -290,17 +381,23 @@ Dateikopien versprechen auch beim Restore keine Datenbankkonsistenz.
   des Dateibrowsers. Docker-Socket, Host-Systempfade, Agent-Betriebsverzeichnisse
   und Sicherungsverzeichnis sind nie auswählbar, auch nicht über Aliasse,
   Volumes oder geschützte Unterpfade. Geteilte Quellen sind nur für Sicherung
-  mit Hinweis wählbar.
+  mit Hinweis wählbar. Unklare Zuordnung geteilter Quellen sperrt Restore-Schreiben.
 - Der Dialog bietet optionale Sicherung, je zulässigem Mount einen Schalter,
   Stopp als Standardmodus und Live mit Inkonsistenzwarnung. Eine konsistente
   Datenbanksicherung durch Dateikopie wird ausdrücklich nicht zugesagt.
 - Sicherungen sind tar-Archive mit Rechten `0600` im per Umgebungsvariable
-  konfigurierbaren Agent-Verzeichnis mit Rechten `0700`. Dieses ist im Dateibrowser
-  unerreichbar. Je Container bleiben die letzten drei vollständigen Sicherungen;
-  ältere werden erst nach erfolgreichem Abschluss einer neuen entfernt.
-- Zu wenig Platz vorab oder ein Sicherungsfehler verhindert den Austausch und
-  wird sichtbar gemeldet. Ein Wiederanlauffehler nach Sicherungsabbruch bleibt
-  zusätzlich sichtbar.
+  übersteuerbaren Unterverzeichnis `backups` des Agent-Datenpfads mit Rechten
+  `0700`. Dieses ist im Dateibrowser unerreichbar. Die letzten drei vollständigen
+  Sicherungen und die Restore-Zuordnung verwenden den stabilen Schlüssel
+  Compose-Projekt plus Service oder Einzelcontainername, auch nach Containerwechsel.
+  Ältere Sicherungen werden erst nach erfolgreichem Abschluss einer neuen entfernt.
+- Die Platzprüfung vor jeder Sicherung berücksichtigt Sicherungsumfang plus
+  feste Reserve für den Agent-Zustand. Der Vertragsschritt legt den Reservewert
+  in `contract/` fest. Bei unterschrittener Reserve wird keine Sicherung angelegt und
+  kein Update gestartet. Zu wenig Platz oder ein Sicherungsfehler verhindert den
+  jeweiligen Austausch und löst beim Stack den Rückweg für bereits ausgetauschte
+  Services aus; der Fehler wird sichtbar gemeldet. Ein Wiederanlauffehler nach
+  Sicherungsabbruch bleibt zusätzlich sichtbar.
 - Restore verlangt eine eigene Bestätigung und stoppt den Container selbst.
   Entpackt wird erst nach bestätigtem Stopp; danach wird der vorherige Laufzustand
   wiederhergestellt. Das Archiv bleibt innerhalb bestätigter zulässiger Mount-Ziele;

@@ -40,8 +40,9 @@ oder ein Volume. Sicherung und Restore verwenden dieselbe Quellenklassifikation
 nach [update-and-rollback.md](update-and-rollback.md): Docker-Socket,
 Host-Systempfade, Agent-Betriebsverzeichnisse und das Sicherungsverzeichnis
 sind dafür nie auswählbar. Geteilte Quellen sind für Sicherung mit Hinweis
-auf weitere Schreiber wählbar, für Restore gesperrt. Die unterschiedlichen
-Aktionen teilen damit die Zuordnung, behalten aber ihre jeweiligen Lese- und
+auf weitere Schreiber wählbar, für Restore gesperrt. Ist die Zuordnung einer
+möglichen geteilten Quelle unklar, sperrt auch Restore das Schreiben.
+Die unterschiedlichen Aktionen teilen damit die Zuordnung, behalten aber ihre jeweiligen Lese- und
 Schreibgrenzen. Update, Sicherung und Restore erzwingen zusätzlich
 Systemcontainer- und Fremdverwaltungsschutz bei jedem Einstieg.
 
@@ -61,6 +62,13 @@ Mounts oder Volumes. Die Agent-Prüfungen aus
 [agent/src/webftp.ts](../../agent/src/webftp.ts) bleiben die gemeinsame Grundlage.
 Damit müssen dieselben Sicherheitsregeln nicht für jede Quellart neu gepflegt
 werden.
+
+Dateischreiben, Compose-Apply, Update und Restore teilen dieselbe Projekt- und
+Containersperre, auch bei direkt aufgerufenen Agent-Routen. Während ein Weg
+dasselbe Ziel verändert, darf kein anderer Weg dort schreiben oder eine
+Definition anwenden. Nach dem Warten werden erwarteter Inhaltshash, Quelle und
+Zustand erneut geprüft. So kann eine Dateiänderung die gesicherte Definition
+oder den Rückweg eines laufenden Updates nicht überholen.
 
 Der Agent erzwingt die Grenze der ausgewählten Quelle: keine absoluten
 Benutzerpfade, kein Traversal, keine Flucht über Symlinks und keine Verwendung
@@ -92,9 +100,11 @@ von beiden Features verwendete gemeinsame Hülle ein.
 
 Die Hülle liegt ebenfalls in `web/src/platform` und verantwortet Laden,
 Speichern mit Inhaltshash-Konflikt, Entwurfsschutz bei Navigation und Maskierung
-sensibler Werte. Jedes Feature steckt seine eigenen Lese- und Schreib-Adapter ein;
-die Hülle importiert keine Fachlogik, und Features importieren sich nicht
-gegenseitig. Dies folgt [feature-architecture.md](feature-architecture.md).
+sensibler Werte. Jedes Feature steckt seine eigenen Lese- und Schreib-Adapter ein.
+Die Schlüsselregeln für Maskierung liegen im Feature-Adapter; die Hülle maskiert
+nur die Bereiche, die dieser Adapter liefert. Sie kennt weder `.env`-Schlüssel
+noch Compose-`environment` und importiert keine Fachlogik. Features importieren
+sich nicht gegenseitig. Dies folgt [feature-architecture.md](feature-architecture.md).
 Die Features binden ihre jeweiligen Verträge an dieselbe Hülle an;
 Compose-spezifische Vorschau und Validierung bleiben beim Compose-Feature.
 Die vorhandene Compose-Vorschau wird wiederverwendet. Eine gewöhnliche Datei
@@ -152,8 +162,11 @@ werden dafür nicht verwendet.
 Die Maskierung gilt für `.env` über den geschützten Bearbeitungsweg und für
 Inline-Werte unter `environment` im Compose-Editor, jeweils bei Schlüsseln mit
 `PASSWORD`, `SECRET`, `TOKEN` oder `KEY`, unabhängig von Groß- und Kleinschreibung.
-Sie gilt nicht für beliebige andere Dateien und ist keine Zusage, alle
-Geheimnisse allein am Namen erkennen zu können. Der Betreiber gibt einen Wert
+Diese Schlüsselregeln gehören in den jeweiligen Feature-Adapter, der die zu
+maskierenden Bereiche an die Hülle liefert. Der Adapter für beliebige andere
+Dateien liefert keine Maskierungsbereiche. Die Hülle wendet nur die gelieferten
+Bereiche an. Die Maskierung ist keine Zusage, alle Geheimnisse allein am Namen
+erkennen zu können. Der Betreiber gibt einen Wert
 gezielt zum Anzeigen beziehungsweise Bearbeiten frei. Die normale Ansicht,
 Hervorhebung und ungefragte Vorschau dürfen den Klartext nicht neben der Maske offenlegen.
 Maskierung wird deshalb vor der gewöhnlichen Inhaltsanzeige wirksam; eine bloße
@@ -192,11 +205,15 @@ Beleg einschließlich Screenshots.
 - Sicherung und Restore teilen die Quellenklassifikation des Dateibrowsers.
   Docker-Socket, Host-Systempfade, Agent-Betriebsverzeichnisse und das
   Sicherungsverzeichnis sind nie Sicherungs- oder Restore-Ziele. Geteilte Quellen
-  sind für Sicherung mit Hinweis wählbar, für Restore gesperrt. Alle Update-,
+  sind für Sicherung mit Hinweis wählbar, für Restore gesperrt. Unklare Zuordnung
+  geteilter Quellen sperrt Restore-Schreiben wie im Dateibrowser. Alle Update-,
   Sicherungs- und Restore-Einstiege erzwingen ihre Verwaltungsgrenzen.
 - Alle Quellarten verwenden dieselben vorhandenen CRUD-Wege. Direkte Anfragen
   erzwingen dieselben Verwaltungs-, Rechte-, Symlink- und Traversalgrenzen;
   ausgetauschte Pfade und Zielkonflikte umgehen sie nicht.
+- Dateischreiben, Compose-Apply, Update und Restore teilen dieselbe Projekt- und
+  Containersperre an allen Einstiegen. Kein zweiter Weg mutiert dasselbe Ziel
+  während eines Laufs; nach dem Warten werden Hash, Quelle und Zustand erneut geprüft.
 - Allgemeiner Dateizugriff umgeht weder Compose-Prüfung noch den geschützten
   `.env`-Weg. Maskierte Werte erscheinen nicht ungefragt in Vorschauen,
   Diagnoseausgaben oder öffentlichen Fehlerbelegen. Downloads sind bewusst
@@ -224,6 +241,8 @@ Beleg einschließlich Screenshots.
 - `.env` im geschützten Weg und Inline-Werte unter Compose-`environment` werden
   bei Schlüsseln mit `PASSWORD`, `SECRET`, `TOKEN` oder `KEY` unabhängig von
   Groß- und Kleinschreibung standardmäßig maskiert und gezielt freigegeben.
-  Beliebige andere Dateien werden nicht maskiert. Speichern erhält unveränderte
-  Geheimnisse ohne Maskenplatzhalter; Logs, Audit und Fehlerbelege bleiben
+  Die Schlüsselregeln liegen ausschließlich im Feature-Adapter; die Hülle
+  maskiert nur dessen gelieferte Bereiche und enthält keine fachlichen Schlüsselregeln.
+  Der Adapter für beliebige andere Dateien liefert keine Maskierungsbereiche.
+  Speichern erhält unveränderte Geheimnisse ohne Maskenplatzhalter; Logs, Audit und Fehlerbelege bleiben
   auch nach Freigabe frei von Geheimnissen und Dateiinhalt.
