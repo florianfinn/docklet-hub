@@ -1,3 +1,4 @@
+import { updateRecovery } from "../runtime/update-recovery.js";
 import { updatePreviewRequestSchema, updateStartRequestSchema, UPDATE_PRECHECK_TIMEOUT_MS } from "contract";
 import { readJsonBody, parseRequest, rejectRequest, send, type RouteContext } from "../runtime/http.js";
 import { updateRunner, authorizeUpdateSelection } from "../runtime/updates.js";
@@ -32,6 +33,7 @@ export async function handleUpdateStart(ctx: RouteContext): Promise<void> {
   const parsed = parseRequest(updateStartRequestSchema, await readJsonBody(ctx.request));
   if (!parsed.ok) { rejectRequest(ctx, { action: "update", containerId: null, containerName: null }, parsed.rejection); return; }
   await updateRoute(ctx, "update", async () => {
+    if (!updateRecovery.isReady()) throw new UpdateFailure("update-rollback-unavailable");
     const budget = new UpdateBudget(UPDATE_PRECHECK_TIMEOUT_MS);
     await Promise.all(parsed.value.services.map((service) => authorizeUpdateSelection(service, ctx.actor, budget)));
     if (parsed.value.services.some((s) => s.backup !== null)) throw new StackEndpointError(409, "backup-incomplete");

@@ -1,4 +1,4 @@
-import { recoverUpdates } from "./runtime/updates.js";
+import { updateRecovery } from "./runtime/update-recovery.js";
 import { startSelfHealing, stopSelfHealing } from "./runtime/self-healing.js";
 import path from "node:path";
 import { legacyEnvKeysInUse } from "./request-keys.js";
@@ -27,7 +27,7 @@ import { handleRequest } from "./dispatch.js";
 // without it the deadlines below would be numbers nobody looks after. The
 // reasoning for each value is in connection-limits.ts. The handler itself is
 // in dispatch.ts.
-const server = createServer(handleRequest);
+export const server = createServer(handleRequest);
 
 // Fail fast: without a writable audit log the agent does not start. An agent
 // that executes actions without a record is worse than one that is missing.
@@ -41,8 +41,6 @@ try {
   );
   process.exit(1);
 }
-
-await recoverUpdates();
 
 server.listen(config.listenPort, config.listenHost, async () => {
   console.log(
@@ -89,6 +87,8 @@ server.listen(config.listenPort, config.listenHost, async () => {
       failure instanceof Error ? failure.message : failure
     );
   }
+
+  updateRecovery.start();
 
   // An open rotation window is a state one wants to end, not a permanent
   // state — that is why it is in the log at startup and not only in /health.
@@ -170,6 +170,7 @@ server.listen(config.listenPort, config.listenHost, async () => {
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
+    updateRecovery.stop();
     stopSelfHealing();
     void dockerEvents.stop().finally(() => process.exit(0));
   });

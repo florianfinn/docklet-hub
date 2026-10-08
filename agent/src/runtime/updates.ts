@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { updateAcceptance, UPDATE_STOP_TIMEOUT_MS, UPDATE_CREATE_TIMEOUT_MS, UPDATE_READBACK_TIMEOUT_MS,
   SELF_HEALING_RECOMMENDATION, updateDigestSchema, type UpdateServiceSelection, type UpdateResult } from "contract";
-import { UpdateJournal, recoverUpdateRemnants } from "../update-recovery.js";
+import { updateJournal } from "./update-recovery.js";
+export { updateJournal } from "./update-recovery.js";
 import { AgentJobs } from "../agent-jobs.js";
 import { UpdateRunner, type UpdateSnapshot, type UpdateOps } from "../update-runner.js";
 import { UpdateBudget, UpdateFailure } from "../update-budget.js";
@@ -25,11 +26,9 @@ import { StackEndpointError } from "../stack-control.js";
 import type { RawInspect } from "../engine.js";
 
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const rollbackTags = new Map<string, string>();
 const sameTarget = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 type Definition = { project: ComposeProject | null; normalized: { services: Record<string, Record<string, unknown>> } | null; currentId: string; parkedId?: string; actor: string | null };
-export const updateJournal = new UpdateJournal(path.join(path.dirname(config.registryFile), "update-pending.json"));
-export const recoverUpdates = () => recoverUpdateRemnants({ engine, registry, journal: updateJournal, state: selfHealingState, basePath: composeBasePath,
-  notify: (id) => dockerEvents.notifyLifecycleChange(id) });
 export const updateCompose = { config: composeConfig, up: composeUp };
 export const agentJobs = new AgentJobs((target) => {
   const ids = containerIdsForTarget(target);
@@ -190,14 +189,21 @@ function finished(result: UpdateResult, actor: string | null): void {
   const at = new Date().toISOString();
   for (const service of result.services.filter((s) => s.rollbackError)) {
     selfHealingState.change((state) => {
-      if (state.incidents.some((incident) => sameTarget(incident.target, service.target) && incident.closedAt === null)) return;
+      const tag = rollbackTags.get(JSON.stringify(service.target));
+      const message = [service.updateError, tag].filter(Boolean).join("; ");
+      const existing = state.incidents.find((incident) => sameTarget(incident.target, service.target) && incident.closedAt === null);
+      if (existing) {
+        if (message && !existing.cause.engineError?.includes(message)) existing.cause.engineError = [existing.cause.engineError, message].filter(Boolean).join("; ");
+        return;
+      }
       state.incidents.push({ id: randomUUID(), target: service.target, containerId: service.state.containerId ?? "unresolved",
-        openedAt: at, closedAt: null, closedReason: null, cause: { exitCode: service.state.exitCode ?? 0, engineError: service.updateError },
+        openedAt: at, closedAt: null, closedReason: null, cause: { exitCode: service.state.exitCode ?? 0, engineError: message || null },
         attempts: [{ attempt: 1, startedAt: at, finishedAt: at, result: "failed", error: service.rollbackError }],
         recommendation: SELF_HEALING_RECOMMENDATION, logs: { available: false, reason: "logs-unavailable" } });
     });
     if (service.state.containerId) dockerEvents.notifyLifecycleChange(service.state.containerId);
   }
+  for (const service of result.services) rollbackTags.delete(JSON.stringify(service.target));
 }
 export const updateRuntimeOps: UpdateOps = {
   prepare,
@@ -228,9 +234,13 @@ export const updateRuntimeOps: UpdateOps = {
   },
   async rollback(snapshot, budget) {
     updateJournal.begin({ target: snapshot.preview.target, containerId: snapshot.raw.Id, containerName: snapshot.raw.Name.replace(/^\//, "") });
+    rollbackTags.delete(JSON.stringify(snapshot.preview.target));
     const reference = parseImageRef(snapshot.preview.imageRef);
     if (!reference) throw new UpdateFailure("update-rollback-failed");
-    if (!reference.digest) await budget.run((options) => engine.tagImage(snapshot.raw.Image!, reference.fromImage, reference.tag ?? "latest", options));
+    if (!reference.digest) {
+      await budget.run((options) => engine.tagImage(snapshot.raw.Image!, reference.fromImage, reference.tag ?? "latest", options));
+      rollbackTags.set(JSON.stringify(snapshot.preview.target), `tag-restored: ${snapshot.preview.imageRef} -> ${snapshot.raw.Image}`);
+    }
     const started = await mutate(snapshot, snapshot.raw.Image!, budget, true);
     let raw = await read(snapshot, budget);
     if (snapshot.preview.initialState.status === "paused") {

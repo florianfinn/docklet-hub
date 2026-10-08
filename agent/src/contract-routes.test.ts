@@ -23,6 +23,7 @@ process.env.DOCKER_AGENT_MONITOR_FILE = path.join(directory, "monitors.json");
 process.env.DOCKER_AGENT_AUDIT_FILE = path.join(directory, "audit.jsonl");
 process.env.DOCKER_AGENT_BIND_BASE_PATH = "/srv/apps";
 const { handleRequest } = await import("./dispatch.js");
+const { updateRecovery } = await import("./runtime/update-recovery.js");
 const { agentJobs } = await import("./runtime/updates.js");
 const { registry, engine, config, audit } = await import("./runtime/state.js");
 after(() => fs.rmSync(directory, { recursive: true, force: true }));
@@ -61,6 +62,7 @@ async function request(method: string, url: string, body?: unknown, authorized =
 }
 
 function fixture(t: TestContext, flags: { observeOnly?: boolean; externallyManaged?: boolean } = {}, own = false) {
+  t.mock.method(updateRecovery, "isReady", () => true);
   registry.replaceAll([{ containerId: id, containerName: "demo", imageRef: "example/app:1.0", allowed: true,
     ...flags, compose: { projectDir: "/srv/apps/demo", projectName: "demo", serviceName: "web",
       composeFileName: "compose.yaml", origin: "dashboard" } }]);
@@ -360,4 +362,11 @@ for (const action of ["recreate", "remove"]) test(`${action} cannot mutate a sta
     const response = await request("POST", `/containers/${id}/${action}`, action === "recreate" ? { acknowledgeImageId: "old-image" } : undefined);
     assert.equal(response.status, 409); assert.equal(response.body().error, "stack-busy");
   } finally { release(); await held; }
+});
+
+test("new updates are denied before gates or job creation until recovery succeeds", async (t) => {
+  fixture(t); t.mock.method(updateRecovery, "isReady", () => false);
+  t.mock.method(engine, "inspect", async () => { assert.fail("Recovery blocks updates before Docker access"); });
+  const result = await request("POST", "/updates", updateBody);
+  assert.equal(result.status, 409); assert.deepEqual(result.body(), { error: "update-rollback-unavailable" });
 });

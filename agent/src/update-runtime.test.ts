@@ -203,7 +203,29 @@ for (const compose of [false, true]) test(`journal survives a restart before ass
   t.mock.method(engine, "start", async (...args: Parameters<typeof start>) => { await start(...args); entered(); await waiting; });
   f.tag("new-image"); const updating = ops.exchange(snapshot, "new-image", new UpdateBudget(60_000), () => {}, () => {});
   await starting;
-  assert.deepEqual(updateJournal.read(), [{ target: snapshot.preview.target, containerId: "old", containerName: "demo" }]);
+  const pending = updateJournal.read(); assert.match(pending[0].journalId!, /^[a-f0-9-]{36}$/);
+  assert.deepEqual(pending.map(({ journalId: _journalId, ...entry }) => entry), [{ target: snapshot.preview.target, containerId: "old", containerName: "demo" }]);
   const persisted = JSON.parse(fs.readFileSync(path.join(directory, "update-pending.json"), "utf8"));
   assert.deepEqual(persisted, updateJournal.read()); resume(); await updating; assert.deepEqual(updateJournal.read(), []);
+});
+test("creation failure after retag reports the old tag state in the rollback incident", async (t) => {
+  const f = fixture(t); const snapshot = await ops.prepare(f.selection, null, new UpdateBudget(60_000));
+  const { selfHealingState, selfHealingConfig, audit, dockerEvents } = await import("./runtime/state.js");
+  selfHealingState.change((state) => { state.incidents = []; }); t.mock.method(audit, "write", () => {}); t.mock.method(dockerEvents, "notifyLifecycleChange", () => {});
+  t.mock.method(engine, "create", async () => { throw new Error("synthetic create failure"); });
+  f.tag("new-image"); await assert.rejects(ops.rollback(snapshot, new UpdateBudget(60_000)), { code: "update-rollback-failed" });
+  assert.equal(f.tagged(), "old-image");
+  ops.finished({ target: f.selection.target, outcome: "rollback-failed", updateError: "update-start-failed", rollbackError: "update-rollback-failed",
+    services: [{ target: f.selection.target, outcome: "rollback-failed", state: { containerId: "old", status: "exited", startedAt: "seen", exitCode: 0, health: null },
+      imageId: "old-image", definitionHash: "hash", backupId: null, updateError: "update-start-failed", rollbackError: "update-rollback-failed", resumeError: null }] }, null);
+  const incident = selfHealingState.status(selfHealingConfig.read(), true, Date.now()).incidents[0];
+  assert.match(incident.cause.engineError!, /update-start-failed; tag-restored: example\/app:1\.0 -> old-image/);
+});
+for (const compose of [false, true]) test(`a competing host-wide retag is detected before starting the replacement: compose=${compose}`, async (t) => {
+  const f = fixture(t, "running", compose); const snapshot = await ops.prepare(f.selection, null, new UpdateBudget(60_000));
+  const pulled = await ops.pull(snapshot, new UpdateBudget(60_000)); const create = engine.create; let raced = false;
+  t.mock.method(engine, "create", async (...args: Parameters<typeof create>) => { if (!raced) { raced = true; f.tag("old-image"); } return create(...args); });
+  await assert.rejects(ops.exchange(snapshot, pulled.imageId, new UpdateBudget(60_000), () => {}, () => {}), { code: "update-state-mismatch" });
+  assert.equal(f.trace.includes("start"), false);
+  const restored = await ops.rollback(snapshot, new UpdateBudget(60_000)); assert.equal(restored.Image, "old-image");
 });
