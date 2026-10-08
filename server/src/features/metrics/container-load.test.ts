@@ -78,8 +78,7 @@ test("ein gestoppter Container zählt nicht mit — sein Detail zeigt auch keine
 });
 
 test("die CPU wird bei 100 % gekappt", () => {
-  // 500 % auf einem Vierkerner — ein Ausreißer, etwa der erste Wert eines
-  // frisch gestarteten Containers.
+  // A 500 % outlier on four cores must be capped at 100 %.
   const load = hostLoad([container("a", [sample(0, 500, 1)])], INFO);
   assert.equal(load?.cpuPercent, 100);
   assert.equal(load?.series[0].cpuPercent, 100);
