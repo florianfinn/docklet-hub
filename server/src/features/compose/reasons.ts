@@ -206,31 +206,8 @@ const ANCHOR_REASONS: ReadonlySet<ComposeRawFailureReason> = new Set([
   "compose-anchor-file-ambiguous"
 ]);
 
-/**
- * The `404` reasons of THIS surface that are an answer of the arm.
- *
- * ⚠️ THE STATUS ALONE DOES NOT TELL "ROUTE UNKNOWN" FROM A NAMED REFUSAL, and a
- * decision hung on it, not only a message (#129). Both fallbacks (the dry run
- * and the apply stream, `service.ts`) read "this arm does not know the way"
- * from every `404`. The arm sends the same status when the container is not on
- * its allowlist (`not-allowlisted`) or has disappeared (`container-gone`): its
- * `gate()` lists both as `404`, and the write path, which carries its chain
- * by hand and does not run through `gate()`, names the place as
- * `dashboard-docker-agent src/index.ts:6314-6316`. On applying, the hub then
- * wrote `{ kind: "start", live: false }`, fell back to the synchronous way, got
- * the same `404` — and the surface read "state unknown" for a stack the arm
- * never touched.
- *
- * ⚠️ WHAT THE SET DOES NOT LIST BEHAVES AS BEFORE. A `404` with a reason the
- * agent adds tomorrow falls back as it did; since #272 every reason stands in
- * `contract/src/agent/`, and a new one comes with a line here in the same
- * commit. The opposite rule — "any key in the body means an answer" — would be
- * the more dangerous one: what an arm puts on an unknown route is measured
- * NOWHERE in this repo (`unbekannte-route` stands only in its own test
- * doubles), and an arm below v0.21.0 respectively v0.22.0 takes BOTH
- * fallbacks. The shipped pin stands at v0.32.0 (#279) and does not need
- * them; a foreign arm still can.
- */
+// These 404 reasons are explicit agent refusals, so they must not trigger
+// the unknown-route fallback used by older agents.
 const NOT_FOUND_ANSWERS: ReadonlySet<string> = new Set(["not-allowlisted", "container-gone"]);
 
 /**

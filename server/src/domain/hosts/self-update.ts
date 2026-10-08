@@ -3,23 +3,9 @@ import type { AgentUpdateOffer, AgentUpdateState } from "contract";
 import { agentGet, agentPost, AgentError, type AgentTarget, type RequestOptions } from "../../platform/agent-transport/protocol.js";
 import { compareAgentVersions, parseAgentVersion } from "./version.js";
 
-// Das Selbstupdate eines Arms, ausgeführt von seinem Watcher (Phase 7, §2
-// „Betrieb über die Zeit").
-//
-// Der Agent tauscht sich nicht selbst: `POST /self-update` legt nur einen
-// Auftrag in sein `/state`, und der Watcher daneben zieht das Image, prüft
-// Versions-Label, Signatur und Rückschritt und tauscht erst dann
-// (`dashboard-docker-agent`, `src/self-update.ts`). Die Antwort ist deshalb
-// `202` — angenommen, nicht erledigt. Den Ausgang liest `GET /self-update`
-// aus einer Datei, weil der Prozess, der den Auftrag angenommen hat, den
-// Tausch nicht überlebt.
-//
-// ⚠️ DER HUB NENNT DAS ZIEL. Ohne Ziel zieht der Watcher den Ref, auf dem der
-// Agent läuft — und die Arme dieses Hubs laufen auf einem Digest-gepinnten Ref
-// (`ARM_AGENT_IMAGE`). Der Pull liefert dann immer dasselbe Image, und der
-// Ausgang ist `unchanged`. Erst ab `SELF_UPDATE_TARGET_MIN_VERSION` liest der
-// Agent das Ziel (`dashboard-docker-agent#112`); ein älterer ignoriert den
-// Rumpf still und tauscht auf seinen eigenen Ref.
+// POST /self-update queues work for the watcher; acceptance does not mean
+// completion. The hub supplies its release image as the explicit target.
+// The watcher validates the image and persists the result across the swap.
 
 /**
  * The first agent version that can follow a target in `POST /self-update`.

@@ -435,8 +435,7 @@ test("eine echte ghcr.io-Referenz steht nur als Image und zieht keine Anmeldung 
 });
 
 test("ein Image mit SemVer-Tag ohne Digest ergibt ein Archiv (#279)", async () => {
-  // Until the first release run there is no digest for the new image name, so
-  // the hub pins its arms to the tag alone (`ARM_AGENT_IMAGE`).
+  // Generated archives use the hub release tag without a digest.
   const image = "ghcr.io/florianfinn/docklet-hub-agent:v0.32.0";
   const input = makeInput();
   const unpacked = await unpack({ ...input, agent: { ...input.agent, image } });

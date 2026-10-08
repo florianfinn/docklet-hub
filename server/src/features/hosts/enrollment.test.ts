@@ -187,8 +187,10 @@ test("installation defaults pin a supported agent release", () => {
   const tag = /^ghcr\.io\/florianfinn\/docklet-hub-agent:v(\d+\.\d+\.\d+(?:-rc\.\d+)?)(@sha256:[0-9a-f]{64})?$/.exec(defaults[0]);
   assert.ok(tag, "the install default must pin a release tag");
   assert.equal(isAgentOutdated(tag[1]), false);
-  const remoteEnv = readFileSync(join(ROOT, "agent/deploy/remote-wireguard/.env.example"), "utf8");
-  assert.ok(remoteEnv.includes(`DOCKER_AGENT_IMAGE=${defaults[0]}\n`));
+  for (const template of ["remote-wireguard", "unraid"]) {
+    const env = readFileSync(join(ROOT, `agent/deploy/${template}/.env.example`), "utf8");
+    assert.ok(env.includes(`DOCKER_AGENT_IMAGE=${defaults[0]}\n`), template);
+  }
 });
 
 // ── Die Peer-Liste ────────────────────────────────────────────────────────
