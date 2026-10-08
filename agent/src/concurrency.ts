@@ -1,12 +1,8 @@
 // Maps `items` with bounded concurrency and PRESERVES the order (result[i]
 // belongs to items[i]).
 //
-// Needed for the container list (container view performance, stage 3.1): the
-// expensive part per container is the one-shot stats call (~1-2 s, because the
-// daemon samples a CPU window). Strictly one after another this adds up over
-// dozens of containers to a long first loading wave; running a few in parallel
-// shortens the wait noticeably without hitting agent and engine with all
-// requests at once.
+// Used for per-container engine calls such as the stats wave: a few run in
+// parallel without hitting agent and engine with all requests at once.
 //
 // A module of its own, so that the order/error semantics stay testable without
 // the server body (index.ts starts a listener on import). If `fn` throws for
