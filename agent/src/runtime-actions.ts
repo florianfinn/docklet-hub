@@ -22,7 +22,7 @@ export function gracePeriodSeconds(value: unknown): number {
 export function runtimeStateOf(inspect: RawInspect | null, unreadable = false): RuntimeState {
   return {
     containerId: inspect?.Id ?? null,
-    status: inspect?.State?.Restarting ? "restarting" : inspect?.State?.Status ?? (unreadable ? "unknown" : "missing"),
+    status: inspect?.State?.Paused ? "paused" : inspect?.State?.Restarting ? "restarting" : inspect?.State?.Status ?? (unreadable ? "unknown" : "missing"),
     exitCode: inspect?.State?.ExitCode ?? null,
     health: inspect?.State?.Health?.Status ?? null,
     startedAt: inspect?.State?.StartedAt ?? null

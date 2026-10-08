@@ -64,6 +64,27 @@ export function isStopSignal(container: RawInspect, value: string | undefined): 
 
 export class StopIntentStore {
   private generation: string | null = null;
+  private readonly updates = new Map<string, { startedAt: number; finishedAt: number; ids: Set<string> }>();
+  beginUpdate(containers: readonly RawInspect[]): () => void {
+    const old = [...this.updates.entries()].filter(([, value]) => value.finishedAt !== Infinity).sort((a, b) => b[1].finishedAt - a[1].finishedAt);
+    for (const [key] of old.slice(256 - containers.length)) this.updates.delete(key);
+    const annotations = containers.map((container) => {
+      const target = stopIntentTarget(container);
+      if (!target) throw new Error("Unknown update target");
+      const annotation = { startedAt: this.now(), finishedAt: Infinity, ids: new Set([container.Id]) };
+      this.updates.set(targetKey(target), annotation);
+      return annotation;
+    });
+    return () => { for (const annotation of annotations) annotation.finishedAt = this.now(); };
+  }
+  updateIntentActive(container: RawInspect, at = this.now()): boolean {
+    const target = stopIntentTarget(container);
+    const annotation = target ? this.updates.get(targetKey(target)) : undefined;
+    if (annotation && at >= annotation.startedAt && at <= annotation.finishedAt) {
+      annotation.ids.add(container.Id); return true;
+    }
+    return [...this.updates.values()].some((item) => item.ids.has(container.Id) && at >= item.startedAt && at <= item.finishedAt);
+  }
   private intents = new Map<string, StopIntent>();
   private kills = new Map<string, PendingKill>();
   private hubStops = new Map<string, HubStop>();
@@ -201,6 +222,7 @@ export class StopIntentStore {
     const target = stopIntentTarget(container);
     if (!target) return null;
     const atMs = event.atMs ?? this.now();
+    if (this.updateIntentActive(container, atMs)) return event.action === "die" ? "manual-stop" : null;
     for (const [id, annotation] of this.hubStops) {
       if (annotation.finishedAt < atMs - STOP_INTENT_BUFFER_MS) this.hubStops.delete(id);
     }
@@ -263,6 +285,7 @@ export class StopIntentStore {
   reconcile(container: RawInspect): void {
     const target = stopIntentTarget(container);
     if (!target) return;
+    if (this.updateIntentActive(container)) return;
     const intent = this.intents.get(targetKey(target));
     if (intent && (container.State?.Running || Date.parse(container.State?.StartedAt ?? "") > Date.parse(intent.stoppedAt))) {
       this.intents.delete(targetKey(target));

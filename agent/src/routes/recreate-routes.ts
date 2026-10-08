@@ -488,13 +488,8 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
     });
     send(response, 200, { ok: true, ...recreated });
   };
-  // The engine fallback of a compose container must not run into the
-  // middle of a project-wide action either. Containers with no compose
-  // context at all have no shared stack and do not need the lock.
-  if (composeContext) {
-    await stackLocks.runExclusive(composeContext.project, engineRecreate).catch(recreateFailed);
-  } else {
-    await engineRecreate().catch(recreateFailed);
-  }
+  // Stable names keep standalone recreates inside the update mutation boundary.
+  const lockKey = composeContext?.project ?? `container:${containerName}`;
+  await stackLocks.runExclusive(lockKey, engineRecreate).catch(recreateFailed);
   return;
 }

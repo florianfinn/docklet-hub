@@ -1,3 +1,4 @@
+import { recoveryBlocksHealing } from "./update-recovery.js";
 import { SELF_HEALING_SYSTEM_ACTOR } from "contract";
 import { SelfHealingController } from "../self-healing.js";
 import { runContainerAction } from "../container-action.js";
@@ -10,7 +11,8 @@ import { gate } from "./gate.js";
 
 export const selfHealing = new SelfHealingController(selfHealingState, {
   config: () => selfHealingConfig.read(),
-  eligible: (container) => !config.readOnly && registry.checkAccess(container.Id, true) === "allowed"
+  intentional: (container) => recoveryBlocksHealing(container) || stopIntents.updateIntentActive(container),
+  eligible: (container) => !recoveryBlocksHealing(container) && !stopIntents.updateIntentActive(container) && !config.readOnly && registry.checkAccess(container.Id, true) === "allowed"
     && forcedManagement(container.Config?.Labels?.["com.docker.compose.project.working_dir"] ?? "") !== "read-only",
   restartInProgress: (id) => stopIntents.isHubRestartActive(id),
   onIncident: (id) => dockerEvents.notifyLifecycleChange(id),
@@ -18,7 +20,7 @@ export const selfHealing = new SelfHealingController(selfHealingState, {
     try {
       // Eligibility is observation; any later action gathers its own delegation evidence once.
       const result = await gate(id, { mutating: true, action: "start", actor: SELF_HEALING_SYSTEM_ACTOR, onDelegation: () => {} });
-      return result.ok ? result.inspect : null;
+      return result.ok && !recoveryBlocksHealing(result.inspect) && !stopIntents.updateIntentActive(result.inspect) ? result.inspect : null;
     } catch (error) {
       const failure = actionFailureOf(error, true);
       audit.write({ action: "start", containerId: id, containerName: null, actor: SELF_HEALING_SYSTEM_ACTOR,

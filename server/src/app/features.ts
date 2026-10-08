@@ -6,6 +6,7 @@ import { registerAccountRoutes } from "../features/account/index.js";
 import { readGlobalTheme, registerAppearanceRoutes } from "../features/appearance/index.js";
 import { registerComposeRoutes } from "../features/compose/index.js";
 import { readContainerViewSettings, registerContainersRoutes } from "../features/containers/index.js";
+import { registerUpdateRoutes } from "../features/updates/index.js";
 import { registerLifecycleRoutes } from "../features/lifecycle/index.js";
 import { registerFileRoutes } from "../features/files/index.js";
 import { registerHostRoutes } from "../features/hosts/index.js";
@@ -91,6 +92,7 @@ export const FEATURES: readonly RegisterFeature[] = [
   }),
 
   registerLifecycleRoutes,
+  registerUpdateRoutes,
   // The feature `containers`: the page after sign-in (`GET /overview`) and the
   // write of the container view (`PUT /settings/containers`). It took the place
   // of the group `overview-routes` and of the group `container-view-routes`

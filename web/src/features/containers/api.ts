@@ -98,3 +98,36 @@ export async function fetchLifecycleHost(hostId: string, signal?: AbortSignal): 
   if (!host) throw new ApiError(404, JSON.stringify({ error: "host-unknown" }));
   return host;
 }
+
+import { agentJobsResponseSchema, updatePreviewResponseSchema, updateStartResponseSchema, updateCancelResponseSchema,
+  updateContainerSettingsSchema, type UpdatePreviewRequest, type UpdateStartRequest, type UpdateTarget,
+  type UpdateContainerSettings } from "contract";
+
+export async function fetchUpdateJobs(hostId: string, signal?: AbortSignal) {
+  const path = `/api/hosts/${encodeURIComponent(hostId)}/jobs?kind=update`;
+  return parseResponse(path, agentJobsResponseSchema, await request(path, { signal }));
+}
+export async function previewUpdate(hostId: string, body: UpdatePreviewRequest) {
+  const path = `/api/hosts/${encodeURIComponent(hostId)}/update-previews`;
+  return parseResponse(path, updatePreviewResponseSchema, await request(path, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body)
+  }));
+}
+export async function startUpdate(hostId: string, body: UpdateStartRequest) {
+  const path = `/api/hosts/${encodeURIComponent(hostId)}/updates`;
+  return parseResponse(path, updateStartResponseSchema, await request(path, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body)
+  }));
+}
+export async function cancelUpdate(hostId: string, id: string) {
+  const path = `/api/hosts/${encodeURIComponent(hostId)}/jobs/${encodeURIComponent(id)}/cancel`;
+  return parseResponse(path, updateCancelResponseSchema, await request(path, { method: "POST" }));
+}
+export async function fetchUpdateSetting(hostId: string, containerId: string, target: UpdateTarget, signal?: AbortSignal) {
+  const path = `/api/hosts/${encodeURIComponent(hostId)}/containers/${encodeURIComponent(containerId)}/update-settings?target=${encodeURIComponent(JSON.stringify(target))}`;
+  return parseResponse(path, updateContainerSettingsSchema, await request(path, { signal }));
+}
+export async function saveUpdateSetting(hostId: string, containerId: string, target: UpdateTarget, settings: UpdateContainerSettings) {
+  const path = `/api/hosts/${encodeURIComponent(hostId)}/containers/${encodeURIComponent(containerId)}/update-settings`;
+  return parseResponse(path, updateContainerSettingsSchema, await putJson(path, { target, settings }));
+}

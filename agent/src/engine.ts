@@ -296,10 +296,22 @@ export class DockerEngine {
 
   // --- Building blocks for recreate/remove (stage 5a) -----------------------
 
-  async rename(containerId: string, name: string): Promise<void> {
+  async pause(containerId: string, paused: boolean, options: RuntimeCallOptions = {}): Promise<void> {
+    const { status } = await this.request({ method: "POST",
+      path: `/containers/${encodeURIComponent(containerId)}/${paused ? "pause" : "unpause"}`, ...options });
+    if (status !== 204) throw new EngineError("pause state change failed", status);
+  }
+
+  async tagImage(imageId: string, repo: string, tag: string, options: RuntimeCallOptions = {}): Promise<void> {
+    const query = new URLSearchParams({ repo, tag });
+    const { status } = await this.request({ method: "POST", path: `/images/${encodeURIComponent(imageId)}/tag?${query}`, ...options });
+    if (status !== 201) throw new EngineError("image tag failed", status);
+  }
+
+  async rename(containerId: string, name: string, options: RuntimeCallOptions = {}): Promise<void> {
     const { status, body } = await this.request({
       method: "POST",
-      path: `/containers/${encodeURIComponent(containerId)}/rename?name=${encodeURIComponent(name)}`
+      path: `/containers/${encodeURIComponent(containerId)}/rename?name=${encodeURIComponent(name)}`, ...options
     });
     if (status === 204) return;
     throw new EngineError(`rename failed (${status}): ${body.toString("utf8").slice(0, 300)}`, status);
@@ -307,12 +319,12 @@ export class DockerEngine {
 
   // `v` removes anonymous volumes as well. Named volumes are ALWAYS kept —
   // they are the data, and a recreate must not touch them.
-  async remove(containerId: string, options: { force?: boolean } = {}): Promise<void> {
+  async remove(containerId: string, options: { force?: boolean } & RuntimeCallOptions = {}): Promise<void> {
     const query = new URLSearchParams({ v: "0" });
     if (options.force) query.set("force", "1");
     const { status, body } = await this.request({
       method: "DELETE",
-      path: `/containers/${encodeURIComponent(containerId)}?${query.toString()}`
+      path: `/containers/${encodeURIComponent(containerId)}?${query.toString()}`, timeoutMs: options.timeoutMs, signal: options.signal
     });
     if (status === 204 || status === 404) return;
     throw new EngineError(`remove failed (${status}): ${body.toString("utf8").slice(0, 300)}`, status);
@@ -320,11 +332,11 @@ export class DockerEngine {
 
   // On create the engine reliably connects only ONE network; all further ones
   // are attached afterwards.
-  async connectNetwork(network: string, containerId: string, endpoint: unknown): Promise<void> {
+  async connectNetwork(network: string, containerId: string, endpoint: unknown, options: RuntimeCallOptions = {}): Promise<void> {
     const { status, body } = await this.request({
       method: "POST",
       path: `/networks/${encodeURIComponent(network)}/connect`,
-      body: { Container: containerId, EndpointConfig: endpoint }
+      body: { Container: containerId, EndpointConfig: endpoint }, ...options
     });
     if (status === 200 || status === 204) return;
     throw new EngineError(
@@ -346,12 +358,12 @@ export class DockerEngine {
     );
   }
 
-  async create(name: string, payload: unknown): Promise<string> {
+  async create(name: string, payload: unknown, options: RuntimeCallOptions = {}): Promise<string> {
     const created = await this.json<{ Id?: string; Warnings?: string[] }>({
       method: "POST",
       path: `/containers/create?name=${encodeURIComponent(name)}`,
       body: payload,
-      timeoutMs: 60_000
+      timeoutMs: 60_000, ...options
     });
     if (!created.Id) throw new EngineError("engine returned no container id", 502);
     return created.Id;
@@ -438,7 +450,7 @@ export class DockerEngine {
     try {
       const image = await this.json<{ Id?: string }>({
         method: "GET",
-        path: `/images/${encodeURIComponent(reference)}/json`,
+        path: `/images/${encodeURIComponent(reference)}/json`, ...options,
         ...options, timeoutMs: Math.min(options.timeoutMs ?? Infinity, this.options.timeoutMs ?? 15_000)
       });
       return image.Id ?? null;
@@ -459,7 +471,7 @@ export class DockerEngine {
   // against. It deliberately lives on the IMAGE and not in the host's
   // configuration, because the signature confirms exactly this label.
   async inspectImage(
-    reference: string
+    reference: string, options: RuntimeCallOptions = {}
   ): Promise<{
     Id?: string;
     RepoDigests?: string[];
@@ -472,7 +484,7 @@ export class DockerEngine {
         Config?: { Env?: string[] | null; Labels?: Record<string, string> | null };
       }>({
         method: "GET",
-        path: `/images/${encodeURIComponent(reference)}/json`
+        path: `/images/${encodeURIComponent(reference)}/json`, ...options
       });
     } catch (error) {
       if (error instanceof EngineError && error.status === 404) return null;
@@ -498,12 +510,12 @@ export class DockerEngine {
   // monitoring.
   async remoteManifestDigest(
     reference: string,
-    auth?: EngineRegistryAuth
+    auth?: EngineRegistryAuth, options: RuntimeCallOptions = {}
   ): Promise<string | null> {
     try {
       const dist = await this.json<{ Descriptor?: { digest?: string } }>({
         method: "GET",
-        path: `/distribution/${encodeURIComponent(reference)}/json`,
+        path: `/distribution/${encodeURIComponent(reference)}/json`, ...options,
         ...(auth ? { headers: { "X-Registry-Auth": registryAuthHeader(auth) } } : {})
       });
       return dist.Descriptor?.digest ?? null;
