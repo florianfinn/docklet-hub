@@ -108,3 +108,20 @@ for (const contents of ["{invalid", JSON.stringify([{ containerName: "demo", con
   const cause = state.status(DEFAULT_SELF_HEALING_CONFIG, true, Date.now()).incidents[0].cause.engineError!;
   assert.match(cause, /update-journal-invalid/); assert.equal(cause.includes(contents), false);
 });
+
+test("damaged recovery history is quarantined with a named warning and bounded retention", (t) => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "update-history-")); t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const file = path.join(base, "pending.json"); const journal = new UpdateJournal(file); const warnings: string[] = [];
+  t.mock.method(console, "warn", (message: string) => warnings.push(message));
+  const entry = { target: { kind: "container" as const, containerName: "demo" }, containerId: "old", containerName: "demo", journalId: "journal" };
+  for (let index = 0; index < 5; index++) {
+    fs.writeFileSync(`${file}.seen`, "{", { mode: 0o600 });
+    assert.equal(journal.seen(entry, "demo", "state"), false);
+  }
+  const quarantined = fs.readdirSync(base).filter((name) => name.startsWith("pending.json.seen.invalid-"));
+  assert.equal(quarantined.length, 3); assert.equal(warnings.length, 5);
+  assert.equal(warnings.every((warning) => /pending\.json\.seen\.invalid-/.test(warning)), true);
+  for (const name of quarantined) assert.equal(fs.statSync(path.join(base, name)).mode & 0o777, 0o600);
+  for (let index = 0; index < 300; index++) journal.remember({ ...entry, journalId: String(index) }, `demo-${index}`, "state");
+  assert.equal(Object.keys(JSON.parse(fs.readFileSync(`${file}.seen`, "utf8"))).length <= 512, true);
+});

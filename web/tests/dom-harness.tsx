@@ -80,6 +80,8 @@ export async function renderInDom(node: ReactNode): Promise<Mounted> {
   document.body.appendChild(container);
   const root = createRoot(container);
   const queryClient = createQueryClient();
+  // Mutation cache timers must not outlive the isolated test tree.
+  queryClient.setDefaultOptions({ ...queryClient.getDefaultOptions(), mutations: { retry: false, gcTime: 0 } });
   await act(async () => {
     root.render(createElement(QueryClientProvider, { client: queryClient }, node));
   });

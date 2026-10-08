@@ -1,7 +1,7 @@
 import { projectLockKey } from "./project-lock.js";
 import { randomUUID } from "node:crypto";
 import { MUTATION_QUEUE_POLICY, UPDATE_PREVIEW_TIMEOUT_MS, UPDATE_PRECHECK_TIMEOUT_MS, UPDATE_PULL_TIMEOUT_MS,
-  UPDATE_READBACK_TIMEOUT_MS, updateExchangeTimeoutMs, updateRollbackTimeoutMs, updateProgressSchema,
+  BACKUP_PHASE_TIMEOUT_MS, UPDATE_MUTATION_RESERVE_MS, UPDATE_READBACK_TIMEOUT_MS, updateExchangeTimeoutMs, updateRollbackTimeoutMs, updateProgressSchema,
   type UpdatePreviewRequest, type UpdatePreviewResponse, type UpdateStartRequest, type UpdateServicePreview,
   type UpdateProgress, type UpdatePhase, type UpdateResult, type UpdateServiceResult, type UpdateError } from "contract";
 import { AgentJobs } from "./agent-jobs.js";
@@ -17,8 +17,11 @@ export const UPDATE_PREVIEW_RETENTION_MS = 5 * 60_000;
 export type UpdateSnapshot = { preview: UpdateServicePreview; raw: RawInspect; definition: unknown; dependencies: string[] };
 export type UpdateOps = {
   prepare(selection: UpdatePreviewRequest["services"][number], actor: string | null, budget: UpdateBudget): Promise<UpdateSnapshot>;
+  estimateBackup?(snapshot: UpdateSnapshot, budget: UpdateBudget): Promise<void>;
   manifest(snapshot: UpdateSnapshot, budget: UpdateBudget): Promise<string | null>;
   pull(snapshot: UpdateSnapshot, budget: UpdateBudget): Promise<{ imageId: string; digest: string | null }>;
+  backup?(snapshot: UpdateSnapshot, budget: UpdateBudget, cancelled: () => boolean): Promise<string>;
+  resume?(snapshot: UpdateSnapshot, budget: UpdateBudget): Promise<RawInspect>;
   exchange(snapshot: UpdateSnapshot, imageId: string, budget: UpdateBudget, verify: () => void, beginExchange: () => void): Promise<RawInspect>;
   rollback(snapshot: UpdateSnapshot, budget: UpdateBudget): Promise<RawInspect>;
   read(snapshot: UpdateSnapshot, budget: UpdateBudget): Promise<RawInspect>;
@@ -49,8 +52,10 @@ export class UpdateRunner {
   constructor(private readonly jobs: AgentJobs, private readonly locks: KeyedMutex, private readonly ops: UpdateOps,
     private readonly now = Date.now) {}
   async preview(request: UpdatePreviewRequest, actor: string | null, budget = new UpdateBudget(UPDATE_PREVIEW_TIMEOUT_MS)): Promise<UpdatePreviewResponse> {
+    const snapshots: UpdateSnapshot[] = [];
     const services = await budget.run(() => Promise.all(request.services.map(async (selection) => {
       const snapshot = await this.ops.prepare(selection, actor, budget);
+      snapshots.push(snapshot);
       const preview = snapshot.preview;
       if (!preview.blocker) {
         try { preview.offeredDigest = await this.ops.manifest(snapshot, budget); }
@@ -59,6 +64,10 @@ export class UpdateRunner {
       }
       return preview;
     })));
+    await Promise.all(snapshots.filter((snapshot) => snapshot.preview.backup).map(async (snapshot) => {
+      try { await this.ops.estimateBackup?.(snapshot, new UpdateBudget(UPDATE_PREVIEW_TIMEOUT_MS / 12)); }
+      catch { for (const mount of snapshot.preview.mounts) if (snapshot.preview.backup!.mounts.some((selected) => selected.sourceId === mount.sourceId)) mount.estimatedBytes = null; }
+    }));
     const response: UpdatePreviewResponse = { previewId: randomUUID(), target: request.target, digestSource: "registry-manifest", services };
     for (const [id, value] of this.previews) if (this.now() - value.at >= UPDATE_PREVIEW_RETENTION_MS) this.previews.delete(id);
     if (this.previews.size >= 64) this.previews.delete(this.previews.keys().next().value!);
@@ -95,6 +104,7 @@ export class UpdateRunner {
     const resultFor = (s: UpdateSnapshot) => results.find((r) => same(r.target, s.preview.target))!;
     const lockKey = projectLockKey(request.target.kind === "container" ? { containerName: request.target.containerName } : { projectName: request.target.projectName });
     const execute = async (): Promise<UpdateResult> => {
+      const backupStopped = new Set<UpdateSnapshot>();
       const snapshots: UpdateSnapshot[] = []; const exchanged: UpdateSnapshot[] = []; const images = new Map<UpdateSnapshot, string>();
       let failure: UpdateResult["updateError"] = null; let rollbackError: UpdateError | null = null; let current: UpdateSnapshot | null = null;
       let finishIntent = () => {};
@@ -129,7 +139,6 @@ export class UpdateRunner {
           for (const snapshot of ordered) {
             const image = images.get(snapshot); if (!image) continue;
             current = snapshot;
-            // Non-null backup requests are rejected before any mutation.
             if (cancelled && !progress.firstExchangeStarted) break;
             const ms = updateExchangeTimeoutMs(snapshot.preview.startDeadlineSeconds);
             phase("precheck", snapshot, UPDATE_PRECHECK_TIMEOUT_MS);
@@ -138,6 +147,18 @@ export class UpdateRunner {
             if (fresh.preview.blocker || fresh.preview.definitionHash !== snapshot.preview.definitionHash
               || !same(fresh.preview.expectedContainer, snapshot.preview.expectedContainer)) throw new UpdateFailure("state-changed");
             if (cancelled && !progress.firstExchangeStarted) break;
+            if (snapshot.preview.backup) {
+              phase("backup", snapshot, BACKUP_PHASE_TIMEOUT_MS);
+              if (snapshot.preview.backup.mode === "stop") backupStopped.add(snapshot);
+              if (!this.ops.backup) throw new UpdateFailure("backup-incomplete");
+              try {
+                resultFor(snapshot).backupId = await this.ops.backup(snapshot, new UpdateBudget(BACKUP_PHASE_TIMEOUT_MS), () => cancelled && !progress.firstExchangeStarted);
+              } catch (error) {
+                if (error instanceof UpdateFailure && error.code === "update-phase-deadline-exceeded") throw new UpdateFailure("backup-deadline-exceeded");
+                throw error;
+              }
+              if (cancelled && !progress.firstExchangeStarted) throw new UpdateCancelled();
+            }
             const budget = new UpdateBudget(ms);
             const raw = await budget.run(() => this.ops.exchange(snapshot, image, budget, () => {
               const deadline = progress.phaseDeadlineAt; phase("verify", snapshot, Math.max(1, Date.parse(deadline) - this.now()));
@@ -158,7 +179,7 @@ export class UpdateRunner {
           Object.assign(result, { state: runtimeStateOf(raw), imageId: raw.Image ?? null });
         }
       } catch (error) {
-        failure = error instanceof UpdateCancelled ? null : updateFailureCode(error);
+        failure = error instanceof UpdateCancelled || cancelled && !progress.firstExchangeStarted ? null : updateFailureCode(error);
         if (current && failure) Object.assign(resultFor(current), { outcome: "failed", updateError: failure });
         for (const snapshot of [...exchanged].reverse()) {
           const ms = updateRollbackTimeoutMs(snapshot.preview.startDeadlineSeconds); phase("rollback", snapshot, ms);
@@ -173,6 +194,18 @@ export class UpdateRunner {
           }
         }
       } finally {
+        for (const snapshot of backupStopped) {
+          if (exchanged.includes(snapshot)) continue;
+          phase("resume", snapshot, UPDATE_MUTATION_RESERVE_MS);
+          try {
+            const resume = this.ops.resume ?? (async () => { throw new UpdateFailure("resume-failed"); });
+            const raw = await resume(snapshot, new UpdateBudget(UPDATE_MUTATION_RESERVE_MS));
+            resultFor(snapshot).state = runtimeStateOf(raw);
+          } catch {
+            failure ??= "resume-failed";
+            Object.assign(resultFor(snapshot), { outcome: "failed", updateError: failure, resumeError: "resume-failed" });
+          }
+        }
         const readBudget = new UpdateBudget(UPDATE_READBACK_TIMEOUT_MS);
         if (failure) for (const snapshot of snapshots) {
           try {

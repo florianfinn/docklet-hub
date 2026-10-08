@@ -1,6 +1,7 @@
 import path from "node:path";
 import { createHash } from "node:crypto";
 import type { FileAccessError, FileSource, MountSource } from "contract";
+import { stopIntentTarget } from "./stop-intent.js";
 import { isBlockedName } from "./file-names.js";
 import type { RawInspect, RawVolume } from "./engine-model.js";
 
@@ -106,7 +107,7 @@ export async function resolveFileSources(input: {
       target: kind === "project" && absolute && mount.Source ? path.posix.join(mount.Destination, path.relative(path.resolve(mount.Source), absolute)) : mount.Destination, readOnly, shared: ownership === "shared", protection, ownership, readable, writable,
       writeBlocker: writeBlocker, estimatedBytes, backupEligible: protection === "none" && readable,
       restoreEligible: writable,
-      sourceId: createHash("sha256").update(JSON.stringify([input.containerId, mount.Type, mount.Source, mount.Name, mount.Destination, absolute])).digest("hex")
+      sourceId: createHash("sha256").update(JSON.stringify([stopIntentTarget(input.inspect), mount.Type, mount.Type === "volume" ? mount.Name : mount.Source, mount.Destination, absolute])).digest("hex")
     } });
   }
   const expanded: ResolvedFileSource[] = [];

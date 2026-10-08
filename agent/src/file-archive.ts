@@ -63,6 +63,18 @@ export class FileArchive {
     }
     return stat;
   }
+  async restoreBoundary(target: string): Promise<void> {
+    await this.checked(target, true);
+    const parts = target.split("/").filter(Boolean);
+    for (let index = 0; index < parts.length; index++) {
+      const stat = await this.engine.statArchive(this.scope.containerId, "/" + parts.slice(0, index + 1).join("/"));
+      // Missing descendants can be created by earlier validated directory entries.
+      if (!stat) return;
+      if (stat.linkTarget || (stat.mode & 0x08000000) !== 0) throw new AccessError("path-outside");
+      if (index < parts.length - 1 && (stat.mode & 0x80000000) === 0) throw new AccessError("wrong-kind");
+      if (index === parts.length - 1 && (stat.mode & 0x8f280000) !== 0 && (stat.mode & 0x80000000) === 0) throw new AccessError("wrong-kind");
+    }
+  }
   async download(target: string) {
     try {
       const stat = await this.stat(target);

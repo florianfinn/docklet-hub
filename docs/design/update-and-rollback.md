@@ -198,7 +198,13 @@ auflösen lässt; der betroffene Austausch gilt dann als fehlgeschlagen.
 Die Erkennung unterbrochener Updates läuft unabhängig vom Agent-Start und
 wiederholt Fehler mit Backoff bis zum ersten erfolgreichen Durchlauf.
 Bis dahin werden neue Update-Starts mit `update-rollback-unavailable` abgelehnt;
-die Selbstheilung lässt Journal-Ziele aus. Ein unlesbares Journal wird mit
+die Selbstheilung lässt Journal-Ziele aus. Solange das Journal unlesbar ist,
+lässt sie alle Ziele aus. Wiederholte Recovery-Audits derselben Fehlerklasse
+werden auf höchstens einen Eintrag je 15 Minuten begrenzt. Ein beschädigter Erkennungsverlauf (`update-pending.json.seen`) wird mit
+Dateiname im Log beiseitegelegt; höchstens drei solcher Dateien und 512
+Erkennungsschlüssel bleiben erhalten. Der Journal-Vorfall verwendet
+`@update-journal`, das kein gültiger Docker-Containername ist.
+Ein unlesbares Journal wird mit
 Zeitstempel und Rechten 0600 beiseitegelegt und als Vorfall gemeldet.
 Die Erkennung berücksichtigt nur Journal-Einträge oder bekannte Registry-Ziele.
 Sie erhält die Ursache eines offenen Vorfalls und ergänzt allenfalls Kontext.
@@ -279,9 +285,12 @@ Update-Abnahme und dauerhafte Betriebsüberwachung nicht vermischt.
 `contract/src/agent/update-deadlines.ts` führt eigene Update-Fristen, unabhängig
 von den Restart-Fristen. Dies sind begrenzte Produktbudgets, keine gemessenen
 Durchsatzgarantien. Die synchrone Vorschau fragt die Registry-Manifeste parallel
-ab und hat insgesamt 60 Sekunden (`UPDATE_PREVIEW_TIMEOUT_MS`), unabhängig von
-der Zahl der Services. Sie liegt damit deutlich unter der 760-s-Hub-Frist für
-Laufzeitaktionen. Die Vorprüfung im gestarteten Agent-Auftrag erhält 60 Sekunden je Service;
+ab und erhält dafür 60 Sekunden (`UPDATE_PREVIEW_TIMEOUT_MS`), unabhängig von
+der Zahl der Services. Danach erhalten ausdrücklich gewählte Mounts höchstens
+5 weitere Sekunden für die Umfangsermittlung; die Services werden parallel
+ermittelt. Die Vorschau benötigt somit höchstens 65 Sekunden und liegt unter
+der 760-s-Hub-Frist für Laufzeitaktionen. Die Web-Vorschau setzt keine
+kürzere eigene Abfragefrist. Die Vorprüfung im gestarteten Agent-Auftrag erhält 60 Sekunden je Service;
 Pull erhält 900 Sekunden je Service, um große Images bei langsamer Verbindung
 zuzulassen. Eine Datenkopie erhält 3.600 Sekunden je Service. Größere Datenmengen,
 die diese Frist überschreiten, benötigen ein gesondertes Sicherungsverfahren.
@@ -406,6 +415,45 @@ möglich ist; ein Wiederanlauffehler wird zusätzlich gemeldet. Auch ein später
 Platzfehler während der Kopie darf keinen Austausch auslösen. So bleibt die
 gewählte Sicherung eine Vorbedingung des Auftrags.
 
+Der Agent protokolliert den Vorzustand vor einem Daten-Stopp in einem privaten
+Journal. Nach einem Agent-Neustart stellt er diesen Laufzustand wieder her und
+meldet den unterbrochenen Lauf; ein begonnenes Restore wird nicht automatisch
+erneut entpackt. Bis zur Recovery bleiben Starts und Selbstheilung für betroffene
+Ziele gesperrt. Das Datenjournal enthält keine Definition und keine Dateiinhalte.
+
+Die Sicherung erhält reguläre Dateien, Verzeichnisse und relative Symlinks,
+deren Ziele lexikalisch innerhalb der Mount-Wurzel bleiben. Symlinks werden nie
+verfolgt. Absolute und ausbrechende Linkziele, Hardlinks ohne reguläres Ziel im
+Archiv sowie Geräte, FIFOs und Sockets werden ausgelassen; `metadata.json`
+vermerkt unter `skipped` jeweils Quelle, Pfad und Grund. Lange Linkziele werden
+mit GNU-Linkmetadaten erhalten; Dateipfade müssen im ustar-Namensbereich liegen.
+
+Beim sichtbaren Restore werden interne Symlinks erst nach allen regulären
+Dateien angelegt. Hardlinks werden als reguläre Kopien ihres gepinnten Ziels
+wiederhergestellt. Kein Archiv darf einen Link als Elternverzeichnis verwenden;
+ausbrechende Links und Spezialdateien werden bei der Vorprüfung abgelehnt.
+Die Deskriptorprüfung folgt auch bestehenden Links niemals. Beim Docker-PUT
+werden Links ausgelassen, weil dieser Weg keine gepinnten Zieldeskriptoren
+bietet. Eine private Datei `restore-skipped-<Quellenschlüssel>.json` hält die
+Auslassungen des letzten erfolgreichen Restore je Quelle fest. Vertrag 13 hat
+kein geeignetes Feld für Auslassungszahlen; diese bleiben in den privaten
+Metadaten und werden nicht als Fehler oder Archivgröße umgedeutet.
+
+Die Image-Vorschau liest keine Mount-Archive ohne ausdrücklich gewählte
+Sicherung. Erst nach den Manifestprüfungen bekommen gewählte Mounts ein eigenes
+Umfangsbudget von höchstens fünf Sekunden pro Service. Ein unbekannter Umfang
+bleibt `estimatedBytes: null`; nur die Sicherungsauswahl des Mounts ist damit
+nicht bestätigbar. Das Update ohne Sicherung bleibt möglich. Vor der tatsächlichen
+Kopie wird der Umfang der gewählten Mounts erneut gestreamt ermittelt und die
+Platzreserve vor und während der Kopie geprüft.
+
+Offene Journaleinträge sperren ihr Ziel laufend, auch nach der Start-Recovery.
+Ein neuer Datenlauf darf den gespeicherten Vorzustand nicht ersetzen. Nach einem
+Wiederanlauffehler wird Recovery erneut gestartet; sie wartet auf das Ende
+aktiver Aufträge und prüft den Eintrag nach Erwerb seiner Sperre erneut. Erst
+nach erfolgreichem Wiederanlauf und Abschluss des Eintrags wird das Ziel frei.
+Eine Vorfallsquittierung ersetzt keinen Journalabschluss.
+
 ## Gesonderter Restore
 
 Restore ist eine eigene, gesondert bestätigte Aktion als Agent-Auftrag. Seine
@@ -433,6 +481,38 @@ Verwaltungsgrenzen wie beim Update gelten bei jedem Restore-Einstieg.
 Geteilte Quellen, Docker-Socket, Host-Systempfade, Agent-Betriebsverzeichnisse
 und das Sicherungsverzeichnis sind als Restore-Ziele gesperrt. Auch bei unklarer
 Zuordnung einer möglichen geteilten Quelle ist Restore-Schreiben gesperrt.
+Beim sichtbaren Restore werden Modus und numerische UID/GID regulärer Dateien,
+Hardlink-Kopien sowie neuer und bestehender Verzeichnisse geprüft hergestellt.
+Die Mount-Wurzel bleibt derselbe Verzeichnis-Inode; nur ihre Metadaten ändern
+sich. Verzeichnisrechte werden nach ihren Kindern gesetzt, die Mount-Wurzel
+zuletzt. Eigentümer werden vor dem Modus gesetzt, da `chown` Set-ID-Bits löschen
+kann. Verzeichnisdeskriptoren werden nicht für den gesamten Lauf offen gehalten.
+
+Die Mount-Wurzel wird ausschließlich über ihren eigenen Deskriptor behandelt;
+fehlende Rechte führen zu `restore-extract-failed`. Dateimounts behalten beim
+Schreiben über diesen Deskriptor ebenfalls ihren Inode. Ohne sichtbaren
+Deskriptor müssen die Wurzelmetadaten bereits dem Archiv entsprechen: PUT
+adressiert die Mount-Wurzel selbst und enthält nur ihre Kinder, keinen
+Wurzelheader. Abweichende Wurzelrechte werden vor und nach PUT geprüft und
+führen zu einem klaren Fehler.
+
+Für Untereinträge ist ein benannter Archiv-PUT bei fehlenden lokalen Rechten
+nur unter dem Schutz beschreibbarer Mounts aus dem Dateizugriff erlaubt. Ein
+frischer Container-Inspect prüft diesen Schutz erneut. Unmittelbar vor PUT
+werden alle Pfadkomponenten über die festgehaltene Deskriptorkette ohne
+Symlink-Folgen wieder geöffnet und mit ihren Inodes verglichen. Nach PUT
+werden Kette, Ziel-Inode, Eigentümer und Modus geprüft. Ein Bindungswechsel
+führt zusätzlich zu einem Vorfall. Quelle und Pfad stehen privat in
+`restore-failure.json`. Bestehende reguläre Dateien erhalten keinen solchen
+Ausweichweg: Moby ersetzt ihren Inode. Bestehende Verzeichnisse bleiben erhalten;
+Moby [führt sie zusammen und setzt Eigentümer und Modus](https://github.com/moby/moby/blob/v27.5.1/pkg/archive/archive.go#L691).
+Zwischen der letzten Prüfung und der Pfadauflösung durch Docker bleibt wie
+bei Archive-Schreibzugriffen aus dem Dateizugriff ein nicht atomar schließbares
+Fenster. Ein später erkannter Tausch kann bereits Daten verändert haben; der
+Vorfall ist keine Rücknahme dieser Änderung. Symlinks
+haben unter Linux den festen Modus 0777; ein davon abweichender Archivmodus
+führt beim sichtbaren Restore zum Fehler. Sie werden niemals durchschrieben.
+
 Agentenseitige Pfad-, Symlink- und Rechteprüfungen gelten auch beim Entpacken; ein Archiv darf
 keine Daten außerhalb seiner bestätigten Ziele verändern. Der gestoppte
 Container allein ist keine Berechtigung zum Schreiben.

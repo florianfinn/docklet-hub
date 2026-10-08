@@ -3,7 +3,7 @@ import { TAR_BLOCK } from "./tar.js";
 
 export type ArchiveEntry = {
   name: string; kind: "file" | "directory" | "symlink" | "other";
-  size: number; changedAt: number; mode: number; uid: number; gid: number; linkTarget: string; content: Buffer;
+  tarType?: string; size: number; changedAt: number; mode: number; uid: number; gid: number; linkTarget: string; content: Buffer;
 };
 function string(block: Buffer, start: number, size: number): string {
   const bytes = block.subarray(start, start + size);
@@ -49,7 +49,7 @@ export function archiveHeader(block: Buffer, extensions: Record<string, string> 
     if (!/^[0-9]+$/.test(extensions[key]) || !Number.isSafeInteger(value) || value > 0xffffffff) throw new Error("not-readable");
     return value;
   };
-  const entry: ArchiveEntry = { name, size, kind: flag === "5" ? "directory" : flag === "2" ? "symlink" : flag === "0" || flag === "" ? "file" : "other",
+  const entry: ArchiveEntry = { name, size, tarType: flag, kind: flag === "5" ? "directory" : flag === "2" ? "symlink" : flag === "0" || flag === "" ? "file" : "other",
     changedAt: number(block, 136, 12), mode: number(block, 100, 8), uid: owner("uid", 108), gid: owner("gid", 116),
     linkTarget: extensions.linkpath ?? string(block, 157, 100), content: Buffer.alloc(0) };
   return { flag, size, entry };
@@ -76,7 +76,7 @@ export function archiveEntries(archive: Buffer): ArchiveEntry[] {
     const name = (extensions.path ?? [prefix, string(block, 0, 100)].filter(Boolean).join("/")).replace(/\/$/, "");
     if (!name || name.startsWith("/") || hasPathControls(name) || name.includes("\\") || name.split("/").some((part) => part === ".." || part === "")) throw new Error("path-outside");
     if (extensions.size && Number(extensions.size) !== size) throw new Error("not-readable");
-    entries.push({ name, size, kind: flag === "5" ? "directory" : flag === "2" ? "symlink" : flag === "0" || flag === "" ? "file" : "other",
+    entries.push({ name, size, tarType: flag, kind: flag === "5" ? "directory" : flag === "2" ? "symlink" : flag === "0" || flag === "" ? "file" : "other",
       changedAt: number(block, 136, 12), mode: number(block, 100, 8), uid: number(block, 108, 8), gid: number(block, 116, 8),
       linkTarget: extensions.linkpath ?? string(block, 157, 100), content });
     extensions = {};

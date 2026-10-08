@@ -131,3 +131,30 @@ export async function saveUpdateSetting(hostId: string, containerId: string, tar
   const path = `/api/hosts/${encodeURIComponent(hostId)}/containers/${encodeURIComponent(containerId)}/update-settings`;
   return parseResponse(path, updateContainerSettingsSchema, await putJson(path, { target, settings }));
 }
+
+import { backupListResponseSchema, restorePreviewResponseSchema, restoreStartResponseSchema,
+  fileSourcesResponseSchema, type RestorePreviewRequest, type RestoreStartRequest } from "contract";
+export async function fetchBackups(host: string, id: string) {
+  const path = `/api/hosts/${encodeURIComponent(host)}/containers/${encodeURIComponent(id)}/backups`;
+  return parseResponse(path, backupListResponseSchema, await request(path));
+}
+export async function fetchRestoreSources(host: string, id: string) {
+  const path = `/api/hosts/${encodeURIComponent(host)}/containers/${encodeURIComponent(id)}/file-sources`;
+  return parseResponse(path, fileSourcesResponseSchema, await request(path));
+}
+export async function previewRestore(host: string, body: RestorePreviewRequest) {
+  const path = `/api/hosts/${encodeURIComponent(host)}/restore-previews`;
+  return parseResponse(path, restorePreviewResponseSchema, await request(path, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body)
+  }));
+}
+export async function startRestore(host: string, body: RestoreStartRequest) {
+  const path = `/api/hosts/${encodeURIComponent(host)}/restores`;
+  return parseResponse(path, restoreStartResponseSchema, await request(path, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body)
+  }));
+}
+export async function fetchRestoreJobs(host: string, signal?: AbortSignal) {
+  const path = `/api/hosts/${encodeURIComponent(host)}/jobs?kind=restore`;
+  return parseResponse(path, agentJobsResponseSchema, await request(path, { signal }));
+}

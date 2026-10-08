@@ -17,15 +17,18 @@ export class UpdateRecoveryController {
   }) {}
   isReady(): boolean { return this.ready; }
   blocks(target: StopIntentTarget | null): boolean {
-    if (this.ready || !target) return false;
+    if (!target) return false;
+    try {
+      const pending = this.deps.pending();
+      if (this.ready) this.targets = pending;
+      else this.targets = [...new Map([...this.targets, ...pending].map((value) => [JSON.stringify(value), value])).values()];
+    } catch { this.unknownJournal = true; return true; }
     if (this.unknownJournal) return true;
-    try { this.targets = [...new Map([...this.targets, ...this.deps.pending()].map((value) => [JSON.stringify(value), value])).values()]; }
-    catch { this.unknownJournal = true; return true; }
     return this.targets.some((value) => JSON.stringify(value) === JSON.stringify(target));
   }
   start(): void {
-    if (this.running || this.ready || this.stopped) return;
-    this.running = true;
+    if (this.running || this.stopped) return;
+    this.ready = false; this.running = true;
     void this.attempt();
   }
   stop(): void { this.stopped = true; if (this.timer) clearTimeout(this.timer); this.timer = null; }
@@ -33,7 +36,9 @@ export class UpdateRecoveryController {
     try {
       try { this.targets = [...new Map([...this.targets, ...this.deps.pending()].map((value) => [JSON.stringify(value), value])).values()]; } catch { this.unknownJournal = true; }
       await this.deps.recover();
-      this.ready = true;
+      this.targets = this.deps.pending();
+      if (this.targets.length) throw new Error("recovery-pending");
+      this.unknownJournal = false; this.ready = true; this.running = false; this.retry = UPDATE_RECOVERY_RETRY_MS;
     } catch (error) {
       const delay = this.retry;
       try { this.deps.failed(error, delay); }

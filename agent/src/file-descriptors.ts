@@ -35,6 +35,7 @@ export async function openDescriptor(root: string, base: string, relative: strin
   const absolute = await hostBoundary(root, base, relative, policy, writing);
   let handle = await fs.promises.open(base, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
   try {
+    const components = [{ absolute: path.resolve(base), stat: await handle.stat() }];
     const segments = path.relative(base, absolute).split(path.sep).filter(Boolean);
     for (const [index, segment] of segments.entries()) {
       const finalFile = index === segments.length - 1 && kind === "file";
@@ -43,6 +44,7 @@ export async function openDescriptor(root: string, base: string, relative: strin
         (finalFile ? 0 : fs.constants.O_DIRECTORY));
       await handle.close();
       handle = next;
+      components.push({ absolute: path.join(base, ...segments.slice(0, index + 1)), stat: await handle.stat() });
     }
     const pinned = `/proc/self/fd/${handle.fd}`;
     const real = await fs.promises.realpath(pinned);
@@ -50,12 +52,29 @@ export async function openDescriptor(root: string, base: string, relative: strin
     const stat = await handle.stat();
     if (kind === "file" ? !stat.isFile() : !stat.isDirectory()) throw new DescriptorError("wrong-kind");
     if (!sameFile(stat, await fs.promises.lstat(absolute))) throw new DescriptorError("file-replaced");
-    return { handle, pinned, absolute, stat };
+    return { handle, pinned, absolute, stat, components };
   } catch (error) { await handle.close(); throw error; }
 }
 export type OpenDescriptor = Awaited<ReturnType<typeof openDescriptor>>;
 export async function verifyDescriptor(entry: OpenDescriptor) {
   if (!sameFile(entry.stat, await fs.promises.lstat(entry.absolute))) throw new DescriptorError("file-replaced");
+}
+
+// Reopen every component without following links and compare it to the pinned chain.
+export async function verifyDescriptorPath(entry: OpenDescriptor) {
+  const first = entry.components[0];
+  let handle = await fs.promises.open(first.absolute, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW);
+  try {
+    if (!sameFile(first.stat, await handle.stat())) throw new DescriptorError("file-replaced");
+    for (const component of entry.components.slice(1)) {
+      const directory = component.stat.isDirectory();
+      const next = await fs.promises.open(path.join(`/proc/self/fd/${handle.fd}`, path.basename(component.absolute)),
+        fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK | (directory ? fs.constants.O_DIRECTORY : 0));
+      await handle.close(); handle = next;
+      if (!sameFile(component.stat, await handle.stat())) throw new DescriptorError("file-replaced");
+    }
+    if (!sameFile(entry.stat, await handle.stat()) || !sameFile(entry.stat, await entry.handle.stat())) throw new DescriptorError("file-replaced");
+  } finally { await handle.close(); }
 }
 
 export async function canonicalPolicy(policy: SourcePolicy): Promise<SourcePolicy> {

@@ -40,7 +40,6 @@ export const backupEntrySchema = z.object({
   archives: z.array(backupArchiveSchema).check(z.minLength(1))
 });
 export type BackupEntry = z.infer<typeof backupEntrySchema>;
-export const backupListRequestSchema = z.object({ target: stopIntentTargetSchema });
 export const backupListResponseSchema = z.object({
   target: stopIntentTargetSchema, backups: z.array(backupEntrySchema).check(z.maxLength(BACKUP_RETENTION_COUNT))
 });
@@ -73,7 +72,6 @@ export const restoreResultSchema = z.object({
 export type RestoreResult = z.infer<typeof restoreResultSchema>;
 export type BackupMode = z.infer<typeof backupModeSchema>;
 export type BackupArchive = z.infer<typeof backupArchiveSchema>;
-export type BackupListRequest = z.infer<typeof backupListRequestSchema>;
 export type BackupListResponse = z.infer<typeof backupListResponseSchema>;
 export type RestorePreviewRequest = z.infer<typeof restorePreviewRequestSchema>;
 export type RestorePreviewResponse = z.infer<typeof restorePreviewResponseSchema>;

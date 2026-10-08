@@ -26,11 +26,13 @@ export function registerUpdateRoutes(router: Router, options: {
   const service = createUpdatesService({ pool: options.pool,
     openHost: (ref, writing) => openHostAccess({ hosts, probe }, ref, writing),
     openContainer: (ref, writing) => openContainerAccess({ hosts, probe }, ref, writing) });
-  const handler = (operation: "preview" | "start" | "list" | "progress" | "cancel" | "setting") =>
+  const handler = (operation: "preview" | "start" | "list" | "progress" | "cancel" | "setting" | "backups" | "restorePreview" | "restoreStart") =>
     withSession(options.auth, async (request, response, user) => {
       response.setHeader("Cache-Control", "no-store");
       const ref = { hostId: String(request.params.hostId), userId: user.id };
       try {
+        if (operation === "backups") { response.json(await service.backups({ ...ref, containerId: String(request.params.containerId) })); return; }
+        if (operation === "restorePreview" || operation === "restoreStart") { response.json(await service[operation](ref, request.body)); return; }
         if (operation === "preview" || operation === "start") { response.json(await service[operation](ref, request.body)); return; }
         if (operation === "progress" || operation === "cancel") {
           response.json(await service[operation](ref, String(request.params.jobId))); return;
@@ -50,6 +52,9 @@ export function registerUpdateRoutes(router: Router, options: {
         response.json(await service.list(ref, query.data));
       } catch (error) { rejection(error, response); }
     });
+  router.get("/hosts/:hostId/containers/:containerId/backups", requireAdmin(options.auth), handler("backups"));
+  router.post("/hosts/:hostId/restore-previews", requireAdmin(options.auth), handler("restorePreview"));
+  router.post("/hosts/:hostId/restores", requireAdmin(options.auth), handler("restoreStart"));
   router.post("/hosts/:hostId/update-previews", requireAdmin(options.auth), handler("preview"));
   router.post("/hosts/:hostId/updates", requireAdmin(options.auth), handler("start"));
   router.get("/hosts/:hostId/jobs", requireAdmin(options.auth), handler("list"));

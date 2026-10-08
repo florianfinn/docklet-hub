@@ -113,3 +113,14 @@ test("a local bind-backed volume uses its driver source without exposing Docker 
     assert.equal(entries[2].source.writable, expected === "none");
   }
 });
+
+test("R9/K20: source IDs survive container replacement for binds and named volumes", async () => {
+  const original = fixture();
+  original.inspect.Config!.Labels!["com.docker.compose.project"] = "demo";
+  const before = await resolveFileSources(original);
+  const inspect = { ...original.inspect, Id: "replacement" };
+  const after = await resolveFileSources({ ...original, containerId: inspect.Id, inspect, containers: [inspect] });
+  assert.deepEqual(after.map((item) => item.source.sourceId), before.map((item) => item.source.sourceId));
+  const moved = await resolveFileSources({ ...original, inspect: { ...inspect, Name: "/other", Config: { Labels: { "com.docker.compose.project": "other", "com.docker.compose.service": "web" } } } });
+  assert.equal(moved.some((item, index) => item.source.sourceId === before[index].source.sourceId), false);
+});

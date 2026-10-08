@@ -1,0 +1,47 @@
+import test, { after } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { UpdateBudget } from "./update-budget.js";
+const base = fs.mkdtempSync(path.join(os.tmpdir(), "data-live-recovery-"));
+Object.assign(process.env, { DOCKER_AGENT_SECRET: "s".repeat(64), DOCKER_AGENT_BIND_BASE_PATH: base,
+  DOCKER_AGENT_REGISTRY_FILE: path.join(base, "registry.json"), DOCKER_AGENT_AUDIT_FILE: path.join(base, "audit.jsonl"),
+  DOCKER_AGENT_MONITOR_FILE: path.join(base, "monitor.json") });
+const { engine, registry, selfHealingState, selfHealingConfig } = await import("./runtime/state.js");
+const { updateRecovery, recoveryBlocksHealing } = await import("./runtime/update-recovery.js");
+const { updateRuntimeOps, authorizeUpdateSelection } = await import("./runtime/updates.js");
+const { restoreRunner } = await import("./runtime/restores.js");
+const { dataJournal } = await import("./runtime/backups.js");
+const { selfHealing } = await import("./runtime/self-healing.js");
+after(() => { updateRecovery.stop(); selfHealing.shutdown(); fs.rmSync(base, { recursive: true, force: true }); });
+const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+test("R2: resume failure after ready blocks update, restore and healing until successful recovery", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const target = { kind: "container", containerName: "demo" } as const;
+  const original = { Id: "demo", Name: "/demo", Config: { Image: "example/app:1.0" }, State: { Running: true, Status: "running", StartedAt: "seen" } };
+  let current = { ...original, State: { ...original.State, Running: false, Status: "exited" } };
+  registry.replaceAll([{ containerId: "demo", containerName: "demo", imageRef: "example/app:1.0", allowed: true }]);
+  t.mock.method(engine, "inspect", async () => structuredClone(current));
+  t.mock.method(engine, "inspectImage", async () => null);
+  t.mock.method(engine, "listWithComposeLabels", async () => []);
+  let fail = true; let starts = 0;
+  t.mock.method(engine, "start", async () => { starts++; if (fail) throw new Error("synthetic resume failure"); current = structuredClone(original); });
+  updateRecovery.start(); await settle(); assert.equal(updateRecovery.isReady(), true);
+  dataJournal.begin(target, original, "restore"); dataJournal.extracting(target);
+  const pending = dataJournal.read();
+  await assert.rejects(updateRuntimeOps.resume!({ raw: original, preview: { target } } as Parameters<NonNullable<typeof updateRuntimeOps.resume>>[0], new UpdateBudget(60_000)));
+  const selection = { target, expectedContainer: { containerId: "demo", status: "exited", startedAt: "seen" }, startDeadlineSeconds: 120, backup: null } as const;
+  await assert.rejects(authorizeUpdateSelection(selection, null, new UpdateBudget(60_000)), { code: "state-changed" });
+  await assert.rejects(restoreRunner.preview({ target, backupId: "absent", mounts: [{ sourceId: "data" }] }, null), { code: "state-changed" });
+  for (const kind of ["backup", "restore"] as const) assert.throws(() => dataJournal.begin(target, current, kind), /data-operation-pending/);
+  assert.deepEqual(dataJournal.read(), pending);
+  selfHealing.setObserving(true); assert.equal(recoveryBlocksHealing(current), true);
+  selfHealing.reconcile(current); selfHealing.observe({ action: "die", containerId: "demo", atMs: Date.now() }, current, "unexpected");
+  await selfHealing.tick(); assert.equal(starts, 1);
+  assert.deepEqual(selfHealingState.status(selfHealingConfig.read(), true, Date.now()).budgets, []);
+  updateRecovery.start(); await settle(); assert.deepEqual(dataJournal.read(), pending); assert.equal(updateRecovery.blocks(target), true);
+  fail = false; t.mock.timers.tick(1000); await settle(); await settle();
+  assert.deepEqual(dataJournal.read(), []); assert.equal(updateRecovery.isReady(), true); assert.equal(recoveryBlocksHealing(current), false);
+  await authorizeUpdateSelection({ ...selection, expectedContainer: { ...selection.expectedContainer, status: "running" } }, null, new UpdateBudget(60_000));
+});

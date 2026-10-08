@@ -24,7 +24,7 @@ process.env.DOCKER_AGENT_AUDIT_FILE = path.join(directory, "audit.jsonl");
 process.env.DOCKER_AGENT_BIND_BASE_PATH = "/srv/apps";
 const { handleRequest } = await import("./dispatch.js");
 const { updateRecovery } = await import("./runtime/update-recovery.js");
-const { agentJobs } = await import("./runtime/updates.js");
+const { agentJobs, updateRunner } = await import("./runtime/updates.js");
 const { registry, engine, config, audit } = await import("./runtime/state.js");
 after(() => fs.rmSync(directory, { recursive: true, force: true }));
 
@@ -98,7 +98,7 @@ for (const [method, url, mutating, action, gate, body] of routes) {
     assert.equal(policy?.public, undefined);
     assert.equal((await request(method, url, body, false)).status, 401);
     const response = await request(method, url, body);
-    const reason = url === "/update-previews" || url === "/updates" ? "state-changed"
+    const reason = url === "/update-previews" || url === "/updates" || url === "/restore-previews" || url === "/restores" || url.endsWith("/backups") ? "state-changed"
       : url.startsWith("/jobs/") ? "update-job-unknown" : url === "/jobs" ? undefined : "not-implemented";
     assert.equal(response.status, reason === "state-changed" ? 409 : reason === "update-job-unknown" ? 404 : reason ? 501 : 200);
     assert.deepEqual(response.body(), reason ? { error: reason } : { active: [], recent: [] });
@@ -111,7 +111,7 @@ for (const [method, url, mutating, , gate, body] of routes.filter((route) => rou
   for (const denial of ["not-allowlisted", "externally-managed", "observe-only", "agent-read-only", "self-management-locked"] as const) {
     if (!mutating && ["observe-only", "agent-read-only", "self-management-locked"].includes(denial)) continue;
     if (denial === "externally-managed" && !DEFINITION_ACTIONS.has(gate!)) continue;
-    test(`${method} ${url}: ${denial} precedes stub`, async (t) => {
+    test(`${method} ${url}: ${denial} precedes work`, async (t) => {
       fixture(t, { observeOnly: denial === "observe-only", externallyManaged: denial === "externally-managed" },
         denial === "self-management-locked");
       if (denial === "agent-read-only") config.readOnly = true;
@@ -138,6 +138,9 @@ test("update preview and start gate every selected service", async (t) => {
   registry.replaceAll([entry, { ...entry, containerId: otherId, externallyManaged: true,
     compose: { ...entry.compose!, serviceName: "worker" } }]);
   const secondTarget = { kind: "compose", projectName: "demo", serviceName: "worker" };
+  const { UpdateFailure } = await import("./update-budget.js");
+  t.mock.method(updateRunner, "preview", async () => { throw new UpdateFailure("source-protected"); });
+  t.mock.method(updateRunner, "start", () => { throw new UpdateFailure("source-protected"); });
   const stackBody = { ...updateBody, target: { kind: "stack", projectName: "demo" }, services: [
     { ...service, target: { ...secondTarget, serviceName: "web" } },
     { ...service, target: secondTarget, expectedContainer: { ...expectedContainer, containerId: otherId } }
@@ -154,7 +157,7 @@ test("update preview and start gate every selected service", async (t) => {
     inspected.length = 0;
     const body = { ...stackBody, services: stackBody.services.map((s) => ({ ...s, backup: updatePreviewBody.services[0].backup })) };
     const response = await request("POST", url, body);
-    assert.equal(response.status, 409); assert.equal(response.body().error, "backup-incomplete");
+    assert.equal(response.status, 409); assert.equal(response.body().error, "source-protected");
     assert.deepEqual(inspected, [id, otherId]);
   }
   registry.replaceAll([entry, deniedEntry]);
@@ -165,7 +168,7 @@ test("update preview and start gate every selected service", async (t) => {
   }
 });
 
-test("invalid bodies and queries fail validation before stub; jobs target is JSON encoded", async (t) => {
+test("invalid bodies and queries fail validation before work; jobs target is JSON encoded", async (t) => {
   fixture(t);
   for (const [method, url, body] of [
     ["POST", "/updates", {}], ["POST", "/restores", {}],
@@ -227,7 +230,7 @@ for (const [url, schema, body] of [
     fixture(t, { observeOnly: true }, true);
     config.readOnly = true;
     assert.deepEqual(schema.parse(body), body);
-    assert.equal((await request("POST", url, body)).status, url === "/update-previews" ? 503 : 501);
+    assert.equal((await request("POST", url, body)).status, 503);
   });
 }
 
@@ -274,15 +277,15 @@ test("restore preview resolves compose service and rejects unknown stable target
     return { Id: containerId, Name: "/demo", Config: {}, HostConfig: {} } satisfies RawInspect;
   });
   const compose = { kind: "compose", projectName: "demo", serviceName: "web" };
-  assert.equal((await request("POST", "/restore-previews", { ...restorePreviewBody, target: compose })).status, 501);
-  assert.deepEqual(inspected, [otherId]);
+  assert.equal((await request("POST", "/restore-previews", { ...restorePreviewBody, target: compose })).status, 409);
+  assert.deepEqual(inspected, [otherId, otherId]);
   for (const unknown of [{ ...compose, serviceName: "missing" }, { ...compose, projectName: "missing" },
     { ...target, containerName: "missing" }]) {
     const response = await request("POST", "/restore-previews", { ...restorePreviewBody, target: unknown });
     assert.equal(response.status, 404);
     assert.equal(response.body().error, "not-allowlisted");
   }
-  assert.deepEqual(inspected, [otherId]);
+  assert.deepEqual(inspected, [otherId, otherId]);
 });
 
 for (const mixed of [false, true]) {

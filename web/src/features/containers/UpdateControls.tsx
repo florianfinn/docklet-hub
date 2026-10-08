@@ -1,3 +1,5 @@
+import { BackupSelection } from "./BackupSelection";
+import { BACKUP_REASON_MESSAGES } from "./backup-messages";
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "use-intl";
@@ -15,6 +17,7 @@ export function UpdateControls({ target, detail = false }: { target: LifecycleTa
   const { host, role, busy, operations } = useLifecycleState(target);
   const scope = maintenanceTarget(target); const name = targetName(target);
   const [preview, setPreview] = useState<UpdatePreviewResponse | null>(null);
+  const [selectionDirty, setSelectionDirty] = useState(false);
   const [deadline, setDeadline] = useState<string>("");
   const [error, setError] = useState<{ code: string | null } | null>(null);
   const reserved = useRef(false);
@@ -46,7 +49,7 @@ export function UpdateControls({ target, detail = false }: { target: LifecycleTa
   const foreign = targetContainers(target).some((container) => container.externalManagement !== null && container.externalManagement !== undefined);
   const blocker = runtimeBlocker(target, host, role, busy);
   const reason = (code: string | null) => {
-    const message = code === null ? undefined : UPDATE_REASON_MESSAGES[code];
+    const message = code === null ? undefined : UPDATE_REASON_MESSAGES[code] ?? BACKUP_REASON_MESSAGES[code];
     return t(message === undefined ? "updateErrorGeneric" : message);
   };
   const release = () => { if (reserved.current) { operations.update(target, { busy: false }); operations.clear(target); reserved.current = false; } };
@@ -56,12 +59,16 @@ export function UpdateControls({ target, detail = false }: { target: LifecycleTa
       target: intentTarget(container), expectedContainer: { containerId: container.id, status: container.status, startedAt: container.startedAt },
       startDeadlineSeconds: UPDATE_START_DEADLINE_SECONDS.default, backup: null
     })) });
-  }, onSuccess: setPreview, onError: (caught) => { setError({ code: errorCode(caught) }); release(); } });
+  }, onSuccess: (value) => { setPreview(value); setSelectionDirty(false); }, onError: (caught) => { setError({ code: errorCode(caught) }); release(); } });
+  const refresh = useMutation({ mutationFn: () => previewUpdate(target.hostId, { target: preview!.target,
+    services: preview!.services.map((service) => ({ target: service.target, expectedContainer: service.expectedContainer,
+      startDeadlineSeconds: service.startDeadlineSeconds, backup: service.backup })) }),
+    onSuccess: (value) => { setPreview(value); setSelectionDirty(false); }, onError: (caught) => setError({ code: errorCode(caught) }) });
   const start = useMutation({ mutationFn: async () => {
-    if (!preview || preview.services.some((service) => service.blocker || !service.offeredDigest)) throw new Error("blocked");
+    if (!preview || preview.services.some((service) => service.backup?.mounts.some((mount) => service.mounts.find((source) => source.sourceId === mount.sourceId)?.estimatedBytes === null) || service.blocker || !service.offeredDigest)) throw new Error("blocked");
     return startUpdate(target.hostId, { target: preview.target, previewId: preview.previewId, confirmed: true,
       services: preview.services.map((service) => ({ target: service.target, expectedContainer: service.expectedContainer,
-        startDeadlineSeconds: service.startDeadlineSeconds, backup: null, offeredDigest: service.offeredDigest!, definitionHash: service.definitionHash })) });
+        startDeadlineSeconds: service.startDeadlineSeconds, backup: service.backup, offeredDigest: service.offeredDigest!, definitionHash: service.definitionHash })) });
   }, onSuccess: () => { setPreview(null); reserved.current = false; ownedActive.current = true; submittedAt.current = Date.now(); operations.update(target, { busy: true, phase: "running" }); void client.invalidateQueries({ queryKey: jobsKey }); },
   onError: (caught) => { setError({ code: errorCode(caught) }); setPreview(null); release(); void client.invalidateQueries({ queryKey: jobsKey }); } });
   const cancel = useMutation({ mutationFn: () => cancelUpdate(target.hostId, active!.jobId),
@@ -70,12 +77,12 @@ export function UpdateControls({ target, detail = false }: { target: LifecycleTa
     onSuccess: () => { setDeadline(""); void client.invalidateQueries({ queryKey: settingKey }); }, onError: (caught) => setError({ code: errorCode(caught) }) });
 
   const disabled = Boolean(blocker || foreign || active || prepare.isPending || start.isPending);
-  const blockedPreview = preview?.services.some((service) => service.blocker !== null || service.offeredDigest === null);
+  const blockedPreview = preview?.services.some((service) => service.blocker !== null || service.offeredDigest === null || service.backup?.mounts.some((mount) => service.mounts.find((source) => source.sourceId === mount.sourceId)?.estimatedBytes == null));
   return <div className="space-y-2" data-update={name}>
     <Button variant="outline" className="min-h-11" aria-disabled={disabled}
       aria-label={t("updateActionFor", { target: name })} onClick={() => { if (!disabled) prepare.mutate(); }}>{t("updateAction")}</Button>
     {foreign ? <p className="text-xs">{t("updateForeign")}</p> : null}
-    {error ? <p role="alert">{reason(error.code)}</p> : null}
+    {error && !preview ? <p role="alert">{reason(error.code)}</p> : null}
     {detail && target.kind === "container" && setting.data ? <form className="flex flex-wrap gap-2 items-center"
       onSubmit={(event) => { event.preventDefault(); if (!disabled && deadline) save.mutate(); }}>
       <label>{t("updateStartDeadline")} <input type="number" min={UPDATE_START_DEADLINE_SECONDS.min} max={UPDATE_START_DEADLINE_SECONDS.max}
@@ -94,6 +101,7 @@ export function UpdateControls({ target, detail = false }: { target: LifecycleTa
       {recent.result.services.map((service) => <div key={JSON.stringify(service.target)}>
         <p>{service.target.kind === "compose" ? service.target.serviceName : service.target.containerName}: {t(UPDATE_OUTCOME_MESSAGES[service.outcome])}</p>
         {service.updateError ? <p>{t("updateFailure", { reason: reason(service.updateError) })}</p> : null}
+        {service.resumeError ? <p>{t("restoreResumeFailure", { reason: reason(service.resumeError) })}</p> : null}
         {service.rollbackError ? <p>{t("updateRollbackFailure", { reason: reason(service.rollbackError) })}</p> : null}
       </div>)}
       {recent.result.updateError ? <p>{t("updateFailure", { reason: reason(recent.result.updateError) })}</p> : null}
@@ -102,19 +110,23 @@ export function UpdateControls({ target, detail = false }: { target: LifecycleTa
       {preview ? <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogTitle>{t("updateConfirmTitle", { target: name })}</DialogTitle>
         <DialogDescription>{t("updateConfirmDescription")}</DialogDescription>
-        <p>{t("updateBackupUnavailable")}</p>
+        {error ? <p role="alert">{reason(error.code)}</p> : null}
         {preview.services.map((service) => <div key={JSON.stringify(service.target)} className="space-y-1 border-b py-2">
           <p>{service.target.kind === "compose" ? service.target.serviceName : service.target.containerName}</p>
           <p className="break-all">{t("updateCurrentDigest", { digest: service.currentDigest ?? t("updateUnknown") })}</p>
           <p className="break-all">{t("updateOfferedDigest", { digest: service.offeredDigest ?? t("updateUnknown") })}</p>
           <p>{t("updateDeadlineSeconds", { seconds: service.startDeadlineSeconds })}</p>
           <p className="break-all">{t("updateRollbackImage", { image: service.rollbackImageId ?? t("updateUnknown") })}</p>
+          <BackupSelection service={service} disabled={start.isPending || refresh.isPending} change={(backup) => {
+            setPreview({ ...preview, services: preview.services.map((item) => item === service ? { ...item, backup } : item) });
+            setSelectionDirty(true);
+          }} />
           {service.warnings.map((warning) => <p key={warning}>{t(UPDATE_REASON_MESSAGES[warning] ?? "updateDataWarning")}</p>)}
           {service.blocker ? <p role="alert">{reason(service.blocker)}</p> : null}
         </div>)}
         <DialogFooter>
           <Button variant="outline" disabled={start.isPending} onClick={() => { setPreview(null); release(); }}>{t("lifecycleCancel")}</Button>
-          <Button disabled={blockedPreview || start.isPending} onClick={() => start.mutate()}>{t("updateConfirm")}</Button>
+          <Button disabled={start.isPending || refresh.isPending || !selectionDirty && blockedPreview} onClick={() => { if (selectionDirty) refresh.mutate(); else start.mutate(); }}>{t(selectionDirty ? "backupRefreshPreview" : "updateConfirm")}</Button>
         </DialogFooter>
       </DialogContent> : null}
     </Dialog>

@@ -1,4 +1,4 @@
-import { updatePreviewRequestSchema, updateStartRequestSchema, updateTargetSchema, updateContainerSettingsSchema,
+import { restorePreviewRequestSchema, restoreStartRequestSchema, updatePreviewRequestSchema, updateStartRequestSchema, updateTargetSchema, updateContainerSettingsSchema,
   type UpdateTarget, type AgentJobsQuery } from "contract";
 import type { Pool } from "pg";
 import type { HostRouteRequest, HostRouteAccessResult, ContainerAccessRequest, ContainerAccessResult } from "../../domain/hosts/index.js";
@@ -36,6 +36,27 @@ export function createUpdatesService(deps: {
     return opened.access;
   }
   return {
+    async backups(ref: ContainerAccessRequest) {
+      const opened = await deps.openContainer(ref, "writes");
+      if (!opened.ok) {
+        if (opened.failure.kind === "agent-error") throw opened.failure.error;
+        rejectUpdate(opened.failure.status, opened.failure.error);
+      }
+      return agent.backups(opened.access.target, ref.containerId, opened.access.options);
+    },
+    async restorePreview(ref: HostRouteRequest, raw: unknown) {
+      const parsed = restorePreviewRequestSchema.safeParse(raw); if (!parsed.success) rejectUpdate(400, "invalid-request");
+      const opened = await access(ref, "writes");
+      return agent.restorePreview(opened.target, parsed.data, opened.options);
+    },
+    async restoreStart(ref: HostRouteRequest, raw: unknown) {
+      const parsed = restoreStartRequestSchema.safeParse(raw); if (!parsed.success) rejectUpdate(400, "invalid-request");
+      const opened = await access(ref, "writes");
+      await selection(ref, parsed.data.target, parsed.data.expectedContainer.containerId);
+      const setting = await readUpdateSetting(deps.pool, ref.hostId, parsed.data.target);
+      if (parsed.data.startDeadlineSeconds !== setting.startDeadlineSeconds) rejectUpdate(409, "state-changed");
+      return agent.restoreStart(opened.target, parsed.data, opened.options);
+    },
     async preview(ref: HostRouteRequest, raw: unknown) {
       const parsed = updatePreviewRequestSchema.safeParse(raw); if (!parsed.success) rejectUpdate(400, "invalid-request");
       const opened = await access(ref, "writes");

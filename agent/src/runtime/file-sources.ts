@@ -43,6 +43,11 @@ export async function fileSources(containerId: string, actor: string | null) {
   let definitions: ReturnType<typeof mountSourcesOf> = [];
   try { if (context) definitions = mountSourcesOf(await rawOps.config(context.projectDir, context.composeFileName, context.project), [context.serviceName], context.projectDir); }
   catch { /* A failed definition lookup never grants writing. */ }
+  if (!context && !gated.inspect.Config?.Labels?.["com.docker.compose.project"]) definitions = (gated.inspect.Mounts ?? [])
+    .filter((mount) => mount.Destination && ["bind", "volume"].includes(mount.Type ?? ""))
+    .map((mount) => ({ service: "", kind: mount.Type === "volume" ? "volume" : "external",
+      source: mount.Type === "volume" ? mount.Name ?? null : mount.Source ?? null, target: mount.Destination!,
+      readOnly: mount.RW === false, shared: false }));
   let containers = null;
   try { containers = await Promise.all((await engine.listContainerIds()).map((id) => engine.inspect(id))); }
   catch { /* Unknown users keep sources read-only. */ }
@@ -87,7 +92,7 @@ export async function fileSources(containerId: string, actor: string | null) {
       const singleFile = (stat.mode & 0x8f280000) === 0;
       if (singleFile) item.source.estimatedBytes = stat.size;
       if (!visibleRoot && item.source.writable && (archiveBlocked || singleFile)) Object.assign(item.source,
-        { writable: false, writeBlocker: archiveBlocked ? "source-protected" : "source-read-only" });
+        { writable: false, restoreEligible: false, writeBlocker: archiveBlocked ? "source-protected" : "source-read-only" });
     } catch {
       Object.assign(item.source, { readable: false, writable: false, backupEligible: false, restoreEligible: false, writeBlocker: "not-readable" });
     }

@@ -480,7 +480,7 @@ export {
   BACKUP_RETENTION_COUNT, BACKUP_FREE_RESERVE_BYTES, BACKUP_DIRECTORY_ENV, BACKUP_DIRECTORY_DEFAULT,
   BACKUP_DIRECTORY_MODE, BACKUP_ARCHIVE_MODE, BACKUP_DEFAULT_MODE, BACKUP_ERRORS,
   backupErrorSchema, backupModeSchema, backupOptionsSchema, backupArchiveSchema,
-  backupEntrySchema, backupListRequestSchema, backupListResponseSchema,
+  backupEntrySchema, backupListResponseSchema,
   restorePreviewRequestSchema, restorePreviewResponseSchema, restoreStartRequestSchema, restoreResultSchema
 } from "./agent/backups.js";
 export type { BackupError, BackupOptions, BackupEntry, RestoreStartRequest, RestoreResult } from "./agent/backups.js";
@@ -505,7 +505,7 @@ export type { UpdateError, UpdateWarning, UpdatePhase, UpdateOutcome, UpdateTarg
 
 export type { FileSourceSelection, FileSourcesResponse, SourceFileQuery } from "./agent/file-access.js";
 
-export type { BackupMode, BackupArchive, BackupListRequest, BackupListResponse, RestorePreviewRequest, RestorePreviewResponse } from "./agent/backups.js";
+export type { BackupMode, BackupArchive, BackupListResponse, RestorePreviewRequest, RestorePreviewResponse } from "./agent/backups.js";
 
 export type { UpdateStartDeadline, UpdateDigest, UpdateServiceSelection, UpdateJobRequest, UpdateStartResponse, UpdateCancelRequest, UpdateCancelResponse, UpdateJobResponse } from "./agent/updates.js";
 

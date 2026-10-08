@@ -25,7 +25,6 @@ export async function handleUpdatePreview(ctx: RouteContext): Promise<void> {
   await updateRoute(ctx, "update-preview", async () => {
     const budget = new UpdateBudget(UPDATE_PRECHECK_TIMEOUT_MS);
     await Promise.all(parsed.value.services.map((service) => authorizeUpdateSelection(service, ctx.actor, budget)));
-    if (parsed.value.services.some((s) => s.backup !== null)) throw new StackEndpointError(409, "backup-incomplete");
     return updateRunner.preview(parsed.value, ctx.actor, budget);
   });
 }
@@ -36,7 +35,6 @@ export async function handleUpdateStart(ctx: RouteContext): Promise<void> {
     if (!updateRecovery.isReady()) throw new UpdateFailure("update-rollback-unavailable");
     const budget = new UpdateBudget(UPDATE_PRECHECK_TIMEOUT_MS);
     await Promise.all(parsed.value.services.map((service) => authorizeUpdateSelection(service, ctx.actor, budget)));
-    if (parsed.value.services.some((s) => s.backup !== null)) throw new StackEndpointError(409, "backup-incomplete");
     return updateRunner.start(parsed.value, ctx.actor);
   });
 }

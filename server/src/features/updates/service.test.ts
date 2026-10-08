@@ -19,6 +19,9 @@ function fixture() {
   let denied = false; let containerName = "demo";
   const agent = { preview: async (_target: unknown, body: unknown) => { writes.push("preview"); return body; },
     start: async () => { writes.push("start"); return { jobId: "job" }; }, list: async () => ({ active: [], recent: [] }),
+    backups: async () => { writes.push("backups"); return { target, backups: [] }; },
+    restorePreview: async (_target: unknown, body: unknown) => { writes.push("restore-preview"); return body; },
+    restoreStart: async () => { writes.push("restore-start"); return { jobId: "restore" }; },
     progress: async () => ({ progress: null }), cancel: async () => ({ jobId: "job", accepted: true }) } as unknown as typeof agentClient;
   const service = createUpdatesService({ pool, agent,
     openHost: async (_ref, writing) => { writes.push(writing); return denied ? { ok: false, failure: { kind: "problem", status: 503, error: "host-unreachable", message: "offline" } } as HostRouteAccessResult
@@ -54,4 +57,24 @@ test("host access, body validation and current container identity precede agent 
 test("job discovery reads the agent list without a local progress table", async () => {
   const f = fixture(); assert.deepEqual(await f.service.list(ref, {}), { active: [], recent: [] });
   assert.deepEqual(f.calls, []);
+});
+
+test("backup list uses container write authorization and update forwards optional mount selection", async () => {
+  const f = fixture(); assert.deepEqual(await f.service.backups({ ...ref, containerId: "old" }), { target, backups: [] });
+  assert.deepEqual(f.writes, ["writes", "backups"]);
+  const backup = { mode: "live", mounts: [{ sourceId: "data", estimatedBytes: 4096 }] };
+  const response = await f.service.preview(ref, { target, services: [{ ...selection, backup }] }) as unknown as { services: { backup: unknown }[] };
+  assert.deepEqual(response.services[0].backup, backup);
+});
+test("restore preview and start retain stable target, confirmed mounts and configured deadline", async () => {
+  const f = fixture(); const request = { target, backupId: "backup", mounts: [{ sourceId: "data" }] };
+  assert.deepEqual(await f.service.restorePreview(ref, request), request);
+  const start = { ...request, previewId: "preview", expectedContainer: selection.expectedContainer, confirmed: true, startDeadlineSeconds: 120 };
+  assert.deepEqual(await f.service.restoreStart(ref, start), { jobId: "restore" });
+  assert.deepEqual(f.writes, ["writes", "restore-preview", "writes", "writes", "restore-start"]);
+  const denied = fixture(); denied.mismatch();
+  await assert.rejects(denied.service.restoreStart(ref, start)); assert.equal(denied.writes.includes("restore-start"), false);
+  const unconfirmed = fixture(); await assert.rejects(unconfirmed.service.restoreStart(ref, { ...start, confirmed: false }));
+  assert.deepEqual(unconfirmed.writes, []);
+  f.deadline(1800); await assert.rejects(f.service.restoreStart(ref, start));
 });

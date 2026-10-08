@@ -1,3 +1,4 @@
+import { backupListResponseSchema, restorePreviewResponseSchema, restoreStartResponseSchema, type RestorePreviewRequest, type RestoreStartRequest } from "contract";
 import { UPDATE_PRECHECK_TIMEOUT_MS, RUNTIME_TRANSPORT_RESERVE_MS, agentJobsResponseSchema, agentJobResponseSchema, updatePreviewResponseSchema, updateStartResponseSchema,
   updateCancelResponseSchema, type UpdatePreviewRequest, type UpdateStartRequest, type AgentJobsQuery } from "contract";
 import { agentGet, agentPost, AgentError, type AgentTarget, type RequestOptions } from "../../platform/agent-transport/protocol.js";
@@ -25,4 +26,15 @@ export async function progress(target: AgentTarget, id: string, options: Request
 }
 export async function cancel(target: AgentTarget, id: string, options: RequestOptions) {
   return parsed(updateCancelResponseSchema, await agentPost(target, `/jobs/${encodeURIComponent(id)}/cancel`, {}, options));
+}
+
+export async function backups(target: AgentTarget, id: string, options: RequestOptions) {
+  return parsed(backupListResponseSchema, await agentGet(target, `/containers/${encodeURIComponent(id)}/backups`, options));
+}
+export async function restorePreview(target: AgentTarget, body: RestorePreviewRequest, options: RequestOptions) {
+  return parsed(restorePreviewResponseSchema, await runtimePost(target, "/restore-previews", body, options));
+}
+export async function restoreStart(target: AgentTarget, body: RestoreStartRequest, options: RequestOptions) {
+  return parsed(restoreStartResponseSchema, await agentPost(target, "/restores", body, { ...options,
+    timeoutMs: UPDATE_PRECHECK_TIMEOUT_MS + RUNTIME_TRANSPORT_RESERVE_MS }));
 }

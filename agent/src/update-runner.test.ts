@@ -222,3 +222,40 @@ for (const key of ["self-management-locked", "externally-managed", "agent-read-o
     assert.equal(f.trace.some((s) => /exchange:|rollback:/.test(s)), false);
   });
 }
+
+for (const mode of ["stop", "live"] as const) test(`K19/K21: ${mode} backup follows all pulls directly before each exchange`, async () => {
+  const f = fixture(["web", "db"]);
+  for (const service of f.request.services) service.backup = { mode, mounts: [{ sourceId: "data", estimatedBytes: 1 }] };
+  f.ops.backup = async (snapshot) => { f.trace.push(`backup:${f.name(snapshot)}`); return `backup-${f.name(snapshot)}`; };
+  f.runner.start(await f.preview(), null);
+  const result = await f.completed;
+  assert.deepEqual(f.trace.filter((step) => /pull:|backup:|exchange:/.test(step)), ["pull:db", "pull:web", "backup:db", "exchange:db", "backup:web", "exchange:web"]);
+  assert.equal(result.services.every((service) => service.backupId !== null), true);
+});
+for (const resumeFails of [false, true]) test(`K21: backup failure resumes without exchange; resume failure=${resumeFails}`, async () => {
+  const f = fixture(); f.request.services[0].backup = { mode: "stop", mounts: [{ sourceId: "data", estimatedBytes: 1 }] };
+  f.ops.backup = async () => { throw new UpdateFailure("backup-space-insufficient"); };
+  f.ops.resume = async (snapshot) => { f.trace.push("resume"); if (resumeFails) throw new Error("synthetic"); return snapshot.raw; };
+  f.runner.start(await f.preview(), null); const result = await f.completed;
+  assert.equal(result.updateError, "backup-space-insufficient"); assert.equal(f.trace.includes("resume"), true);
+  assert.equal(f.trace.some((step) => step.startsWith("exchange:")), false);
+  assert.equal(result.services[0].resumeError, resumeFails ? "resume-failed" : null);
+});
+test("K21: stack backup failure rolls prior exchanges back and resumes the stopped service", async () => {
+  const f = fixture(["web", "db"]);
+  for (const service of f.request.services) service.backup = { mode: "stop", mounts: [{ sourceId: "data", estimatedBytes: 1 }] };
+  f.ops.backup = async (snapshot) => { if (f.name(snapshot) === "web") throw new UpdateFailure("backup-copy-failed"); return "backup"; };
+  f.ops.resume = async (snapshot) => { f.trace.push(`resume:${f.name(snapshot)}`); return snapshot.raw; };
+  f.runner.start(await f.preview(), null); assert.equal((await f.completed).outcome, "rolled-back");
+  assert.equal(f.trace.includes("rollback:db"), true); assert.equal(f.trace.includes("resume:web"), true);
+  assert.equal(f.trace.includes("exchange:web"), false);
+});
+test("K21: cancellation during backup resumes the original with no exchange", async () => {
+  const f = fixture(); f.request.services[0].backup = { mode: "stop", mounts: [{ sourceId: "data", estimatedBytes: 1 }] };
+  let jobId = "";
+  f.ops.backup = async () => { assert.equal(f.jobs.cancel(jobId), true); throw new UpdateFailure("backup-copy-failed"); };
+  f.ops.resume = async (snapshot) => { f.trace.push("resume"); return snapshot.raw; };
+  jobId = f.runner.start(await f.preview(), null).jobId; const result = await f.completed;
+  assert.equal(result.outcome, "cancelled"); assert.equal(result.updateError, null); assert.equal(f.trace.includes("resume"), true);
+  assert.equal(f.trace.includes("exchange:web"), false);
+});
