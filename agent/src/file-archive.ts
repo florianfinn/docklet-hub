@@ -42,6 +42,9 @@ export class FileArchive {
       if (protection === "agent" || protection === "unknown" || (writing && protection !== "none")) throw new AccessError("source-protected");
     }
   }
+  async mutationBoundary(target: string): Promise<{ ok: true } | ArchiveFailure> {
+    try { await this.checked(target, true); return { ok: true }; } catch (error) { return failure(error); }
+  }
   async stat(target: string, writing = false): Promise<ArchiveStat | null> {
     await this.checked(target, writing);
     // HEAD uses lstat; checking every component prevents known link escapes.

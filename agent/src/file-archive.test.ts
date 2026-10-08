@@ -134,6 +134,7 @@ test("a nested mount cannot bypass the selected source boundary or readonly mode
   const f = archiveFixture();
   const files = new FileArchive(f.engine, { ...f.scope, mounts: [...f.scope.mounts, { Type: "bind", Source: "/other", Destination: "/data/nested", RW: false }] });
   assert.deepEqual(await files.read("/data/nested/value"), { ok: false, reason: "path-outside" });
+  assert.deepEqual(await files.mutationBoundary("/data/nested/value"), { ok: false, reason: "path-outside" });
   assert.equal(f.engine.calls.length, 0);
 });
 test("independent policies remain isolated across concurrent requests", async () => {
@@ -144,11 +145,15 @@ test("independent policies remain isolated across concurrent requests", async ()
   assert.deepEqual(denied, { ok: false, reason: "backup-directory-protected" });
 });
 
-test("general file access has one backend and no host descriptor fallback or exec", async () => {
+test("content access stays on archives; descriptors serve only rename and delete without exec", async () => {
   for (const source of ["file-archive.ts", "webftp.ts", "runtime/access.ts", "routes/file-routes.ts", "file-sources.ts"]) {
     const text = await fs.readFile(new URL(source, import.meta.url), "utf8");
     assert.doesNotMatch(text, /from "node:fs(?:\/promises)?"|openBelow|writePinned|descriptorPath|execCreate/);
   }
+  const actions = await fs.readFile(new URL("visible-file-actions.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(actions, /readFile|writeFile|createReadStream|getArchive|putArchive|execCreate/);
+  const routes = await fs.readFile(new URL("routes/file-routes.ts", import.meta.url), "utf8");
+  assert.deepEqual([...routes.matchAll(/entryActions\.(\w+)\(/g)].map((match) => match[1]).sort(), ["available", "delete", "rename"]);
   await assert.rejects(fs.access(new URL("file-write.ts", import.meta.url)), { code: "ENOENT" });
 });
 

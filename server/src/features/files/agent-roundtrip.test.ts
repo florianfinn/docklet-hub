@@ -81,16 +81,15 @@ test("Dateien: Liste, Text, Speichern, Upload, Download und die drei Aktionen tr
 
   const [createFolder, rename, remove] = FILE_ACTIONS;
   await applyFileAction(agent.target, CONTAINER_ID, SHARE, { action: createFolder, path: "", name: "assets" }, options);
-  for (const command of [{ action: rename, path: "index.html", name: "start.html" }, { action: remove, path: "index.html" }]) {
-    await assert.rejects(applyFileAction(agent.target, CONTAINER_ID, SHARE, command, options), (error: unknown) => {
-      assert.equal((error as { status: number }).status, 403);
-      assert.equal((error as { detail: { error: string } }).detail.error, "not-writable");
-      return true;
-    });
-  }
-  assert.equal((await listFiles(agent.target, CONTAINER_ID, root, options)).diagnostics?.deletable, false);
-  const preserved = await downloadFile(agent.target, CONTAINER_ID, file, options);
-  assert.equal(await new Response(preserved.stream).text(), "<h1>hallo</h1>\n");
+  await applyFileAction(agent.target, CONTAINER_ID, SHARE, { action: rename, path: "index.html", name: "start.html" }, options);
+  const renamed = await downloadFile(agent.target, CONTAINER_ID, { ...root, path: "start.html" }, options);
+  assert.equal(await new Response(renamed.stream).text(), "<h1>hallo</h1>\n");
+  await applyFileAction(agent.target, CONTAINER_ID, SHARE, { action: remove, path: "start.html" }, options);
+  await applyFileAction(agent.target, CONTAINER_ID, SHARE, { action: rename, path: "assets", name: "resources" }, options);
+  await applyFileAction(agent.target, CONTAINER_ID, SHARE, { action: remove, path: "resources" }, options);
+  const after = await listFiles(agent.target, CONTAINER_ID, root, options);
+  assert.equal(after.diagnostics?.deletable, true);
+  assert.deepEqual(after.entries.map((entry) => entry.name), ["robots.txt"]);
 
   assert.deepEqual(schemaRefusals(agent), []);
 });

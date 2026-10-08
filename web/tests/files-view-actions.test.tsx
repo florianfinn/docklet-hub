@@ -307,7 +307,7 @@ test("das Löschen fragt nach und schickt vor der Bestätigung nichts", async ()
 });
 
 test("Löschen und Umbenennen sind gesperrt, wenn im Verzeichnis nicht geschrieben werden darf", async () => {
-  // Archive sources allow uploads while rename/delete remain unavailable.
+  // Sources outside the visible base allow uploads while rename/delete stay blocked.
   const server = stubHub({
     listings: {
       "": listing({
@@ -327,6 +327,8 @@ test("Löschen und Umbenennen sind gesperrt, wenn im Verzeichnis nicht geschrieb
     assert.equal(rename.disabled, true, "das Umbenennen steht offen, obwohl es am Verzeichnis scheitern wird");
     assert.ok(at("files-write-blocked") !== null, "der Sperrgrund fehlt");
     assert.equal(saysEither(de.filesWriteBlocked, en.filesWriteBlocked), true);
+    assert.equal(de.filesWriteBlocked.includes("Basispfad"), true);
+    assert.equal(en.filesWriteBlocked.includes("base path"), true);
     const nameInput = at("files-create-directory-name");
     assert.ok(nameInput instanceof HTMLInputElement);
     assert.equal(nameInput.disabled, false);

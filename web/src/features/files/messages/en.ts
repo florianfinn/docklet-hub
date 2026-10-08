@@ -195,7 +195,7 @@ export const enFiles = {
   filesDeleteSubmit: "Delete permanently",
   filesDeletePending: "Deleting …",
   filesWriteBlocked:
-    "This action is blocked for this source. The archive API cannot safely rename or delete entries without guaranteed tools in the target container.",
+    "This action is blocked for this source. Rename and delete require a source visible to the arm under its base path and write permission on the directory.",
   filesWriteUnknown:
     "Whether writing works here is unresolved — the agent could not assess this directory. The attempt still goes out; it is decided there.",
 } satisfies typeof deFiles;

@@ -229,7 +229,7 @@ export const deFiles = {
   filesDeleteSubmit: "Endgültig löschen",
   filesDeletePending: "Wird gelöscht …",
   filesWriteBlocked:
-    "Diese Aktion ist für die Quelle gesperrt. Die Archiv-API erlaubt kein sicheres Umbenennen oder Löschen ohne garantierte Werkzeuge im Zielcontainer.",
+    "Diese Aktion ist für die Quelle gesperrt. Umbenennen und Löschen benötigen eine im Arm sichtbare Quelle unter dem Basispfad und Schreibrechte am Verzeichnis.",
   filesWriteUnknown:
     "Ob hier geschrieben werden darf, ist ungeklärt — der Arm konnte dieses Verzeichnis nicht beurteilen. Der Versuch geht trotzdem hinaus; entschieden wird er dort.",
 };

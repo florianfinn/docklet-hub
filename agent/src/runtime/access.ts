@@ -15,6 +15,7 @@ import {
   containerPathFor,
   checkSharePath
 } from "../webftp.js";
+import { VisibleFileActions } from "../visible-file-actions.js";
 import { FileArchive } from "../file-archive.js";
 import {
   requiredComposeContextForFileLogs
@@ -105,6 +106,7 @@ export type WebftpPrecheck =
       shareAbsolute: string;
       writable: boolean;
       files: FileArchive;
+      entryActions: VisibleFileActions;
     }
   | { ok: false; status: number; reason: string };
 export async function checkWebftpAccess(
@@ -130,6 +132,7 @@ export async function checkWebftpAccess(
       return { ok: false, status: 409, reason: "file-replaced" };
     return { ok: true, inspect: fresh.inspect, containerName: (fresh.inspect.Name ?? "").replace(/^\//, ""),
       projectDir: sources.context?.projectDir ?? "", shareRelative: selected.source.sourceId, shareAbsolute: selected.source.target, writable: selected.source.writable,
+      entryActions: new VisibleFileActions(selected.absolute, composeBasePath, sources.policy, selected.source.writable),
       files: new FileArchive(engine, { containerId, root: selected.source.target, hostRoot: selected.absolute, policy: sources.policy, mounts: fresh.inspect.Mounts ?? [], volumeRoots: sources.volumeRoots, volumeDevices: sources.volumeDevices }) };
   }
   const result = await gate(containerId, {
@@ -188,6 +191,7 @@ export async function checkWebftpAccess(
   if (!target.ok) return { ok: false, status: 409, reason: "not-mounted" };
   return { ok: true, inspect: sources.inspect, containerName, projectDir: composeContext.projectDir,
     shareRelative: share.relative, shareAbsolute: target.absolutePath, writable: resolved.source.writable,
+    entryActions: new VisibleFileActions(share.absolute, composeBasePath, sources.policy, resolved.source.writable),
     files: new FileArchive(engine, { containerId, root: target.absolutePath, hostRoot: share.absolute, policy: sources.policy, mounts: sources.inspect.Mounts ?? [], volumeRoots: sources.volumeRoots, volumeDevices: sources.volumeDevices }) };
 }
 

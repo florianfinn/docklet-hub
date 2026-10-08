@@ -189,7 +189,7 @@ export async function handleFileList(ctx: ContainerRouteContext): Promise<void> 
     path: checked.relative,
     entries: listing.list.entries,
     truncated: listing.list.truncated,
-    diagnostics: { ...listing.diagnostics, uploadable: before.writable }
+    diagnostics: { ...listing.diagnostics, deletable: await before.entryActions.available(checked.relative), uploadable: before.writable }
   });
   return;
 }
@@ -479,8 +479,19 @@ async function handleFileActionUnlocked(ctx: ContainerRouteContext): Promise<voi
     const name = checkName(body.name);
     if (!name.ok) return void reject(400, name.reason);
   }
-  // Archive API has no rename/delete; arbitrary images have no trusted tools.
-  reject(403, "not-writable");
+  const boundary = await before.files.mutationBoundary(checked.absolute);
+  if (!boundary.ok) return void reject(403, boundary.reason);
+  if (body.action === "rename") {
+    const target = checkEntryPath([checked.relative.split("/").slice(0, -1).join("/"), body.name].filter(Boolean).join("/"), before.shareAbsolute);
+    if (!target.ok) return void reject(400, target.reason);
+    const destination = await before.files.mutationBoundary(target.absolute);
+    if (!destination.ok) return void reject(403, destination.reason);
+  }
+  const result = body.action === "rename" ? await before.entryActions.rename(checked.relative, body.name)
+    : await before.entryActions.delete(checked.relative);
+  if (!result.ok) return void reject(result.reason === "already-exists" || result.reason === "file-replaced" ? 409 : 403, result.reason);
+  confirm(checked.relative);
+  send(response, 200, result);
 }
 
 async function withFileLock(ctx: ContainerRouteContext, operation: () => Promise<void>): Promise<void> {
