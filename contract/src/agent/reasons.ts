@@ -31,6 +31,7 @@ export const SHARED_HTTP_ERRORS = [
   { status: 400, code: "invalid-request" },
   { status: 400, code: "invalid-json" },
   { status: 401, code: "unauthorized" },
+  { status: 501, code: "not-implemented" },
   { status: 403, code: "actor-not-allowed" },
   { status: 403, code: "observe-only" },
   { status: 403, code: "externally-managed" },

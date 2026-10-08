@@ -22,13 +22,16 @@ export type GateResult =
   | { ok: false; status: number; reason: string };
 
 export async function gate(
-  containerId: string,
+  containerId: string | null,
   options: { mutating: boolean; action: string; actor?: string | null; onDelegation?: (reason: string) => void; budget?: RuntimeBudget; onInspect?: (inspect: Awaited<ReturnType<DockerEngine["inspect"]>>) => void }
 ): Promise<GateResult> {
   // The kill switch takes precedence over all other gates.
   if (options.mutating && config.readOnly) {
     return { ok: false, status: 503, reason: "agent-read-only" };
   }
+
+  // Job stubs have no stored target yet and must fail closed before inspection.
+  if (containerId === null) return { ok: false, status: 501, reason: "not-implemented" };
 
   // Authorization comes exclusively from the agent registry.
   const access = registry.checkAccess(containerId, options.mutating, DEFINITION_ACTIONS.has(options.action));

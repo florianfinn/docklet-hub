@@ -1,3 +1,7 @@
+import { handleFileSources } from "./routes/file-source-routes.js";
+import { handleUpdatePreview, handleProjectUpdatePreview, handleUpdateStart } from "./routes/update-routes.js";
+import { handleBackups, handleRestorePreview, handleRestoreStart } from "./routes/restore-routes.js";
+import { handleJobs, handleJob } from "./routes/job-routes.js";
 import { handleStopIntents } from "./routes/stop-intent-routes.js";
 import type http from "node:http";
 import { handleSelfHealingStatus, handleSelfHealingMaintenance, handleSelfHealingAcknowledge } from "./routes/self-healing-control-routes.js";
@@ -376,6 +380,34 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
       return;
     }
 
+    if (request.method === "POST" && url.pathname === "/updates") {
+      await handleUpdateStart(ctx);
+      return;
+    }
+    if (request.method === "POST" && url.pathname === "/restores") {
+      await handleRestoreStart(ctx);
+      return;
+    }
+    if (request.method === "GET" && url.pathname === "/jobs") {
+      await handleJobs(ctx);
+      return;
+    }
+    const projectUpdateMatch = url.pathname.match(/^\/projects\/([^/]+)\/update-preview$/);
+    if (request.method === "GET" && projectUpdateMatch) {
+      await handleProjectUpdatePreview(ctx, projectUpdateMatch);
+      return;
+    }
+    const jobMatch = url.pathname.match(/^\/jobs\/([^/]+)$/);
+    if (request.method === "GET" && jobMatch) {
+      await handleJob(ctx, jobMatch, false);
+      return;
+    }
+    const jobCancelMatch = url.pathname.match(/^\/jobs\/([^/]+)\/cancel$/);
+    if (request.method === "POST" && jobCancelMatch) {
+      await handleJob(ctx, jobCancelMatch, true);
+      return;
+    }
+
     const containerMatch = url.pathname.match(/^\/containers\/([^/]+)(?:\/([^/]+))?$/);
     if (containerMatch) {
       const containerId = decodeURIComponent(containerMatch[1]);
@@ -383,6 +415,23 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
 
       if (request.method === "GET" && !action) {
         await handleContainerDetail({ ...ctx, containerId });
+        return;
+      }
+
+      if (request.method === "GET" && action === "file-sources") {
+        await handleFileSources({ ...ctx, containerId, action });
+        return;
+      }
+      if (request.method === "GET" && action === "update-preview") {
+        await handleUpdatePreview({ ...ctx, containerId, action });
+        return;
+      }
+      if (request.method === "GET" && action === "backups") {
+        await handleBackups({ ...ctx, containerId, action });
+        return;
+      }
+      if (request.method === "GET" && action === "restore-preview") {
+        await handleRestorePreview({ ...ctx, containerId, action });
         return;
       }
 
