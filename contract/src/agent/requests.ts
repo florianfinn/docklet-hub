@@ -134,11 +134,10 @@ export type EnvWriteRequest = z.input<typeof envWriteRequestSchema>;
 
 // --- Files (Web FTP) ------------------------------------------------------------
 
-/**
- * The share and the path below it, for listing, download and reading text.
- * Without `share` the agent takes the container's only share or refuses.
- */
+// Source selection and relative path for listing, download and text reads.
+// `share` retains project-share selection; `sourceId` selects an agent-resolved source.
 export const shareQuerySchema = z.object({
+  sourceId: z.optional(z.string().check(z.minLength(1))),
   share: z.optional(z.string()),
   path: z._default(z.string(), "")
 });
@@ -146,6 +145,7 @@ export type ShareQuery = z.input<typeof shareQuerySchema>;
 
 /** `PUT /containers/:id/file?share=…&path=…&name=…`: an upload, raw bytes. */
 export const fileUploadQuerySchema = z.object({
+  sourceId: z.optional(z.string().check(z.minLength(1))),
   share: z.optional(z.string()),
   path: z._default(z.string(), ""),
   name: z._default(z.string(), "")

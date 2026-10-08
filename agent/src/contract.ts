@@ -13,6 +13,9 @@ import {
   updateStartRequestSchema, updateProgressSchema, updateResultSchema, updatePhaseSchema, updateOutcomeSchema,
   updateWarningSchema, backupOptionsSchema, backupEntrySchema, backupArchiveSchema, restoreStartRequestSchema,
   restorePreviewRequestSchema, restoreResultSchema, fileSourceSchema, sourceFileTextWriteRequestSchema,
+  shareQuerySchema, fileUploadQuerySchema, fileSourcesResponseSchema,
+  backupListResponseSchema, agentJobResponseSchema, agentJobCancelResponseSchema,
+  agentJobRequestSchema,
   SELF_HEALING_LIMITS,
   selfHealingConfigSchema,
   selfHealingMaintenanceRequestSchema, selfHealingIncidentSchema, selfHealingBudgetSchema,
@@ -115,6 +118,7 @@ export const AGENT_CONTRACT = {
     directoryMode: BACKUP_DIRECTORY_MODE, archiveMode: BACKUP_ARCHIVE_MODE, defaultMode: BACKUP_DEFAULT_MODE,
     optionFields: fieldPresence(backupOptionsSchema.shape), entryFields: fieldPresence(backupEntrySchema.shape),
     mountSelectionFields: fieldPresence(backupMountSelectionSchema.shape),
+    listResponseFields: fieldPresence(backupListResponseSchema.shape),
     restorePreviewResponseFields: fieldPresence(restorePreviewResponseSchema.shape),
     restorePhases: restorePhaseSchema.options, restoreCancelBoundary: RESTORE_CANCEL_BOUNDARY,
     restoreProgressFields: fieldPresence(restoreProgressSchema.shape),
@@ -124,11 +128,17 @@ export const AGENT_CONTRACT = {
   jobs: {
     kinds: agentJobKindSchema.options, resultRetentionMs: AGENT_JOB_RESULT_RETENTION_MS,
     startResponseFields: fieldPresence(agentJobStartResponseSchema.shape),
+    requestFields: fieldPresence(agentJobRequestSchema.shape),
+    responseFields: fieldPresence(agentJobResponseSchema.shape),
+    cancelResponseFields: fieldPresence(agentJobCancelResponseSchema.shape),
+    queryEncoding: { target: "json", kind: "string" },
     progressFields: fieldPresence(agentJobProgressFieldsSchema.shape),
     queryFields: fieldPresence(agentJobsQuerySchema.shape), listFields: fieldPresence(agentJobsResponseSchema.shape)
   },
   fileAccess: {
     textLimits: EDITOR_TEXT_LIMITS, sourceFields: fieldPresence(fileSourceSchema.shape),
+    sourcesResponseFields: fieldPresence(fileSourcesResponseSchema.shape),
+    queryFields: fieldPresence(shareQuerySchema.shape), uploadQueryFields: fieldPresence(fileUploadQuerySchema.shape),
     textWriteFields: fieldPresence(sourceFileTextWriteRequestSchema.shape), conflict: "file-changed-externally"
   },
   ndjsonKinds: NDJSON_KINDS,

@@ -35,7 +35,8 @@ export const SHARED_HTTP_ERRORS = [
   { status: 403, code: "observe-only" },
   { status: 403, code: "externally-managed" },
   { status: 429, code: "too-many-streams" },
-  { status: 429, code: "too-many-sessions" }
+  { status: 429, code: "too-many-sessions" },
+  { status: 501, code: "not-implemented" }
 ] as const;
 
 // --- Rejected requests ------------------------------------------------------------

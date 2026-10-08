@@ -198,9 +198,22 @@ gestreamtem Fortschritt. Ihr Start antwortet nur mit `jobId`; das Ergebnis steht
 im abfragbaren Fortschritt. Beide laufen unabhängig von der HTTP-Verbindung und
 können die 760-s-Frist für synchrone Laufzeitaktionen überschreiten; ein
 Verbindungsabbruch beendet sie in keiner Phase. Nach erneutem Verbinden kann der
-Hub Fortschritt und Ergebnis wieder abfragen. Eine Auftragsliste liefert ohne
+Hub Fortschritt und Ergebnis wieder abfragen.
+
+### Auftragsliste
+
+Eine Auftragsliste liefert ohne
 bekannte `jobId` aktive und zuletzt beendete Update-/Restore-Aufträge, für den
-Host insgesamt oder gefiltert nach stabilem Ziel und Auftragsart. Ergebnisse
+Host insgesamt oder gefiltert nach stabilem Ziel und Auftragsart. Liste und
+Fortschrittsabfrage zeigen ausschließlich Aufträge, deren sämtliche Ziele in
+der aktuellen Agent-Registry noch bekannt sind. Die Prüfung erfolgt bei jeder
+Abfrage über die stabilen Zielschlüssel (Compose-Projekt plus Service oder
+Einzelcontainername), unabhängig von einer inzwischen ersetzten Container-ID.
+Entfernte oder nicht vollständig zuordenbare Ziele liefern weder einen
+Listeneintrag noch Fortschrittsdaten. Das gilt auch für beendete Aufträge
+innerhalb der Aufbewahrungsfrist; ein Filter oder eine bekannte `jobId` hebt
+diese Grenze nicht auf. Beobachtereinträge gelten für diese Leseabfragen als
+bekannt. Ergebnisse
 bleiben ab `completedAt` 24 Stunden verfügbar (`AGENT_JOB_RESULT_RETENTION_MS`);
 aktive Aufträge werden nicht durch diese Aufbewahrungsfrist entfernt. Die Auftragsdauer erhält eigene
 Fristen je Phase: Ziehen, Sicherung, Austausch mit Prüfung und Rückweg. Sie werden
@@ -472,6 +485,12 @@ Dateikopien versprechen auch beim Restore keine Datenbankkonsistenz.
   Austausch mit Prüfung und Rückweg stehen gemeinsam in `contract/`, mit Werten
   aus dem Vertragsschritt und unabhängig von Restart-Fristen. Fortschritt enthält
   die festgelegten Phasen und beim Stack den Service.
+- Auftragsliste und Fortschrittsabfrage prüfen bei jeder Anfrage die aktuelle
+  Registry anhand sämtlicher stabiler Auftragsziele. Unbekannte, entfernte oder
+  nicht vollständig zuordenbare Ziele werden weder in aktiven noch in zuletzt
+  beendeten Aufträgen oder deren Fortschritt offengelegt. Ein Container-ID-Wechsel
+  bei weiterhin bekanntem stabilem Ziel erhält die Lesbarkeit; Filter und
+  Aufbewahrungsfrist umgehen die Registry-Grenze nicht.
 - Update, Sicherung und Restore erzwingen an allen Einstiegen Allowlist,
   Nur-Lese-Modus, Selbstverwaltungssperre, Systemcontainer- und Fremdverwaltungsschutz.
 - Ein nach erfolgreichem Abschluss auftretendes `unhealthy` startet keinen
