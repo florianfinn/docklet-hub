@@ -5,6 +5,8 @@ export const updateStartDeadlineSchema = z.int().check(
   z.minimum(UPDATE_START_DEADLINE_SECONDS.min), z.maximum(UPDATE_START_DEADLINE_SECONDS.max)
 );
 export const UPDATE_STABILITY_WINDOW_MS = 30_000;
+export const UPDATE_PREVIEW_TIMEOUT_MS = 60_000;
+export const UPDATE_PREVIEW_MANIFEST_MODE = "parallel";
 export const UPDATE_PRECHECK_TIMEOUT_MS = 60_000;
 export const UPDATE_PULL_TIMEOUT_MS = 15 * 60_000;
 export const BACKUP_COPY_TIMEOUT_MS = 60 * 60_000;

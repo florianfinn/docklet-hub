@@ -480,7 +480,7 @@ export {
   BACKUP_RETENTION_COUNT, BACKUP_FREE_RESERVE_BYTES, BACKUP_DIRECTORY_ENV, BACKUP_DIRECTORY_DEFAULT,
   BACKUP_DIRECTORY_MODE, BACKUP_ARCHIVE_MODE, BACKUP_DEFAULT_MODE, BACKUP_ERRORS,
   backupErrorSchema, backupModeSchema, backupOptionsSchema, backupArchiveSchema,
-  backupEntrySchema, backupListRequestSchema, backupListResponseSchema, backupStartRequestSchema,
+  backupEntrySchema, backupListRequestSchema, backupListResponseSchema,
   restorePreviewRequestSchema, restorePreviewResponseSchema, restoreStartRequestSchema, restoreResultSchema
 } from "./agent/backups.js";
 export type { BackupError, BackupOptions, BackupEntry, RestoreStartRequest, RestoreResult } from "./agent/backups.js";
@@ -505,6 +505,27 @@ export type { UpdateError, UpdateWarning, UpdatePhase, UpdateOutcome, UpdateTarg
 
 export type { FileSourceSelection, FileSourcesResponse, SourceFileQuery } from "./agent/file-access.js";
 
-export type { BackupMode, BackupArchive, BackupListRequest, BackupListResponse, BackupStartRequest, RestorePreviewRequest, RestorePreviewResponse } from "./agent/backups.js";
+export type { BackupMode, BackupArchive, BackupListRequest, BackupListResponse, RestorePreviewRequest, RestorePreviewResponse } from "./agent/backups.js";
 
 export type { UpdateStartDeadline, UpdateDigest, UpdateServiceSelection, UpdateJobRequest, UpdateStartResponse, UpdateCancelRequest, UpdateCancelResponse, UpdateJobResponse } from "./agent/updates.js";
+
+export { estimatedBytesSchema } from "./agent/file-access.js";
+export { UPDATE_PREVIEW_TIMEOUT_MS, UPDATE_PREVIEW_MANIFEST_MODE } from "./agent/update-deadlines.js";
+export { updateFailureSchema } from "./agent/updates.js";
+export {
+  backupMountSelectionSchema, RESTORE_CANCEL_BOUNDARY, restorePhaseSchema,
+  restoreStartResponseSchema, restoreJobRequestSchema, restoreCancelRequestSchema,
+  restoreCancelResponseSchema, restoreProgressSchema, restoreJobResponseSchema
+} from "./agent/backups.js";
+export type {
+  BackupMountSelection, RestorePhase, RestoreStartResponse, RestoreJobRequest,
+  RestoreCancelRequest, RestoreCancelResponse, RestoreProgress, RestoreJobResponse
+} from "./agent/backups.js";
+export {
+  AGENT_JOB_RESULT_RETENTION_MS, agentJobKindSchema, agentJobScopeSchema, agentJobRequestSchema,
+  agentJobStartResponseSchema, agentJobCancelResponseSchema, agentJobProgressFieldsSchema,
+  agentJobsQuerySchema, agentJobProgressIsConsistent
+} from "./agent/jobs.js";
+export type { AgentJobKind, AgentJobScope, AgentJobRequest, AgentJobStartResponse, AgentJobCancelResponse, AgentJobsQuery } from "./agent/jobs.js";
+export { agentJobProgressSchema, agentJobResponseSchema, agentJobsResponseSchema } from "./agent/job-progress.js";
+export type { AgentJobProgress, AgentJobResponse, AgentJobsResponse } from "./agent/job-progress.js";

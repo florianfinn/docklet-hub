@@ -1,4 +1,8 @@
 import {
+  AGENT_JOB_RESULT_RETENTION_MS, agentJobKindSchema, agentJobStartResponseSchema, agentJobProgressFieldsSchema,
+  agentJobsQuerySchema, agentJobsResponseSchema, UPDATE_PREVIEW_TIMEOUT_MS, UPDATE_PREVIEW_MANIFEST_MODE,
+  RESTORE_CANCEL_BOUNDARY, restorePhaseSchema, restoreProgressSchema, restorePreviewResponseSchema,
+  backupMountSelectionSchema, updateServiceResultSchema,
   UPDATE_START_DEADLINE_SECONDS, UPDATE_STABILITY_WINDOW_MS, UPDATE_PRECHECK_TIMEOUT_MS, UPDATE_PULL_TIMEOUT_MS,
   BACKUP_COPY_TIMEOUT_MS, UPDATE_STOP_TIMEOUT_MS, UPDATE_CREATE_TIMEOUT_MS, UPDATE_READBACK_TIMEOUT_MS,
   UPDATE_MUTATION_RESERVE_MS, BACKUP_PHASE_TIMEOUT_MS, MUTATION_QUEUE_POLICY,
@@ -92,6 +96,7 @@ export const AGENT_CONTRACT = {
   },
   updates: {
     startDeadlineSeconds: UPDATE_START_DEADLINE_SECONDS, stabilityWindowMs: UPDATE_STABILITY_WINDOW_MS,
+    preview: { timeoutMs: UPDATE_PREVIEW_TIMEOUT_MS, manifestMode: UPDATE_PREVIEW_MANIFEST_MODE },
     phaseTimeouts: { precheck: UPDATE_PRECHECK_TIMEOUT_MS, pull: UPDATE_PULL_TIMEOUT_MS, backupCopy: BACKUP_COPY_TIMEOUT_MS,
       stop: UPDATE_STOP_TIMEOUT_MS, create: UPDATE_CREATE_TIMEOUT_MS, readback: UPDATE_READBACK_TIMEOUT_MS,
       mutationReserve: UPDATE_MUTATION_RESERVE_MS, backup: BACKUP_PHASE_TIMEOUT_MS },
@@ -99,6 +104,7 @@ export const AGENT_CONTRACT = {
     phases: updatePhaseSchema.options, outcomes: updateOutcomeSchema.options, warnings: updateWarningSchema.options,
     previewRequestFields: fieldPresence(updatePreviewRequestSchema.shape),
     previewResponseFields: fieldPresence(updatePreviewResponseSchema.shape),
+    serviceResultFields: fieldPresence(updateServiceResultSchema.shape),
     selectionFields: fieldPresence(updateServiceSelectionSchema.shape), previewServiceFields: fieldPresence(updateServicePreviewSchema.shape),
     startFields: fieldPresence(updateStartRequestSchema.shape), progressFields: fieldPresence(updateProgressSchema.shape),
     resultFields: fieldPresence(updateResultSchema.shape)
@@ -108,8 +114,18 @@ export const AGENT_CONTRACT = {
     directoryEnv: BACKUP_DIRECTORY_ENV, directoryDefault: BACKUP_DIRECTORY_DEFAULT,
     directoryMode: BACKUP_DIRECTORY_MODE, archiveMode: BACKUP_ARCHIVE_MODE, defaultMode: BACKUP_DEFAULT_MODE,
     optionFields: fieldPresence(backupOptionsSchema.shape), entryFields: fieldPresence(backupEntrySchema.shape),
+    mountSelectionFields: fieldPresence(backupMountSelectionSchema.shape),
+    restorePreviewResponseFields: fieldPresence(restorePreviewResponseSchema.shape),
+    restorePhases: restorePhaseSchema.options, restoreCancelBoundary: RESTORE_CANCEL_BOUNDARY,
+    restoreProgressFields: fieldPresence(restoreProgressSchema.shape),
     archiveFields: fieldPresence(backupArchiveSchema.shape), restorePreviewFields: fieldPresence(restorePreviewRequestSchema.shape),
     restoreStartFields: fieldPresence(restoreStartRequestSchema.shape), restoreResultFields: fieldPresence(restoreResultSchema.shape)
+  },
+  jobs: {
+    kinds: agentJobKindSchema.options, resultRetentionMs: AGENT_JOB_RESULT_RETENTION_MS,
+    startResponseFields: fieldPresence(agentJobStartResponseSchema.shape),
+    progressFields: fieldPresence(agentJobProgressFieldsSchema.shape),
+    queryFields: fieldPresence(agentJobsQuerySchema.shape), listFields: fieldPresence(agentJobsResponseSchema.shape)
   },
   fileAccess: {
     textLimits: EDITOR_TEXT_LIMITS, sourceFields: fieldPresence(fileSourceSchema.shape),

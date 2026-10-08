@@ -1,7 +1,10 @@
 import * as z from "zod/mini";
 import { stopIntentTargetSchema } from "./stop-intents.js";
 import { expectedContainerSchema, runtimeStateSchema } from "./runtime-actions.js";
-import { backupOptionsSchema } from "./backups.js";
+import { backupOptionsSchema, backupErrorSchema } from "./backups.js";
+import { fileSourceSchema, fileAccessErrorSchema } from "./file-access.js";
+import { agentJobScopeSchema, agentJobRequestSchema, agentJobStartResponseSchema, agentJobCancelResponseSchema,
+  agentJobProgressFieldsSchema, agentJobProgressIsConsistent } from "./jobs.js";
 import { updateStartDeadlineSchema } from "./update-deadlines.js";
 import { ACTION_QUEUE_WAIT_MS } from "./runtime-deadlines.js";
 
@@ -25,7 +28,7 @@ export const updateErrorSchema = z.enum(UPDATE_ERRORS);
 export type UpdateError = z.infer<typeof updateErrorSchema>;
 export const updateWarningSchema = z.enum([
   "unhealthy", "restarting", "paused", "live-backup-inconsistent", "shared-source-writers",
-  "database-consistency-not-guaranteed", "rollback-does-not-restore-data", "local-image-no-registry-digest"
+  "database-consistency-not-guaranteed", "rollback-does-not-restore-data"
 ]);
 export type UpdateWarning = z.infer<typeof updateWarningSchema>;
 export const updatePhaseSchema = z.enum([
@@ -38,10 +41,7 @@ export const updateOutcomeSchema = z.enum([
 export type UpdateOutcome = z.infer<typeof updateOutcomeSchema>;
 export const updateTargetSchema = stopIntentTargetSchema;
 export type UpdateTarget = z.infer<typeof updateTargetSchema>;
-export const updateScopeSchema = z.union([
-  updateTargetSchema,
-  z.object({ kind: z.literal("stack"), projectName: z.string().check(z.minLength(1)) })
-]);
+export const updateScopeSchema = agentJobScopeSchema;
 export type UpdateScope = z.infer<typeof updateScopeSchema>;
 export { updateStartDeadlineSchema } from "./update-deadlines.js";
 export const updateContainerSettingsSchema = z.object({ startDeadlineSeconds: updateStartDeadlineSchema });
@@ -63,13 +63,14 @@ export const updatePreviewRequestSchema = z.object({
     : request.services.length === 1 && keys[0] === JSON.stringify(target);
 }));
 export type UpdatePreviewRequest = z.input<typeof updatePreviewRequestSchema>;
+export const updateFailureSchema = z.union([updateErrorSchema, backupErrorSchema, fileAccessErrorSchema]);
 export const updateServicePreviewSchema = z.object({
   ...updateServiceSelectionSchema.shape,
   imageRef: z.string().check(z.minLength(1)), currentDigest: z.nullable(updateDigestSchema),
   offeredDigest: z.nullable(updateDigestSchema), rollbackImageId: z.nullable(z.string()),
   definitionHash: z.string().check(z.minLength(1)),
   acceptance: z.enum(["created", "service", "completion-job"]),
-  initialState: runtimeStateSchema, warnings: z.array(updateWarningSchema), blocker: z.nullable(z.string())
+  initialState: runtimeStateSchema, mounts: z.array(fileSourceSchema), warnings: z.array(updateWarningSchema), blocker: z.nullable(updateFailureSchema)
 });
 export type UpdateServicePreview = z.infer<typeof updateServicePreviewSchema>;
 export const updatePreviewResponseSchema = z.object({
@@ -85,28 +86,28 @@ export const updateStartRequestSchema = z.object({
   })).check(z.minLength(1)), confirmed: z.literal(true)
 }).check(z.refine((request) => updatePreviewRequestSchema.safeParse(request).success));
 export type UpdateStartRequest = z.input<typeof updateStartRequestSchema>;
-export const updateJobRequestSchema = z.object({ jobId: z.string().check(z.minLength(1)) });
-export const updateStartResponseSchema = updateJobRequestSchema;
-export const updateCancelRequestSchema = updateJobRequestSchema;
-export const updateCancelResponseSchema = z.object({ jobId: updateJobRequestSchema.shape.jobId, accepted: z.boolean() });
+export const updateJobRequestSchema = agentJobRequestSchema;
+export const updateStartResponseSchema = agentJobStartResponseSchema;
+export const updateCancelRequestSchema = agentJobRequestSchema;
+export const updateCancelResponseSchema = agentJobCancelResponseSchema;
 export const updateServiceResultSchema = z.object({
   target: updateTargetSchema, outcome: updateOutcomeSchema, state: runtimeStateSchema,
   imageId: z.nullable(z.string()), definitionHash: z.nullable(z.string()), backupId: z.nullable(z.string()),
-  updateError: z.nullable(z.string()), rollbackError: z.nullable(z.string()), resumeError: z.nullable(z.string())
+  updateError: z.nullable(updateFailureSchema), rollbackError: z.nullable(updateErrorSchema), resumeError: z.nullable(backupErrorSchema)
 });
 export type UpdateServiceResult = z.infer<typeof updateServiceResultSchema>;
 export const updateResultSchema = z.object({
   target: updateScopeSchema, outcome: updateOutcomeSchema, services: z.array(updateServiceResultSchema),
-  updateError: z.nullable(z.string()), rollbackError: z.nullable(z.string())
+  updateError: z.nullable(updateFailureSchema), rollbackError: z.nullable(updateErrorSchema)
 });
 export type UpdateResult = z.infer<typeof updateResultSchema>;
 export const updateProgressSchema = z.object({
-  jobId: updateJobRequestSchema.shape.jobId, target: updateScopeSchema,
+  ...agentJobProgressFieldsSchema.shape, kind: z.literal("update"), target: updateScopeSchema,
   service: z.nullable(updateTargetSchema), phase: updatePhaseSchema,
-  phaseStartedAt: z.iso.datetime(), phaseDeadlineAt: z.iso.datetime(),
-  cancelAllowed: z.boolean(), firstExchangeStarted: z.boolean(),
+  firstExchangeStarted: z.boolean(),
   result: z.nullable(updateResultSchema)
-}).check(z.refine((progress) => !progress.cancelAllowed || (!progress.firstExchangeStarted && progress.phase !== "completed")));
+}).check(z.refine((progress) => agentJobProgressIsConsistent(progress)
+  && (!progress.cancelAllowed || (!progress.firstExchangeStarted && !["exchange", "verify", "rollback", "resume", "completed"].includes(progress.phase)))));
 export type UpdateProgress = z.infer<typeof updateProgressSchema>;
 export const updateJobResponseSchema = z.object({ progress: updateProgressSchema });
 

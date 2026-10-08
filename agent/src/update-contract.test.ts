@@ -82,7 +82,7 @@ test("manifest-only preview explains local images and state warnings", () => {
   const preview = { previewId: "preview", target, digestSource: "registry-manifest", services: [{
     ...selection, imageRef: "demo:1.0.0", currentDigest: null, offeredDigest: null,
     rollbackImageId: "old-image", definitionHash: "definition", acceptance: "service", initialState: state,
-    warnings: ["unhealthy", "restarting", "paused", "local-image-no-registry-digest"], blocker: "local-image-no-registry-digest"
+    mounts: [], warnings: ["unhealthy", "restarting", "paused"], blocker: "local-image-no-registry-digest"
   }] };
   assert.deepEqual(updatePreviewResponseSchema.parse(preview), preview);
   assert.equal(updatePreviewResponseSchema.safeParse({ ...preview, digestSource: "pull" }).success, false);
@@ -104,7 +104,7 @@ test("completion acceptance requires active initial state and explicit successfu
 });
 
 test("polling progress cannot permit cancellation after the first exchange", () => {
-  const progress = { jobId: "job", target, service: target, phase: "backup",
+  const progress = { kind: "update", completedAt: null, jobId: "job", target, service: target, phase: "backup",
     phaseStartedAt: "2026-10-08T00:00:00Z", phaseDeadlineAt: "2026-10-08T01:12:00Z",
     cancelAllowed: true, firstExchangeStarted: false, result: null };
   assert.deepEqual(updateProgressSchema.parse(progress), progress);
@@ -118,7 +118,7 @@ test("results preserve update, rollback and resume failures separately", () => {
     services: [{ target, outcome: "rollback-failed", state, imageId: "new-image", definitionHash: "definition", backupId: "backup",
       updateError: "update-health-timeout", rollbackError: "update-rollback-failed", resumeError: "resume-failed" }] };
   assert.deepEqual(updateResultSchema.parse(result), result);
-  const restore = { target, backupId: "backup", ok: false, state, restoreError: "restore-extract-failed", resumeError: "resume-failed" };
+  const restore = { target, backupId: "backup", ok: false, outcome: "failed", state, restoreError: "restore-extract-failed", resumeError: "resume-failed" };
   assert.deepEqual(restoreResultSchema.parse(restore), restore);
 });
 
@@ -130,7 +130,7 @@ test("backup list retains runs with mount archives rather than counting each arc
   assert.deepEqual(backupListResponseSchema.parse(list), list);
   assert.equal(backupListResponseSchema.safeParse({ target, backups: [...list.backups, backup] }).success, false);
   assert.equal(backupListResponseSchema.safeParse({ target, backups: [{ ...backup, archives: [] }] }).success, false);
-  for (const mode of ["stop", "live"]) assert.equal(backupOptionsSchema.safeParse({ mode, mounts: [mount] }).success, true);
+  for (const mode of ["stop", "live"]) assert.equal(backupOptionsSchema.safeParse({ mode, mounts: [{ ...mount, estimatedBytes: 42 }] }).success, true);
   assert.equal(backupOptionsSchema.safeParse({ mode: "stop", mounts: [] }).success, false);
   assert.equal(backupOptionsSchema.safeParse({ mode: "stop", mounts: [mount, mount] }).success, false);
 });
@@ -144,7 +144,7 @@ test("restore requires an explicit backup choice and confirmation independent of
 });
 
 const source = { service: "web", kind: "project", source: "data", target: "/data", readOnly: false, shared: false,
-  sourceId: "data", readable: true, writable: true, writeBlocker: null, backupEligible: true,
+  sourceId: "data", estimatedBytes: 42, readable: true, writable: true, writeBlocker: null, backupEligible: true,
   restoreEligible: true, protection: "none", ownership: "exclusive" };
 test("file sources carry the existing class and action-specific capabilities", () => {
   assert.deepEqual(fileSourceSchema.parse(source), source);
@@ -153,7 +153,7 @@ test("file sources carry the existing class and action-specific capabilities", (
   assert.equal(fileSourceSchema.safeParse(shared).success, true);
   assert.equal(fileSourceSchema.safeParse({ ...shared, writable: true }).success, false);
   assert.equal(fileSourceSchema.safeParse({ ...shared, restoreEligible: true }).success, false);
-  for (const protection of ["system", "agent", "backup", "unknown"]) {
+  for (const protection of ["system", "agent", "unknown"]) {
     assert.equal(fileSourceSchema.safeParse({ ...source, protection }).success, false);
     assert.equal(fileSourceSchema.safeParse({ ...source, protection, writable: false, backupEligible: false, restoreEligible: false }).success, true);
   }

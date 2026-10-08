@@ -193,10 +193,16 @@ Austausch beginnt, läuft die Prüfung samt gegebenenfalls nötigem Rückweg zu 
 Eine getrennte Browserverbindung ist kein Abbruchauftrag. Diese Grenze verhindert
 einen absichtlich zurückgelassenen, unbewerteten Ersatzcontainer.
 
-Der Update-Lauf ist ein Auftrag im Agenten mit abfragbarem beziehungsweise
-gestreamtem Fortschritt. Er kann länger als eine HTTP-Anfrage dauern; ein
-Verbindungsabbruch beendet ihn in keiner Phase. Nach erneutem Verbinden kann der
-Hub Fortschritt und Ergebnis wieder abfragen. Die Auftragsdauer erhält eigene
+Update und Restore sind Aufträge im Agenten mit abfragbarem beziehungsweise
+gestreamtem Fortschritt. Ihr Start antwortet nur mit `jobId`; das Ergebnis steht
+im abfragbaren Fortschritt. Beide laufen unabhängig von der HTTP-Verbindung und
+können die 760-s-Frist für synchrone Laufzeitaktionen überschreiten; ein
+Verbindungsabbruch beendet sie in keiner Phase. Nach erneutem Verbinden kann der
+Hub Fortschritt und Ergebnis wieder abfragen. Eine Auftragsliste liefert ohne
+bekannte `jobId` aktive und zuletzt beendete Update-/Restore-Aufträge, für den
+Host insgesamt oder gefiltert nach stabilem Ziel und Auftragsart. Ergebnisse
+bleiben ab `completedAt` 24 Stunden verfügbar (`AGENT_JOB_RESULT_RETENTION_MS`);
+aktive Aufträge werden nicht durch diese Aufbewahrungsfrist entfernt. Die Auftragsdauer erhält eigene
 Fristen je Phase: Ziehen, Sicherung, Austausch mit Prüfung und Rückweg. Sie werden
 in `contract/` gemeinsam geführt und übernehmen nicht die Restart-Fristen aus
 `runtime-deadlines.ts`. Die Werte und die Budgetrechnung stehen im folgenden
@@ -229,7 +235,10 @@ Update-Abnahme und dauerhafte Betriebsüberwachung nicht vermischt.
 
 `contract/src/agent/update-deadlines.ts` führt eigene Update-Fristen, unabhängig
 von den Restart-Fristen. Dies sind begrenzte Produktbudgets, keine gemessenen
-Durchsatzgarantien. Vorprüfung und Manifest-Abfrage erhalten 60 Sekunden je Service;
+Durchsatzgarantien. Die synchrone Vorschau fragt die Registry-Manifeste parallel
+ab und hat insgesamt 60 Sekunden (`UPDATE_PREVIEW_TIMEOUT_MS`), unabhängig von
+der Zahl der Services. Sie liegt damit deutlich unter der 760-s-Hub-Frist für
+Laufzeitaktionen. Die Vorprüfung im gestarteten Agent-Auftrag erhält 60 Sekunden je Service;
 Pull erhält 900 Sekunden je Service, um große Images bei langsamer Verbindung
 zuzulassen. Eine Datenkopie erhält 3.600 Sekunden je Service. Größere Datenmengen,
 die diese Frist überschreiten, benötigen ein gesondertes Sicherungsverfahren.
@@ -271,7 +280,11 @@ nach dem Warten erneut; eine abgelaufene oder veränderte Vorschau ist kein Auft
 Im Update-Dialog wird eine Datensicherung bewusst gewählt; sie ist optional.
 Für jeden zulässigen Bind-Mount und jedes zulässige benannte Volume gibt es einen
 eigenen Schalter. Die Auswahl nennt Quelle, Zuordnung zum Container und Umfang.
-Sie gilt beim Stack je betroffenem Service und ist vor Beginn der Kopie
+Die Quellen der Update-Vorschau und jeder ausgewählte Sicherungs-Mount tragen
+`estimatedBytes`; `null` bedeutet, dass der Umfang nicht ermittelbar ist. Die
+Platzprüfung darf daraus keinen Umfang von null Bytes ableiten und lehnt bei
+unbekanntem Umfang mit `backup-size-unavailable` ab.
+Die Auswahl gilt beim Stack je betroffenem Service und ist vor Beginn der Kopie
 festgelegt. Gesichert wird nach dem Ziehen und der Digest-Prüfung, beim Stack
 je Service direkt vor dessen eigenem Austausch. Im Stoppmodus wird dieser
 Service für seine Kopie gestoppt; im Live-Modus erfolgt die Kopie ohne diesen
@@ -313,7 +326,9 @@ Der Agent legt die Archive in seinem Sicherungsverzeichnis ab.
 Standardort ist das Unterverzeichnis `backups` im Agent-Datenpfad. Das
 Verzeichnis ist per Umgebungsvariable übersteuerbar; der konkrete technische
 Schlüssel ist `DOCKER_AGENT_BACKUP_DIR`, dokumentiert in den generischen
-`.env.example`-Dateien. Leer bedeutet `backups` relativ zum Agent-Datenpfad;
+Agent-Deploy-`.env.example`-Dateien. Das gebündelte Setup verwendet ohne
+Durchreichen einer Override-Variable das Datenvolume unter `/state`; dessen
+Unterverzeichnis `backups` ist bereits persistent. Leer bedeutet `backups` relativ zum Agent-Datenpfad;
 eine gesetzte Angabe bezeichnet das alternative Sicherungsverzeichnis.
 Archive sind nur für den Agenten lesbar (Rechte `0600`), das Verzeichnis hat
 Rechte `0700`. Das Sicherungsverzeichnis ist über den Dateibrowser nicht
@@ -350,7 +365,15 @@ gewählte Sicherung eine Vorbedingung des Auftrags.
 
 ## Gesonderter Restore
 
-Restore ist eine eigene, gesondert bestätigte Aktion. Die Vorschau nennt
+Restore ist eine eigene, gesondert bestätigte Aktion als Agent-Auftrag. Seine
+Phasen sind `queued`, `stop`, `extract`, `resume` und `completed`. Abbruch ist nur
+vor `extract` möglich; ein bereits gestopptes Ziel wird dabei in seinen Vorzustand
+zurückgeführt. Nach Entpackbeginn werden Entpacken und Wiederanlauf abgeschlossen.
+Das Fortschrittsresultat enthält Restore- und Wiederanlauffehler getrennt.
+Die Vorschau enthält die gewählte Sicherung mit `completedAt`, Modus und der
+Archivliste je Mount einschließlich Bytes sowie die ausgewählten betroffenen
+Zielquellen. Die Sicherungsliste je stabilem Ziel trägt dieselben Sicherungsangaben.
+Die Vorschau nennt
 Ziel anhand des stabilen Schlüssels, zugehörige Sicherung und die ausgewählten
 zulässigen Mount-Ziele sowie die betroffenen vorhandenen Daten. Die Zuordnung
 verwendet Compose-Projekt plus Service beziehungsweise den Einzelcontainernamen,

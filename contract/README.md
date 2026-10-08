@@ -163,7 +163,7 @@ die Vertragsnummer (`version.ts`). Die Regeln oben gelten, mit drei Zusätzen:
   Stromzeile, bevor er sie liest; eine Zeile, die nicht passt, fällt weg.
   Was vom Host abhängt (Basispfad, Allowlist, Härtung), prüft weiter der
   Agent selbst und nicht das Schema.
-- **Ein Fehlerschlüssel ist im Schema ein Text.** Die Aufzählungen in
+- **Bestehende Agent-Streams lesen Fehlerschlüssel als Text.** Die Aufzählungen in
   `reasons.ts` tippen, was der Agent sendet. Der Leser reicht einen Schlüssel,
   den er nicht kennt, wörtlich als `reason` weiter, damit ein neuerer Agent
   einen älteren Hub nicht bricht. Eine unbekannte `kind` scheitert mit einem
@@ -207,6 +207,12 @@ oder Optionen). Start verlangt zusätzlich `previewId`, `definitionHash`,
 `offeredDigest` und `confirmed: true`. Restore verlangt Sicherungs-ID, Mount-Auswahl,
 Vorschau-ID, erwarteten Zustand und eigene Bestätigung. Der Agent leitet Fähigkeiten
 und Abschlussauftragsregel selbst ab; Anfragewerte erteilen keine Berechtigungen.
+Update und Restore teilen Auftragsfelder und eine Auftragsliste; Start liefert
+nur `jobId`, Ergebnisse stehen im Fortschritt. Ergebnisse bleiben 24 Stunden ab
+Abschluss abfragbar. Sicherung ist ausschließlich eine Update-Phase; ein eigener
+Sicherungsstart ist nicht Teil des Vertrags. Die Fehlerfelder dieser Flächen sind
+an die gemeinsamen Schlüssel-Enums gebunden. Quelle und Sicherungs-Mount tragen
+`estimatedBytes` mit `null` für unbekannten Umfang.
 Die fachlichen Kriterien und die Herleitung der Konstanten stehen in
 [update-and-rollback.md](../docs/design/update-and-rollback.md) und
 [file-access.md](../docs/design/file-access.md). `GET /contract` meldet diese
