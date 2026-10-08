@@ -32,13 +32,17 @@ for (const visible of [true, false]) for (const mode of ["stop", "live"] as cons
     mode: destination.endsWith("file") ? 0o644 : 0x80000000, mtime: "2026-10-08T00:00:00Z", linkTarget: "" }));
   const entry = { name: "data", kind: "directory" as const, size: 0, content: Buffer.alloc(0), mode: 0o755,
     uid: process.getuid!(), gid: process.getgid!(), changedAt: 0, linkTarget: "" };
-  const archive = Buffer.concat([backupTarHeader(entry), backupTarHeader({ ...entry, name: "data/file", kind: "file", size: 3, mode: 0o644 }), Buffer.from("new"), Buffer.alloc(509), Buffer.alloc(1024)]);
+  const archive = Buffer.concat([backupTarHeader(entry), backupTarHeader({ ...entry, name: "data/file", kind: "file", size: 3, mode: 0o644 }), Buffer.from("new"), Buffer.alloc(509),
+    backupTarHeader({ ...entry, name: "data/current", kind: "symlink", linkTarget: "file" }),
+    backupTarHeader({ ...entry, name: "data/outside", kind: "symlink", linkTarget: "/outside" }), Buffer.alloc(1024)]);
   t.mock.method(engine, "openArchiveStream", async () => (async function* () { for (let offset = 0; offset < archive.length; offset += 127) yield archive.subarray(offset, offset + 127); })());
   t.mock.method(engine, "stop", async () => { trace.push("stop"); raw.State = { ...raw.State, Running: false, Status: "exited" }; });
   t.mock.method(engine, "start", async () => { trace.push("start"); raw.State = { ...raw.State, Running: true, Status: "running" }; });
   t.mock.method(engine, "putArchiveStream", async (_id: string, destination: string, stream: AsyncIterable<Buffer>) => {
     assert.equal(destination, "/"); trace.push("put"); const chunks = []; for await (const chunk of stream) chunks.push(chunk);
-    assert.equal(archiveEntries(Buffer.concat(chunks))[1].content.toString(), "new");
+    const restored = archiveEntries(Buffer.concat(chunks));
+    assert.equal(restored[1].content.toString(), "new");
+    assert.equal(restored.some((item) => item.kind === "symlink"), false);
   });
   const sources = await backupSources(raw.Id, null, new UpdateBudget(60_000), true);
   assert.equal(sources.resolved[0].source.backupEligible, true); assert.equal(sources.resolved[0].source.restoreEligible, true);
@@ -47,6 +51,10 @@ for (const visible of [true, false]) for (const mode of ["stop", "live"] as cons
     startDeadlineSeconds: 120, backup: { mode, mounts: [{ sourceId, estimatedBytes: sources.resolved[0].source.estimatedBytes }] } }, null, new UpdateBudget(60_000));
   const finish = updateRuntimeOps.intentional([snapshot]);
   const backupId = await updateRuntimeOps.backup!(snapshot, new UpdateBudget(4_320_000), () => false);
+  const saved = await backupStore.archive(target, backupId, sourceId);
+  const metadata = JSON.parse(fs.readFileSync(path.join(path.dirname(saved.file), "metadata.json"), "utf8"));
+  assert.deepEqual(metadata.skipped, [{ path: "outside", reason: "absolute-link-target", sourceId }]);
+  assert.equal(archiveEntries(fs.readFileSync(saved.file)).at(-1)!.linkTarget, "file");
   assert.equal(stopIntents.updateIntentActive(raw), true); assert.equal(trace.includes("stop"), mode === "stop");
   await updateRuntimeOps.resume!(snapshot, new UpdateBudget(720_000)); finish();
   assert.equal(raw.State.Running, true); assert.deepEqual(dataJournal.read(), []);
@@ -68,7 +76,16 @@ for (const visible of [true, false]) for (const mode of ["stop", "live"] as cons
     assert.equal(progress.extractStarted, true); assert.equal(progress.result?.outcome, "restored");
     assert.equal(progress.result?.state.status, "running");
   } else assert.fail("restore progress is missing");
-  if (visible) assert.equal(fs.readFileSync(path.join(source, "file"), "utf8"), "new"); else assert.equal(trace.includes("put"), true);
+  if (visible) {
+    assert.equal(fs.readFileSync(path.join(source, "file"), "utf8"), "new");
+    assert.equal(fs.readlinkSync(path.join(source, "current")), "file");
+  } else {
+    assert.equal(trace.includes("put"), true);
+    const directory = path.dirname(saved.file);
+    const file = fs.readdirSync(directory).find((name) => name.startsWith("restore-skipped-"))!;
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(directory, file), "utf8")).skipped,
+      [{ path: "current", reason: "archive-put-link-unsupported" }]);
+  }
 });
 
 test("restore rejects a scaled Compose service before backup lookup or extraction", async (t) => {

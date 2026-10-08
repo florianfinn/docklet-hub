@@ -62,3 +62,19 @@ test("K20: a 64 MiB stream is written incrementally with exact byte accounting",
   })() }));
   assert.equal(emitted, 1024); assert.equal(entry.archives[0].bytes, 64 * 1024 * 1024);
 });
+
+test("skipped backup and archive PUT restore entries persist privately without changing contract entries", async (t) => {
+  const f = await fixture(t); const skipped = [{ path: "outside", reason: "absolute-link-target" }];
+  const entry = await f.store.create(target, options, async () => ({ ...await f.copy(), skipped }));
+  const archive = await f.store.archive(target, entry.backupId, "data"); const directory = path.dirname(archive.file);
+  const metadata = JSON.parse(await fs.readFile(path.join(directory, "metadata.json"), "utf8"));
+  assert.deepEqual(metadata.skipped, [{ ...skipped[0], sourceId: "data" }]);
+  assert.equal("skipped" in (await f.store.list(target))[0], false);
+  await f.store.recordRestoreSkipped(target, entry.backupId, "data", [{ path: "current", reason: "archive-put-link-unsupported" }]);
+  const files = (await fs.readdir(directory)).filter((name) => name.startsWith("restore-skipped-"));
+  assert.equal(files.length, 1);
+  const result = JSON.parse(await fs.readFile(path.join(directory, files[0]), "utf8"));
+  assert.equal(result.skipped.length, 1); assert.equal(result.sourceId, "data");
+  await f.store.recordRestoreSkipped(target, entry.backupId, "data", []);
+  assert.equal((await fs.readdir(directory)).filter((name) => name.startsWith("restore-skipped-")).length, 1);
+});

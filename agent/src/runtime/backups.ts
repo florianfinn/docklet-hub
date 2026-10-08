@@ -5,7 +5,7 @@ import { BACKUP_DIRECTORY_DEFAULT, BACKUP_DIRECTORY_ENV, BACKUP_COPY_TIMEOUT_MS,
   UPDATE_CREATE_TIMEOUT_MS, UPDATE_READBACK_TIMEOUT_MS, type BackupOptions, type FileSourceSelection,
   type StopIntentTarget } from "contract";
 import { BackupStore } from "../backup-store.js";
-import { archiveSize, safeBackupArchive, extractVisible } from "../backup-archive.js";
+import { archiveSize, safeBackupArchive, extractVisible, type SkippedEntry } from "../backup-archive.js";
 import { FileArchive } from "../file-archive.js";
 import { fileSources } from "./file-sources.js";
 import { config, engine, stopIntents } from "./state.js";
@@ -66,10 +66,11 @@ export async function copyBackup(raw: RawInspect, target: StopIntentTarget, opti
     const { item, files } = archiveAccess(sources, sourceId);
     files.scope.mounts = files.scope.mounts.map((mount) => ({ ...mount, RW: true }));
     const stream = await engine.openArchiveStream(raw.Id, item.source.target, signal);
-    return { target: item.source.target, stream: safeBackupArchive(stream, item.source.target, async (relative) => {
+    const skipped: SkippedEntry[] = [];
+    return { target: item.source.target, skipped, stream: safeBackupArchive(stream, item.source.target, async (relative) => {
       if (cancelled()) throw new UpdateFailure("backup-copy-failed");
       return (await files.boundary(path.posix.join(item.source.target, relative), true)).ok;
-    }, signal, () => { if (cancelled()) throw new UpdateFailure("backup-copy-failed"); }) };
+    }, signal, () => { if (cancelled()) throw new UpdateFailure("backup-copy-failed"); }, skipped) };
   }, signal), BACKUP_COPY_TIMEOUT_MS);
 }
 export async function restoreArchives(sources: Awaited<ReturnType<typeof backupSources>>, target: StopIntentTarget,
@@ -88,14 +89,16 @@ export async function restoreArchives(sources: Awaited<ReturnType<typeof backupS
     await budget.run(async ({ signal }) => {
       const handle = await fs.promises.open(archive.file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
       try {
-      const stream = safeBackupArchive(handle.createReadStream({ autoClose: false, signal }), item.source.target, allowed, signal);
+      const skipped: SkippedEntry[] = [];
+      const visible = sources.visibleRoots.get(mount.sourceId);
+      const stream = safeBackupArchive(handle.createReadStream({ autoClose: false, signal }), item.source.target, allowed, signal, () => {}, skipped, true, !visible && !validateOnly);
       if (validateOnly) { for await (const chunk of stream) { void chunk; } }
       else {
-        const visible = sources.visibleRoots.get(mount.sourceId);
         if (visible) await extractVisible(stream, visible, composeBasePath, sources.policy, item.source.target, signal);
         else {
           if (sources.archiveBlocked) throw new UpdateFailure("source-protected");
           await engine.putArchiveStream(sources.inspect.Id, path.posix.dirname(item.source.target), stream, signal);
+          await backupStore.recordRestoreSkipped(target, backupId, mount.sourceId, skipped);
         }
       }
       } finally { await handle.close(); }

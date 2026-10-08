@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { BACKUP_DIRECTORY_MODE, BACKUP_ARCHIVE_MODE, BACKUP_RETENTION_COUNT, BACKUP_FREE_RESERVE_BYTES,
   backupEntrySchema, type BackupEntry, type BackupOptions, type StopIntentTarget } from "contract";
 import type { ArchiveStream } from "./archive-stream.js";
+import type { SkippedEntry } from "./backup-archive.js";
 import { UpdateFailure } from "./update-budget.js";
 
 const key = (target: StopIntentTarget) => createHash("sha256").update(JSON.stringify(target)).digest("hex");
@@ -46,17 +47,27 @@ export class BackupStore {
     if (!archive) throw new UpdateFailure("backup-mount-mismatch");
     return { entry, archive, file: path.join(await this.root(target), backupId, `${archive.archiveId}.tar`) };
   }
+  async recordRestoreSkipped(target: StopIntentTarget, backupId: string, sourceId: string, skipped: SkippedEntry[]) {
+    await this.archive(target, backupId, sourceId);
+    const directory = path.join(await this.root(target), backupId);
+    const temporary = path.join(directory, `restore-skipped-${randomUUID()}.tmp`);
+    try {
+      await fs.promises.writeFile(temporary, JSON.stringify({ sourceId, skipped }), { mode: BACKUP_ARCHIVE_MODE, flag: "wx" });
+      await fs.promises.rename(temporary, path.join(directory, `restore-skipped-${createHash("sha256").update(sourceId).digest("hex")}.json`));
+    } finally { await fs.promises.rm(temporary, { force: true }); }
+  }
   async checkSpace(target: StopIntentTarget, options: BackupOptions) {
     const root = await this.root(target);
     if (options.mounts.some((mount) => mount.estimatedBytes === null)) throw new UpdateFailure("backup-size-unavailable");
     const bytes = options.mounts.reduce((sum, mount) => sum + BigInt(mount.estimatedBytes!), 0n);
     if (await this.free(root) < bytes + BigInt(BACKUP_FREE_RESERVE_BYTES)) throw new UpdateFailure("backup-space-insufficient");
   }
-  async create(target: StopIntentTarget, options: BackupOptions, copy: (sourceId: string) => Promise<{ target: string; stream: ArchiveStream }>, signal?: AbortSignal): Promise<BackupEntry> {
+  async create(target: StopIntentTarget, options: BackupOptions, copy: (sourceId: string) => Promise<{ target: string; stream: ArchiveStream; skipped?: SkippedEntry[] }>, signal?: AbortSignal): Promise<BackupEntry> {
     const root = await this.root(target);
     await this.checkSpace(target, options);
     const backupId = randomUUID(); const temporary = path.join(root, `${backupId}.tmp`); const destination = path.join(root, backupId);
     await fs.promises.mkdir(temporary, { mode: BACKUP_DIRECTORY_MODE });
+    const skipped: (SkippedEntry & { sourceId: string })[] = [];
     const archives: BackupEntry["archives"] = []; let committed = false;
     try {
       for (const mount of options.mounts) {
@@ -74,13 +85,14 @@ export class BackupStore {
           }
           await file.sync();
         } finally { await file.close(); }
+        skipped.push(...(loaded.skipped ?? []).map((item) => ({ ...item, sourceId: mount.sourceId })));
         archives.push({ sourceId: mount.sourceId, mountTarget: loaded.target, archiveId, bytes: written });
       }
       signal?.throwIfAborted();
       await fs.promises.rename(temporary, destination);
       const entry: BackupEntry = { backupId, target, mode: options.mode, completedAt: new Date().toISOString(), archives };
       const metadata = path.join(destination, "metadata.tmp");
-      await fs.promises.writeFile(metadata, JSON.stringify(backupEntrySchema.parse(entry)), { mode: BACKUP_ARCHIVE_MODE, flag: "wx" });
+      await fs.promises.writeFile(metadata, JSON.stringify({ ...backupEntrySchema.parse(entry), skipped }), { mode: BACKUP_ARCHIVE_MODE, flag: "wx" });
       await fs.promises.rename(metadata, path.join(destination, "metadata.json"));
       committed = true;
       const keep = new Set((await this.list(target)).map((item) => item.backupId));

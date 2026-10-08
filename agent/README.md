@@ -95,8 +95,13 @@ Restore is a separate previewed and confirmed job. It stops the container,
 extracts selected archives and restores its prior runtime state. Cancellation
 is possible only before extraction. Shared, ambiguous and protected sources
 cannot be restored. Compose files, `.env` and protected subpaths are excluded.
-Only regular files and directories with representable ustar paths are accepted;
-links and special files fail safely. Visible sources use pinned descriptors,
+Backups preserve regular files, directories and relative in-mount symlinks
+without following them. Unsafe links and special files are skipped and recorded
+with source, path and reason in private backup metadata. Visible restores create
+safe symlinks last and copy internal hardlink data through pinned descriptors.
+Archives using links as parent directories fail validation. Docker PUT restores
+omit links and record them in private restore metadata because target descriptors
+cannot be pinned. Contract 13 has no skip-count field. Visible sources use pinned descriptors,
 other sources use the Docker archive API. A restore can fail when the agent
 cannot preserve file ownership through the visible-source descriptor path.
 

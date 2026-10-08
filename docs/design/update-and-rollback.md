@@ -418,9 +418,23 @@ meldet den unterbrochenen Lauf; ein begonnenes Restore wird nicht automatisch
 erneut entpackt. Bis zur Recovery bleiben Starts und Selbstheilung für betroffene
 Ziele gesperrt. Das Datenjournal enthält keine Definition und keine Dateiinhalte.
 
-Die Archivprüfung akzeptiert reguläre Dateien und Verzeichnisse. Links und
-Spezialdateien sowie nicht im ustar-Namensbereich darstellbare Pfade führen zum
-Fehler, statt unvollständig gesichert oder ungeprüft wiederhergestellt zu werden.
+Die Sicherung erhält reguläre Dateien, Verzeichnisse und relative Symlinks,
+deren Ziele lexikalisch innerhalb der Mount-Wurzel bleiben. Symlinks werden nie
+verfolgt. Absolute und ausbrechende Linkziele, Hardlinks ohne reguläres Ziel im
+Archiv sowie Geräte, FIFOs und Sockets werden ausgelassen; `metadata.json`
+vermerkt unter `skipped` jeweils Quelle, Pfad und Grund. Lange Linkziele werden
+mit GNU-Linkmetadaten erhalten; Dateipfade müssen im ustar-Namensbereich liegen.
+
+Beim sichtbaren Restore werden interne Symlinks erst nach allen regulären
+Dateien angelegt. Hardlinks werden als reguläre Kopien ihres gepinnten Ziels
+wiederhergestellt. Kein Archiv darf einen Link als Elternverzeichnis verwenden;
+ausbrechende Links und Spezialdateien werden bei der Vorprüfung abgelehnt.
+Die Deskriptorprüfung folgt auch bestehenden Links niemals. Beim Docker-PUT
+werden Links ausgelassen, weil dieser Weg keine gepinnten Zieldeskriptoren
+bietet. Eine private Datei `restore-skipped-<Quellenschlüssel>.json` hält die
+Auslassungen des letzten erfolgreichen Restore je Quelle fest. Vertrag 13 hat
+kein geeignetes Feld für Auslassungszahlen; diese bleiben in den privaten
+Metadaten und werden nicht als Fehler oder Archivgröße umgedeutet.
 
 ## Gesonderter Restore
 
