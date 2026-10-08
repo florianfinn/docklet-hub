@@ -234,5 +234,4 @@ export const deFiles = {
     "Ob hier geschrieben werden darf, ist ungeklärt — der Arm konnte dieses Verzeichnis nicht beurteilen. Der Versuch geht trotzdem hinaus; entschieden wird er dort.",
   filesArchiveReplaceWarning: "Wenn die Quelle im Arm nicht sichtbar ist, ersetzt Speichern die Datei. Andere Hardlinks behalten den alten Inhalt; ACLs und erweiterte Attribute gehen verloren. Sichtbare Quellen werden im selben Inode geschrieben.",
   filesArchiveReplaceConfirm: "Eine im Arm nicht sichtbare Datei wird beim Speichern ersetzt. Hardlinks werden nicht mitgeändert; ACLs und erweiterte Attribute gehen verloren. Speichern bestätigen?",
-
 };

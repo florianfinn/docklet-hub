@@ -198,6 +198,6 @@ export const enFiles = {
     "This action is blocked for this source. Rename and delete require a source visible to the arm under its base path and write permission on the directory.",
   filesWriteUnknown:
     "Whether writing works here is unresolved — the agent could not assess this directory. The attempt still goes out; it is decided there.",
-filesArchiveReplaceWarning: "If the source is not visible to the arm, saving replaces the file. Other hard links retain the old content; ACLs and extended attributes are lost. Visible sources are written in the same inode.",
+  filesArchiveReplaceWarning: "If the source is not visible to the arm, saving replaces the file. Other hard links retain the old content; ACLs and extended attributes are lost. Visible sources are written in the same inode.",
   filesArchiveReplaceConfirm: "Saving replaces files that are not visible to the arm. Hard links are not updated; ACLs and extended attributes are lost. Confirm saving?",
 } satisfies typeof deFiles;

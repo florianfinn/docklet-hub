@@ -169,3 +169,17 @@ test("descriptor hash writes detect leaf replacement before touching the opened 
   assert.equal(await fs.promises.readFile(target + "-original", "utf8"), "old");
   assert.equal(f.engine.calls.length, 0);
 });
+
+for (const directory of [false, true]) test(`visible ${directory ? "folder" : "file"} creation keeps descriptor ownership despite a writable socket mount`, async (t) => {
+  const f = await fixture(t);
+  f.scope.mounts.push({ Type: "bind", Source: "/run/docker.sock", Destination: "/run/docker.sock", RW: true });
+  const parent = await fs.promises.stat(f.root);
+  const content = directory ? undefined : Buffer.from("new bytes");
+  const result = await f.files.write("/data", "created", content);
+  assert.equal(result.ok, true);
+  const header = archiveEntriesForTest(f.engine.lastWrite!)[0];
+  assert.equal(header.kind, directory ? "directory" : "file");
+  assert.deepEqual([header.uid, header.gid, header.mode], [parent.uid, parent.gid, parent.mode & (directory ? 0o777 : 0o666) & ~0o002]);
+  if (content) assert.equal(header.content.equals(content), true);
+  assert.deepEqual(f.engine.calls.map((call) => call.method), ["PUT"]);
+});

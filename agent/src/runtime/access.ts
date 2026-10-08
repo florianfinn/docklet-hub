@@ -135,7 +135,7 @@ export async function checkWebftpAccess(
     const archive = new FileArchive(engine, { containerId, root: selected.source.target, hostRoot: selected.absolute, policy: sources.policy, mounts: fresh.inspect.Mounts ?? [], volumeRoots: sources.volumeRoots, volumeDevices: sources.volumeDevices });
     const visibleRoot = sources.visibleRoots.get(selected.source.sourceId);
     return { ok: true, inspect: fresh.inspect, containerName: (fresh.inspect.Name ?? "").replace(/^\//, ""),
-      projectDir: sources.context?.projectDir ?? "", shareRelative: selected.source.sourceId, shareAbsolute: selected.source.target, writable: selected.source.writable, uploadable: selected.source.writable && !sources.archiveBlocked,
+      projectDir: sources.context?.projectDir ?? "", shareRelative: selected.source.sourceId, shareAbsolute: selected.source.target, writable: selected.source.writable, uploadable: selected.source.writable && (!!visibleRoot || !sources.archiveBlocked),
       entryActions: new VisibleFileActions(visibleRoot ?? selected.absolute, composeBasePath, sources.policy, !!visibleRoot && selected.source.writable),
       files: visibleRoot ? new VisibleFiles(archive, visibleRoot, composeBasePath, sources.policy, selected.source.writable) : archive };
   }
@@ -197,7 +197,7 @@ export async function checkWebftpAccess(
   const visibleSource = sources.visibleRoots.get(resolved.source.sourceId);
   const visibleRoot = visibleSource ? `${visibleSource}${share.absolute.slice(resolved.absolute!.length)}` : undefined;
   return { ok: true, inspect: sources.inspect, containerName, projectDir: composeContext.projectDir,
-    shareRelative: share.relative, shareAbsolute: target.absolutePath, writable: resolved.source.writable, uploadable: resolved.source.writable && !sources.archiveBlocked,
+    shareRelative: share.relative, shareAbsolute: target.absolutePath, writable: resolved.source.writable, uploadable: resolved.source.writable && (!!visibleRoot || !sources.archiveBlocked),
     entryActions: new VisibleFileActions(visibleRoot ?? share.absolute, composeBasePath, sources.policy, !!visibleRoot && resolved.source.writable),
     files: visibleRoot ? new VisibleFiles(archive, visibleRoot, composeBasePath, sources.policy, resolved.source.writable) : archive };
 }

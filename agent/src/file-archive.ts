@@ -156,7 +156,6 @@ export class FileArchive {
   }
   async create(directory: string, name: string, owner: { uid: number; gid: number; mode: number }, content?: Buffer) {
     try {
-      if (await protectedWritableMount(this.scope.mounts, this.scope.policy, this.scope.volumeRoots, this.scope.volumeDevices)) throw new AccessError("source-protected");
       await this.checked(path.posix.join(directory, name), true);
       if (content && content.length > MAX_UPLOAD_BYTES) throw new AccessError("too-large");
       await this.engine.putArchive(this.scope.containerId, directory, tarWithOneEntry({ name, kind: content === undefined ? "directory" : "file", content,
