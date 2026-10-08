@@ -173,3 +173,33 @@ test("dirty documents install beforeunload protection and remove it on unmount",
   window.dispatchEvent(after);
   assert.equal(after.defaultPrevented, false);
 });
+
+test("file adapters select YAML, env schema or plain text by extension without masking", async () => {
+  const { fileEditorAdapterFor } = await import("../src/features/files/editor-adapter.js");
+  for (const path of ["config.yaml", "config.YML", ".env", "nested/.env.example", "plain.txt"]) {
+    const adapter = fileEditorAdapterFor(path);
+    assert.deepEqual(adapter.ranges("API_KEY=visible"), []);
+    const value = path.includes("env") ? "API_KEY=visible\n# comment" : "key: visible";
+    const mounted = await renderInDom(<AppLanguageProvider><EditorShell value={value} adapter={adapter} onChange={() => {}} label="text" /></AppLanguageProvider>);
+    try {
+      assert.equal(mounted.container.querySelector("textarea")!.value, value);
+      assert.equal(mounted.container.querySelector('[class*="editor-syntax-"]') !== null, path !== "plain.txt");
+    } finally { await mounted.unmount(); }
+  }
+});
+
+test("single-file mount editors highlight the container filename with an empty relative path", async () => {
+  const { FileEditor } = await import("../src/features/files/FileEditor.js");
+  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+  const query = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const fetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ text: { path: "", content: "key: visible\n", hash: "actual" } }), { headers: { "content-type": "application/json" } });
+  const mounted = await renderInDom(<AppLanguageProvider><QueryClientProvider client={query}>
+    <FileEditor hostId="host" containerId="container" path="" syntaxPath="/config/settings.yml" onClose={() => {}} onSaved={() => {}} />
+  </QueryClientProvider></AppLanguageProvider>);
+  try {
+    await settle();
+    assert.equal(mounted.container.querySelector("textarea")?.value, "key: visible\n");
+    assert.equal(mounted.container.querySelector('[class*="editor-syntax-"]') !== null, true);
+  } finally { await mounted.unmount(); query.clear(); globalThis.fetch = fetch; }
+});

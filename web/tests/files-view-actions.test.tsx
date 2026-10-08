@@ -307,8 +307,7 @@ test("das Löschen fragt nach und schickt vor der Bestätigung nichts", async ()
 });
 
 test("Löschen und Umbenennen sind gesperrt, wenn im Verzeichnis nicht geschrieben werden darf", async () => {
-  // ⚠️ `deletable` IST DAS RECHT AM VERZEICHNIS und nicht an der Datei — genau
-  // deshalb hängen BEIDE Handlungen daran, auch das Umbenennen.
+  // Archive sources allow uploads while rename/delete remain unavailable.
   const server = stubHub({
     listings: {
       "": listing({
@@ -326,7 +325,15 @@ test("Löschen und Umbenennen sind gesperrt, wenn im Verzeichnis nicht geschrieb
     assert.ok(rename instanceof HTMLButtonElement, "der Knopf zum Umbenennen fehlt");
     assert.equal(remove.disabled, true, "das Löschen steht offen, obwohl im Verzeichnis nicht geschrieben werden darf");
     assert.equal(rename.disabled, true, "das Umbenennen steht offen, obwohl es am Verzeichnis scheitern wird");
-    assert.ok(at("files-write-blocked") !== null, "der Satz, warum hier nichts geht, fehlt");
+    assert.ok(at("files-write-blocked") !== null, "der Sperrgrund fehlt");
+    assert.equal(saysEither(de.filesWriteBlocked, en.filesWriteBlocked), true);
+    const nameInput = at("files-create-directory-name");
+    assert.ok(nameInput instanceof HTMLInputElement);
+    assert.equal(nameInput.disabled, false);
+    await typeInto(nameInput, "new-folder");
+    const create = at("files-create-directory-submit");
+    assert.ok(create instanceof HTMLButtonElement);
+    assert.equal(create.disabled, false);
   } finally {
     await mounted.unmount();
     server.restore();

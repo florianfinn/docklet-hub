@@ -90,8 +90,8 @@ export const enFiles = {
 
   filesDiagnosticsReadable: "readable",
   filesDiagnosticsNotReadable: "not readable",
-  filesDiagnosticsDeletable: "writable",
-  filesDiagnosticsNotDeletable: "not writable",
+  filesDiagnosticsDeletable: "rename and delete allowed",
+  filesDiagnosticsNotDeletable: "rename and delete blocked",
   filesDiagnosticsUploadable: "writable inside the container",
   filesDiagnosticsNotUploadable: "read-only inside the container",
   filesDiagnosticsOwner: "owner {uid}:{gid}",
@@ -195,7 +195,7 @@ export const enFiles = {
   filesDeleteSubmit: "Delete permanently",
   filesDeletePending: "Deleting …",
   filesWriteBlocked:
-    "The agent may not write in this directory. Creating, renaming and deleting therefore do not work here — not even for a file that would be writable on its own.",
+    "This action is blocked for this source. The archive API cannot safely rename or delete entries without guaranteed tools in the target container.",
   filesWriteUnknown:
     "Whether writing works here is unresolved — the agent could not assess this directory. The attempt still goes out; it is decided there.",
 } satisfies typeof deFiles;

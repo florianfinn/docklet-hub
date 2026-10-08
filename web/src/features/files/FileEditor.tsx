@@ -7,13 +7,14 @@ import { Button } from "../../platform/ui/shadcn/button";
 import { Card } from "../../platform/ui/shadcn/card";
 import { EditorShell } from "../../platform/editor/EditorShell";
 import { useEditorDocument } from "../../platform/editor/useEditorDocument";
-import { fileEditorAdapter } from "./editor-adapter";
+import { fileEditorAdapterFor } from "./editor-adapter";
 import { fileChangedHash, fileErrorKey } from "./file-errors";
 import { useFileSource } from "./source-context";
-export function FileEditor({ hostId, containerId, path, onClose, onSaved, writable = true, sourceIdentity }: {
-  hostId: string; containerId: string; path: string; writable?: boolean; sourceIdentity?: string; onClose: () => void; onSaved: () => void;
+export function FileEditor({ hostId, containerId, path, onClose, onSaved, writable = true, sourceIdentity, syntaxPath }: {
+  hostId: string; containerId: string; path: string; writable?: boolean; sourceIdentity?: string; syntaxPath?: string; onClose: () => void; onSaved: () => void;
 }) {
   const t = useTranslations();
+  const fileEditorAdapter = fileEditorAdapterFor(syntaxPath ?? path);
   const sourceId = useFileSource();
   const [busy, setBusy] = useState(false);
   const [round, setRound] = useState(0);

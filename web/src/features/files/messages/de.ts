@@ -114,8 +114,8 @@ export const deFiles = {
   // Auskunft" ist nicht dasselbe wie „nein".
   filesDiagnosticsReadable: "lesbar",
   filesDiagnosticsNotReadable: "nicht lesbar",
-  filesDiagnosticsDeletable: "beschreibbar",
-  filesDiagnosticsNotDeletable: "nicht beschreibbar",
+  filesDiagnosticsDeletable: "Umbenennen und Löschen erlaubt",
+  filesDiagnosticsNotDeletable: "Umbenennen und Löschen gesperrt",
   filesDiagnosticsUploadable: "im Container schreibbar",
   filesDiagnosticsNotUploadable: "im Container nur lesbar",
   filesDiagnosticsOwner: "Eigentümer {uid}:{gid}",
@@ -229,7 +229,7 @@ export const deFiles = {
   filesDeleteSubmit: "Endgültig löschen",
   filesDeletePending: "Wird gelöscht …",
   filesWriteBlocked:
-    "In diesem Verzeichnis darf der Arm nicht schreiben. Anlegen, Umbenennen und Löschen gehen hier deshalb nicht — auch nicht an einer Datei, die für sich beschreibbar wäre.",
+    "Diese Aktion ist für die Quelle gesperrt. Die Archiv-API erlaubt kein sicheres Umbenennen oder Löschen ohne garantierte Werkzeuge im Zielcontainer.",
   filesWriteUnknown:
     "Ob hier geschrieben werden darf, ist ungeklärt — der Arm konnte dieses Verzeichnis nicht beurteilen. Der Versuch geht trotzdem hinaus; entschieden wird er dort.",
 };

@@ -170,7 +170,7 @@ export function FilesView({ hostId, containerId }: { hostId: string; containerId
   if (selectedSource?.estimatedBytes !== null && selectedSource?.estimatedBytes !== undefined) {
     return <FileSourceContext value={sourceId}>
       <SourceChooser sources={sources.data?.sources ?? []} pathname={pathname} selected={sourceId} />
-      {editing !== null ? <FileEditor hostId={hostId} containerId={containerId} path="" writable={selectedSource.writable}
+      {editing !== null ? <FileEditor hostId={hostId} containerId={containerId} path="" syntaxPath={selectedSource.target} writable={selectedSource.writable}
         onClose={closeEditor} onSaved={() => { void sources.refetch(); }} />
         : <Button onClick={() => { void navigate(editHrefFor("")); }}>{t("filesEditorLabel")}</Button>}
     </FileSourceContext>;
