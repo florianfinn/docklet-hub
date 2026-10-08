@@ -87,3 +87,35 @@ test("container setting submits its stable identity and configured start deadlin
     assert.deepEqual(saved, { target: f.preview.services[0].target, settings: { startDeadlineSeconds: 10 } });
   } finally { await f.close(); }
 });
+
+test("K19: backup selection defaults to stop, warns for live and requires a new confirmed preview", async () => {
+  const f = await fixture();
+  try {
+    f.preview.services[0].mounts = [{ sourceId: "data", service: "web", kind: "volume", source: "demo-data", target: "/data",
+      readOnly: false, shared: false, readable: true, writable: true, writeBlocker: null, estimatedBytes: 4096,
+      backupEligible: true, restoreEligible: true, protection: "none", ownership: "exclusive" }];
+    const previous = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (String(input).endsWith("update-previews") && init?.body) {
+        const body = JSON.parse(String(init.body));
+        f.preview.services[0].backup = body.services[0].backup;
+      }
+      return previous(input, init);
+    };
+    await click(textButton("Update")); await waitFor(() => document.querySelector('[role="dialog"]') !== null);
+    const dialog = document.querySelector('[role="dialog"]')!;
+    assert.equal(dialog.textContent?.includes("4096 Bytes"), true); assert.equal(dialog.textContent?.includes("demo-data"), true);
+    const checkbox = dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    await click(checkbox); assert.equal(checkbox.checked, true);
+    assert.equal(dialog.querySelector<HTMLInputElement>('input[type="radio"]')!.checked, true);
+    await click(dialog.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1]);
+    assert.equal(dialog.textContent?.includes("inkonsistente"), true);
+    await click(textButton("Sicherungsauswahl prüfen", dialog));
+    assert.equal(await waitFor(() => [...dialog.querySelectorAll("button")].some((button) => button.textContent === "Update starten")), true);
+    assert.equal(f.calls.some((call) => call.path.endsWith("/updates")), false);
+    await click(textButton("Update starten", dialog));
+    assert.equal(await waitFor(() => f.calls.some((call) => call.path.endsWith("/updates"))), true);
+    const body = f.calls.find((call) => call.path.endsWith("/updates"))!.body as { services: { backup: unknown }[] };
+    assert.deepEqual(body.services[0].backup, { mode: "live", mounts: [{ sourceId: "data", estimatedBytes: 4096 }] });
+  } finally { await f.close(); }
+});

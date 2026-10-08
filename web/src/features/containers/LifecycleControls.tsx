@@ -1,3 +1,4 @@
+import { RestoreControls } from "./RestoreControls";
 import { useId, useCallback } from "react";
 import { useTranslations } from "use-intl";
 import { Button } from "../../platform/ui/shadcn/button";
@@ -49,6 +50,7 @@ export function LifecycleControls({ target, detail = false }: { target: Lifecycl
       </p>)}
     </div>
     <UpdateControls target={target} detail={detail} />
+    {target.kind === "container" ? <RestoreControls target={target} /> : null}
     <LifecycleStatus target={target} reload={action.reload} />
     <LifecycleNotice operation={operation} dismiss={dismiss} reload={() => { void action.reload().catch(() => undefined); }} />
     <Dialog open={question !== null} onOpenChange={(open) => { if (!open) action.cancel(); }}>
