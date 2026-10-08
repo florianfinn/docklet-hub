@@ -44,7 +44,7 @@ for (const fallback of [false, true]) test(`R1: foreign directory owners are pre
     return handle;
   });
   const calls: string[] = [];
-  await extractVisible(tar([directory("data", 0o700, 12345, 12345), directory("data/old", 0o710, 12345, 12345), directory("data/new", 0o750, 12345, 12345),
+  await extractVisible(tar([directory("data", 0o700, fallback ? process.getuid!() : 12345, fallback ? process.getgid!() : 12345), directory("data/old", 0o710, 12345, 12345), directory("data/new", 0o750, 12345, 12345),
     { ...directory("data/file", 0o2750, 12345, 12345), kind: "file", size: 5, content: Buffer.from("saved") },
     { ...directory("data/alias", 0o640, 12345, 12345), kind: "other", tarType: "1", linkTarget: "data/file" }]), root, base, archivePolicy, "/data", undefined,
     async (entry, relative, body) => {
@@ -59,13 +59,13 @@ for (const fallback of [false, true]) test(`R1: foreign directory owners are pre
     });
   for (const [relative, mode] of [["", 0o700], ["old", 0o710], ["new", 0o750], ["file", 0o2750], ["alias", 0o640]] as const) {
     const stat = await fs.promises.lstat(path.join(root, relative));
-    assert.equal(stat.uid, 12345); assert.equal(stat.gid, 12345); assert.equal(stat.mode & 0o7777, mode);
+    assert.equal(stat.uid, fallback && !relative ? process.getuid!() : 12345); assert.equal(stat.gid, fallback && !relative ? process.getgid!() : 12345); assert.equal(stat.mode & 0o7777, mode);
   }
-  assert.equal(calls.length, fallback ? 5 : 0);
+  assert.equal(calls.length, fallback ? 4 : 0);
 });
 test("R1: a PUT that leaves wrong directory metadata fails with the private path", async (t) => {
   const base = await fs.promises.mkdtemp(path.join(os.tmpdir(), "restore-mismatch-")); t.after(() => fs.promises.rm(base, { recursive: true, force: true }));
-  const root = path.join(base, "data"); await fs.promises.mkdir(root);
+  const root = path.join(base, "data"); await fs.promises.mkdir(root); await fs.promises.mkdir(path.join(root, "sub"));
   const originalOpen = fs.promises.open;
   t.mock.method(fs.promises, "open", async (...args: Parameters<typeof fs.promises.open>) => {
     const handle = await originalOpen(...args);
@@ -73,9 +73,9 @@ test("R1: a PUT that leaves wrong directory metadata fails with the private path
     return handle;
   });
   let called = false;
-  await assert.rejects(extractVisible(tar([directory("data", 0o700, 12345, 12345)]), root, base, archivePolicy, "/data", undefined,
+  await assert.rejects(extractVisible(tar([directory("data/sub", 0o700, 12345, 12345)]), root, base, archivePolicy, "/data", undefined,
     async () => { called = true; }), (error: unknown) => {
-      assert.equal((error as { code: string }).code, "restore-extract-failed"); assert.equal((error as { relative: string }).relative, "data"); return true;
+      assert.equal((error as { code: string }).code, "restore-extract-failed"); assert.equal((error as { relative: string }).relative, "sub"); return true;
     });
   assert.equal(called, true);
 });

@@ -250,13 +250,14 @@ for (const kind of ["large", "slow"] as const) test(`R3: ${kind} unselected moun
   runner.start({ confirmed: true, target: preview.target, previewId: preview.previewId, services: preview.services.map((service) => ({ ...service, offeredDigest: service.offeredDigest! })) }, null);
   assert.equal((await completed).outcome, "updated"); assert.equal(archiveCalls, 0);
 });
-test("R3: selected slow mount times out separately after manifest and leaves the image update usable", async (t) => {
+test("R3: selected slow mount times out separately after manifest and leaves the image update usable", { timeout: 10_000 }, async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] }); const f = fixture(t);
   f.change({ Mounts: ["data", "cache"].map((name) => ({ Type: "bind", Source: `/synthetic/${name}`, Destination: `/${name}`, RW: true })) });
   t.mock.method(engine, "info", async () => ({ DockerRootDir: "/var/lib/docker" }));
   t.mock.method(engine, "listContainerIds", async () => ["old"]);
   t.mock.method(engine, "statArchive", async () => ({ name: "data", size: 0, mode: 0x80000000, mtime: "2026-10-08T00:00:00Z", linkTarget: "" }));
   const archives: string[] = []; const trace: string[] = [];
+  let opened!: () => void; const archiveReady = new Promise<void>((resolve) => { opened = resolve; });
   t.mock.method(engine, "openArchiveStream", async () => (async function* () { yield Buffer.alloc(1024); })());
   const initial = await ops.prepare(f.selection, null, new UpdateBudget(60_000));
   assert.equal(initial.preview.mounts[0].backupEligible, true, JSON.stringify(initial.preview.mounts));
@@ -264,13 +265,13 @@ test("R3: selected slow mount times out separately after manifest and leaves the
   t.mock.method(engine, "openArchiveStream", async (_id: string, target: string, signal: AbortSignal) => {
     archives.push(target); trace.push("archive");
     return (async function* () {
-      await new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true })); yield Buffer.alloc(1024);
+      await new Promise((_, reject) => { signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true }); opened(); }); yield Buffer.alloc(1024);
     })();
   });
   const selected = { ...f.selection, backup: { mode: "stop" as const, mounts: [{ sourceId, estimatedBytes: null }] } };
   const runner = new UpdateRunner(new AgentJobs(() => true), new KeyedMutex(), { ...ops, manifest: async () => { trace.push("manifest"); return offered; } });
   const pending = runner.preview({ target: selected.target, services: [selected] }, null);
-  for (let attempt = 0; !archives.length && attempt < 2000; attempt++) await new Promise<void>((resolve) => setImmediate(resolve));
+  await archiveReady;
   assert.deepEqual(trace, ["manifest", "archive"]); t.mock.timers.tick(5000);
   const preview = await pending;
   assert.deepEqual(archives, ["/data"]); assert.equal(preview.services[0].mounts.find((mount) => mount.sourceId === sourceId)!.estimatedBytes, null);

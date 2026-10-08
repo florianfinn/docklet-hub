@@ -1,3 +1,4 @@
+import { archiveRoot, rootMetadataMatches, withoutArchiveRoot } from "../restore-root-archive.js";
 import { DataJournal } from "../data-journal.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -6,10 +7,12 @@ import { BACKUP_DIRECTORY_DEFAULT, BACKUP_DIRECTORY_ENV, BACKUP_COPY_TIMEOUT_MS,
   type StopIntentTarget } from "contract";
 import { BackupStore } from "../backup-store.js";
 import { archiveSize, safeBackupArchive, extractVisible, backupTarHeader, type SkippedEntry } from "../backup-archive.js";
-import { RestorePathFailure } from "../restore-metadata.js";
+import { RestorePathFailure, RestoreBindingFailure } from "../restore-metadata.js";
+import { protectedWritableMount } from "../file-sources.js";
+import { appendRecoveryIncident } from "../update-recovery.js";
 import { FileArchive } from "../file-archive.js";
 import { fileSources } from "./file-sources.js";
-import { config, engine, stopIntents } from "./state.js";
+import { config, engine, stopIntents, selfHealingState, dockerEvents } from "./state.js";
 import { composeBasePath } from "./containers.js";
 import { UpdateBudget, UpdateFailure } from "../update-budget.js";
 import type { RawInspect } from "../engine.js";
@@ -95,27 +98,42 @@ export async function restoreArchives(sources: Awaited<ReturnType<typeof backupS
       const stream = safeBackupArchive(handle.createReadStream({ autoClose: false, signal }), item.source.target, allowed, signal, () => {}, skipped, true, !visible && !validateOnly);
       if (validateOnly) { for await (const chunk of stream) { void chunk; } }
       else {
-        if (visible) await extractVisible(stream, visible, composeBasePath, sources.policy, item.source.target, signal, async (entry, _relative, body) => {
+        if (visible) await extractVisible(stream, visible, composeBasePath, sources.policy, item.source.target, signal, async (entry, _relative, body, verify) => {
           if (sources.archiveBlocked) throw new RestorePathFailure(entry.name);
           const basename = path.posix.basename(item.source.target);
           const relative = entry.name === basename ? "" : entry.name.slice(basename.length + 1);
           const absolute = path.posix.join(item.source.target, relative);
           await allowed(relative);
           await files.restoreBoundary(absolute);
+          const fresh = await engine.inspect(sources.inspect.Id, { signal });
+          if (await protectedWritableMount(fresh.Mounts ?? [], sources.policy, sources.volumeRoots, sources.volumeDevices)) throw new RestorePathFailure(entry.name);
           const put = async function* () {
             yield backupTarHeader({ ...entry, name: path.posix.basename(absolute) });
             if (body) for await (const chunk of body) yield chunk;
             yield Buffer.alloc((512 - entry.size % 512) % 512); yield Buffer.alloc(1024);
           };
+          await verify?.();
           await engine.putArchiveStream(sources.inspect.Id, path.posix.dirname(absolute), put(), signal);
         });
         else {
           if (sources.archiveBlocked) throw new UpdateFailure("source-protected");
-          await engine.putArchiveStream(sources.inspect.Id, path.posix.dirname(item.source.target), stream, signal);
+          const current = await archiveRoot(await engine.openArchiveStream(sources.inspect.Id, item.source.target, signal), item.source.target);
+          const savedRoot = await archiveRoot(fs.createReadStream(archive.file, { signal }), item.source.target);
+          if (!rootMetadataMatches(current, savedRoot)) throw new RestorePathFailure(item.source.target);
+          const fresh = await engine.inspect(sources.inspect.Id, { signal });
+          if (await protectedWritableMount(fresh.Mounts ?? [], sources.policy, sources.volumeRoots, sources.volumeDevices)) throw new RestorePathFailure(item.source.target);
+          await files.restoreBoundary(item.source.target);
+          await engine.putArchiveStream(sources.inspect.Id, item.source.target, withoutArchiveRoot(stream, item.source.target, current), signal);
+          const after = await archiveRoot(await engine.openArchiveStream(sources.inspect.Id, item.source.target, signal), item.source.target);
+          if (!rootMetadataMatches(savedRoot, after)) throw new RestorePathFailure(item.source.target);
           await backupStore.recordRestoreSkipped(target, backupId, mount.sourceId, skipped);
         }
       }
       } catch (error) {
+        if (error instanceof RestoreBindingFailure) {
+          appendRecoveryIncident(selfHealingState, target, sources.inspect.Id, "restore-path-binding-changed");
+          dockerEvents.notifyLifecycleChange(sources.inspect.Id);
+        }
         if (error instanceof RestorePathFailure) await backupStore.recordRestoreFailure(target, backupId, mount.sourceId, error.relative);
         throw error;
       } finally { await handle.close(); }

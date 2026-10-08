@@ -285,9 +285,12 @@ Update-Abnahme und dauerhafte Betriebsüberwachung nicht vermischt.
 `contract/src/agent/update-deadlines.ts` führt eigene Update-Fristen, unabhängig
 von den Restart-Fristen. Dies sind begrenzte Produktbudgets, keine gemessenen
 Durchsatzgarantien. Die synchrone Vorschau fragt die Registry-Manifeste parallel
-ab und hat insgesamt 60 Sekunden (`UPDATE_PREVIEW_TIMEOUT_MS`), unabhängig von
-der Zahl der Services. Sie liegt damit deutlich unter der 760-s-Hub-Frist für
-Laufzeitaktionen. Die Vorprüfung im gestarteten Agent-Auftrag erhält 60 Sekunden je Service;
+ab und erhält dafür 60 Sekunden (`UPDATE_PREVIEW_TIMEOUT_MS`), unabhängig von
+der Zahl der Services. Danach erhalten ausdrücklich gewählte Mounts höchstens
+5 weitere Sekunden für die Umfangsermittlung; die Services werden parallel
+ermittelt. Die Vorschau benötigt somit höchstens 65 Sekunden und liegt unter
+der 760-s-Hub-Frist für Laufzeitaktionen. Die Web-Vorschau setzt keine
+kürzere eigene Abfragefrist. Die Vorprüfung im gestarteten Agent-Auftrag erhält 60 Sekunden je Service;
 Pull erhält 900 Sekunden je Service, um große Images bei langsamer Verbindung
 zuzulassen. Eine Datenkopie erhält 3.600 Sekunden je Service. Größere Datenmengen,
 die diese Frist überschreiten, benötigen ein gesondertes Sicherungsverfahren.
@@ -485,16 +488,28 @@ sich. Verzeichnisrechte werden nach ihren Kindern gesetzt, die Mount-Wurzel
 zuletzt. Eigentümer werden vor dem Modus gesetzt, da `chown` Set-ID-Bits löschen
 kann. Verzeichnisdeskriptoren werden nicht für den gesamten Lauf offen gehalten.
 
-Fehlende lokale Rechte führen nach Prüfung des Eltern-Deskriptors zu einem
-benannten Archiv-PUT mit Header-Eigentümer. Auch danach werden die tatsächlichen
-Metadaten geprüft; eine Abweichung führt zu `restore-extract-failed`, mit Quelle
-und betroffenem Pfad in der privaten Datei `restore-failure.json`. Moby
-[führt bestehende Verzeichnisse zusammen und setzt danach Eigentümer und Modus](https://github.com/moby/moby/blob/v27.5.1/pkg/archive/archive.go#L691).
-Ein Eintrag namens `.` wird dagegen
-[übersprungen](https://github.com/moby/moby/blob/v27.5.1/pkg/archive/archive.go#L1150);
-deshalb adressiert der PUT die Mount-Wurzel mit ihrem Namen vom Elternpfad aus.
-Die anschließende Prüfung verhindert ein stilles Erfolgsergebnis bei einer
-abweichenden Engine-Implementierung oder fehlenden Daemon-Rechten. Symlinks
+Die Mount-Wurzel wird ausschließlich über ihren eigenen Deskriptor behandelt;
+fehlende Rechte führen zu `restore-extract-failed`. Dateimounts behalten beim
+Schreiben über diesen Deskriptor ebenfalls ihren Inode. Ohne sichtbaren
+Deskriptor müssen die Wurzelmetadaten bereits dem Archiv entsprechen: PUT
+adressiert die Mount-Wurzel selbst und enthält nur ihre Kinder, keinen
+Wurzelheader. Abweichende Wurzelrechte werden vor und nach PUT geprüft und
+führen zu einem klaren Fehler.
+
+Für Untereinträge ist ein benannter Archiv-PUT bei fehlenden lokalen Rechten
+nur unter dem Schutz beschreibbarer Mounts aus dem Dateizugriff erlaubt. Ein
+frischer Container-Inspect prüft diesen Schutz erneut. Unmittelbar vor PUT
+werden alle Pfadkomponenten über die festgehaltene Deskriptorkette ohne
+Symlink-Folgen wieder geöffnet und mit ihren Inodes verglichen. Nach PUT
+werden Kette, Ziel-Inode, Eigentümer und Modus geprüft. Ein Bindungswechsel
+führt zusätzlich zu einem Vorfall. Quelle und Pfad stehen privat in
+`restore-failure.json`. Bestehende reguläre Dateien erhalten keinen solchen
+Ausweichweg: Moby ersetzt ihren Inode. Bestehende Verzeichnisse bleiben erhalten;
+Moby [führt sie zusammen und setzt Eigentümer und Modus](https://github.com/moby/moby/blob/v27.5.1/pkg/archive/archive.go#L691).
+Zwischen der letzten Prüfung und der Pfadauflösung durch Docker bleibt wie
+bei Archive-Schreibzugriffen aus dem Dateizugriff ein nicht atomar schließbares
+Fenster. Ein später erkannter Tausch kann bereits Daten verändert haben; der
+Vorfall ist keine Rücknahme dieser Änderung. Symlinks
 haben unter Linux den festen Modus 0777; ein davon abweichender Archivmodus
 führt beim sichtbaren Restore zum Fehler. Sie werden niemals durchschrieben.
 

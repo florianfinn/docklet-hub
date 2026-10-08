@@ -39,9 +39,9 @@ for (const visible of [true, false]) for (const mode of ["stop", "live"] as cons
   t.mock.method(engine, "stop", async () => { trace.push("stop"); raw.State = { ...raw.State, Running: false, Status: "exited" }; });
   t.mock.method(engine, "start", async () => { trace.push("start"); raw.State = { ...raw.State, Running: true, Status: "running" }; });
   t.mock.method(engine, "putArchiveStream", async (_id: string, destination: string, stream: AsyncIterable<Buffer>) => {
-    assert.equal(destination, "/"); trace.push("put"); const chunks = []; for await (const chunk of stream) chunks.push(chunk);
+    assert.equal(destination, "/data"); trace.push("put"); const chunks = []; for await (const chunk of stream) chunks.push(chunk);
     const restored = archiveEntries(Buffer.concat(chunks));
-    assert.equal(restored[1].content.toString(), "new");
+    assert.equal(restored[0].name, "file"); assert.equal(restored[0].content.toString(), "new");
     assert.equal(restored.some((item) => item.kind === "symlink"), false);
   });
   const sources = await backupSources(raw.Id, null, new UpdateBudget(60_000), true);
@@ -101,7 +101,7 @@ test("restore rejects a scaled Compose service before backup lookup or extractio
   t.mock.method(engine, "listWithComposeLabels", async () => ["first", "second"].map((id) => ({ id, name: id, image: "example/app:1.0", imageId: "image", status: "running", labels })));
   await assert.rejects(restoreRunner.preview({ target, backupId: "absent", mounts: [{ sourceId: "data" }] }, null), { code: "scaled-service-unsupported" });
 });
-test("R1: visible root metadata fallback sends a named owner header and persists a failed path", async (t) => {
+test("R6: visible root metadata permission failure never calls PUT and persists its path", async (t) => {
   fs.rmSync(path.join(state, "data-pending.json"), { force: true });
   const root = path.join(base, "metadata-data"); fs.mkdirSync(root, { recursive: true });
   const target = { kind: "container", containerName: "metadata-demo" } as const;
@@ -125,7 +125,7 @@ test("R1: visible root metadata fallback sends a named owner header and persists
     const header = archiveEntries(Buffer.concat(chunks))[0]; assert.equal(header.name, "data"); assert.equal(header.uid, 12345); assert.equal(header.gid, 12345);
   });
   await assert.rejects(restoreArchives(sources, target, saved.backupId, [{ sourceId }], new UpdateBudget(60_000)), { code: "restore-extract-failed" });
-  assert.equal(put, true);
+  assert.equal(put, false);
   const archive = await backupStore.archive(target, saved.backupId, sourceId);
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(path.dirname(archive.file), "restore-failure.json"), "utf8")), { sourceId, path: "metadata-data", error: "restore-extract-failed" });
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(path.dirname(archive.file), "restore-failure.json"), "utf8")), { sourceId, path: "data", error: "restore-extract-failed" });
 });
