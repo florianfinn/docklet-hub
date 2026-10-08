@@ -156,3 +156,7 @@ test("the violation list is deduplicated and sorted", () => {
   ]);
   assert.deepEqual(listing, ["api:privileged", "web:dangerous-capability"]);
 });
+
+test("raw Compose input rejects isolated UTF-16 surrogates rather than replacing them", () => {
+  assert.equal(validateRawContent("services: { app: { image: '\ud800' } }").length > 0, true);
+});

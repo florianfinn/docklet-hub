@@ -178,9 +178,9 @@ export async function inspectRawApply(
   try {
     writeCandidateFile(location.projectDir, options.content, basePath);
     normalized = await ops.config(location.projectDir, CANDIDATE_FILE_NAME, location.projectName);
-  } catch (error) {
+  } catch {
     configFailed = true;
-    configError = error instanceof Error ? error.message : null;
+    configError = "compose-config-failed";
   } finally {
     try {
       removeCandidateFile(location.projectDir);
@@ -413,12 +413,11 @@ export async function executeRawApply(
   try {
     report("start");
     await ops.up(location);
-  } catch (error) {
+  } catch {
     return {
       ok: false,
       reason: "compose-up-failed",
-      rolledBack: await rollback(),
-      detail: error instanceof Error ? error.message : undefined
+      rolledBack: await rollback()
     };
   }
 

@@ -1,3 +1,4 @@
+import { projectLockKey } from "../project-lock.js";
 import { RuntimeBudget } from "../runtime-budget.js";
 import { actionAuditReason } from "../action-audit.js";
 import { actionFailureOf } from "../action-failure.js";
@@ -395,7 +396,7 @@ export async function handleContainerCreate(ctx: RouteContext): Promise<void> {
     reason: `${parsed.fullRef} (${imageId.slice(0, 19)}) -> ${location.projectDir}`
   });
 
-  const outcome = await stackLocks.runExclusive(spec.name, () =>
+  const outcome = await stackLocks.runExclusive(projectLockKey({ projectName: spec.name }), () =>
     applyCompose(applyOps, {
       location,
       spec,
@@ -454,7 +455,7 @@ export async function handleStackContext(ctx: RouteContext, stackContextMatch: R
   const anchorContainerId = decodeURIComponent(stackContextMatch[1]);
   try {
     const project = stackProjectFromRegistry(anchorContainerId);
-    const prepared = await stackLocks.runExclusive(project.projectName, () => {
+    const prepared = await stackLocks.runExclusive(projectLockKey({ projectName: project.projectName }), () => {
       if (!registry.isAllowed(anchorContainerId)) {
         throw new StackEndpointError(409, "stack-anchor-stale");
       }
@@ -528,7 +529,7 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
       responder.finish(result);
       return;
     }
-    const outcome = await stackLocks.runExclusive(project.projectName, async () => {
+    const outcome = await stackLocks.runExclusive(projectLockKey({ projectName: project.projectName }), async () => {
       if (!registry.isAllowed(anchorContainerId)) {
         throw new StackEndpointError(409, "stack-anchor-stale");
       }

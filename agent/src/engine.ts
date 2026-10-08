@@ -1,3 +1,4 @@
+import { openArchiveStream } from "./archive-request.js";
 import { containerActionTimeoutMs } from "./runtime-actions.js";
 import http from "node:http";
 import type { RuntimeCallOptions } from "./runtime-budget.js";
@@ -17,6 +18,7 @@ import {
   parsePullProgress,
   type RawStats,
   type EngineInfo,
+  type EngineOptions,
   type DockerMonitorEvent,
   monitorEventOf,
   type RawInspect,
@@ -31,10 +33,6 @@ import {
 // child_process — string concatenation into a shell is a non-starter on this
 // attack surface (stage plan 3.2).
 
-export type EngineOptions = {
-  socketPath: string;
-  timeoutMs?: number;
-};
 
 // The socket's idle window has expired. Not a type of its own, but a `code` in
 // the same form node attaches to its own socket failures (ECONNREFUSED,
@@ -52,7 +50,7 @@ function engineTimeoutError(): NodeJS.ErrnoException {
 }
 
 type RequestOptions = {
-  method: "GET" | "POST" | "DELETE" | "PUT";
+  method: "GET" | "HEAD" | "POST" | "DELETE" | "PUT";
   path: string;
   // The response is not JSON (e.g. log stream).
   raw?: boolean;
@@ -86,7 +84,7 @@ export const MAX_LOG_SNAPSHOT_BYTES = 4 * 1024 * 1024;
 export class DockerEngine {
   constructor(private readonly options: EngineOptions) {}
 
-  private request(options: RequestOptions): Promise<{ status: number; body: Buffer }> {
+  private request(options: RequestOptions): Promise<{ status: number; body: Buffer; headers: http.IncomingHttpHeaders }> {
     const payload =
       options.rawBody !== undefined
         ? options.rawBody
@@ -126,7 +124,7 @@ export class DockerEngine {
             chunks.push(chunk);
           });
           response.on("end", () =>
-            resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks) })
+            resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks), headers: response.headers })
           );
           response.on("error", reject);
         }
@@ -242,20 +240,30 @@ export class DockerEngine {
     }
   }
 
-  // Unpack a tar archive into a directory OF THE CONTAINER (S19 — K6).
-  //
-  // The write path of Web-FTP runs over this route and not over
-  // `fs.writeFile`, because the daemon unpacks as root and sets the uid/gid
-  // from the tar header while doing so — the agent itself has no CAP_CHOWN and
-  // could not hand an uploaded file over to the service that is meant to read
-  // it (in detail in tar.ts).
-  //
-  // `noOverwriteDirNonDir=1`: a file may never replace an existing directory
-  // (and vice versa). Without it, an upload named `Saved` would be the way to
-  // make a whole directory disappear.
-  // `copyUIDGID` is deliberately NOT set — it would force the uid/gid of the
-  // target directory and thereby overwrite exactly the value the caller set
-  // here on purpose.
+  // Numeric tar owners are preserved; copyUIDGID must remain unset.
+  async statArchive(containerId: string, target: string): Promise<import("./file-archive.js").ArchiveStat | null> {
+    const query = new URLSearchParams({ path: target });
+    const result = await this.request({ method: "HEAD", path: `/containers/${encodeURIComponent(containerId)}/archive?${query}` });
+    if (result.status === 404) return null;
+    if (result.status !== 200) throw new EngineError("archive-stat-failed", result.status);
+    const header = result.headers["x-docker-container-path-stat"];
+    if (typeof header !== "string") throw new EngineError("archive-stat-invalid", 502);
+    let stat: import("./file-archive.js").ArchiveStat;
+    try { stat = JSON.parse(Buffer.from(header, "base64").toString("utf8")) as typeof stat; }
+    catch { throw new EngineError("archive-stat-invalid", 502); }
+    if (!stat || !Number.isSafeInteger(stat.mode) || stat.mode < 0 || stat.mode > 0xffffffff || !Number.isSafeInteger(stat.size) || stat.size < 0 || typeof stat.linkTarget !== "string") throw new EngineError("archive-stat-invalid", 502);
+    return stat;
+  }
+  openArchiveStream(containerId: string, target: string, signal?: AbortSignal) {
+    return openArchiveStream(this.options, containerId, target, signal);
+  }
+  async getArchive(containerId: string, target: string, maxResponseBytes: number): Promise<Buffer> {
+    const query = new URLSearchParams({ path: target });
+    const result = await this.request({ method: "GET", path: `/containers/${encodeURIComponent(containerId)}/archive?${query}`, maxResponseBytes });
+    if (result.status !== 200) throw new EngineError("archive-read-failed", result.status);
+    return result.body;
+  }
+
   async putArchive(containerId: string, directory: string, archive: Buffer): Promise<void> {
     const query = new URLSearchParams({ path: directory, noOverwriteDirNonDir: "1" });
     const { status, body } = await this.request({
@@ -927,6 +935,7 @@ export {
   parsePullProgress,
   type RawStats,
   type EngineInfo,
+  type EngineOptions,
   type DockerMonitorEvent,
   monitorEventOf,
   type RawInspect,

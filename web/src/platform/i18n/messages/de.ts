@@ -31,6 +31,21 @@
 // alle Teile.
 
 export const de = {
+  editorConflictTitle: "Die Datei wurde extern geändert.",
+  editorConflictBody: "Der Entwurf bleibt erhalten. Neu laden verwirft ihn; bewusstes Überschreiben speichert gegen den aktuellen Hash.",
+  editorConflictReload: "Neu laden und verwerfen",
+  editorConflictOverwrite: "Meinen Entwurf speichern",
+  editorSave: "Speichern",
+  editorSaving: "Wird gespeichert …",
+  editorSaved: "Gespeichert",
+  editorRevealFailed: "Der Wert konnte nicht geladen werden.",
+  editorKeyboardHint: "Tab rückt ein. Escape, dann Tab verlässt das Feld. Shift+Tab ohne Einrückung führt zurück.",
+  editorRevealValue: "{key} anzeigen und bearbeiten",
+  editorHideValue: "{key} maskieren",
+  editorDirty: "Ungespeicherter Entwurf",
+  editorInvalidText: "Der Text enthält ungültige Zeichen oder überschreitet die Größengrenze.",
+  editorDiscardConfirm: "Ungespeicherten Entwurf verwerfen?",
+
   // The tab bar of the stack page. The texts of the tabs themselves live in
   // the features `logs` and `compose` (`web/src/features/<name>/messages/`).
   stackTabsLabel: "Reiter dieses Stacks",

@@ -184,7 +184,7 @@ test("the finding names the reason for an unreadable file and leaves nothing beh
   const inspection = await inspectFor(place, ops, []);
 
   assert.equal(inspection.configFailed, true);
-  assert.equal(inspection.configError, "yaml kaputt");
+  assert.equal(inspection.configError, "compose-config-failed");
   assert.equal(inspection.services, null);
   assert.equal(inspection.diff, null);
   assert.equal(fs.existsSync(path.join(place.project, CANDIDATE_FILE_NAME)), false);

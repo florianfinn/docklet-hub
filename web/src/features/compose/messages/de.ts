@@ -63,20 +63,15 @@ export const deCompose = {
   composeEdit: "Bearbeiten",
   composeFileTabs: "Dateien des Compose-Projekts",
   composeEnvFileName: ".env",
-  composeEnvReveal: "Werte anzeigen",
-  composeEnvHide: "Werte verbergen",
   composeEnvMissing: "Zu dieser Compose-Datei liegt keine .env im Projektverzeichnis.",
-  composeEnvEmpty: "Die .env enthält keine auswertbaren Einträge.",
   composeEnvParsedNote: "Angezeigt werden Schlüssel und Werte aus der .env; Kommentare und Leerzeilen bleiben in der Datei.",
   composeEnvOwnStack: "Die .env des Hub-Stacks bleibt gesperrt, weil sie dessen Zugangsdaten enthält.",
   composeEditLabel: "Compose-Datei bearbeiten",
   // Der Weg aus dem Feld heraus (#135). Er steht als Satz da, weil ihn sonst
   // niemand fände: ein Feld, in dem Tab einrückt, sieht von außen aus wie
   // jedes andere.
-  composeEditKeyboardHint:
-    "Tabulator rückt ein, Umschalt und Tabulator rücken aus. Escape und danach Tabulator führt aus dem Feld heraus.",
   // Der Name des Symbols in der Kopfkarte (#157). Er ist kurz, weil er auf
-  // dem Knopf steht; der Satz dazu ist `composeEditKeyboardHint`.
+  // dem Knopf steht; der Satz dazu ist `editorKeyboardHint`.
   composeEditKeyboardTitle: "Tastenbelegung",
   composeShowDiff: "Vergleich",
   composeBackToEdit: "Zurück zum Text",

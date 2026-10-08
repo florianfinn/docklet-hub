@@ -1,3 +1,4 @@
+import { projectLockKey } from "./project-lock.js";
 import { randomUUID } from "node:crypto";
 import { MUTATION_QUEUE_POLICY, UPDATE_PREVIEW_TIMEOUT_MS, UPDATE_PRECHECK_TIMEOUT_MS, UPDATE_PULL_TIMEOUT_MS,
   UPDATE_READBACK_TIMEOUT_MS, updateExchangeTimeoutMs, updateRollbackTimeoutMs, updateProgressSchema,
@@ -92,7 +93,7 @@ export class UpdateRunner {
       state: s.initialState, imageId: s.rollbackImageId, definitionHash: s.definitionHash, backupId: null,
       updateError: null, rollbackError: null, resumeError: null }));
     const resultFor = (s: UpdateSnapshot) => results.find((r) => same(r.target, s.preview.target))!;
-    const lockKey = request.target.kind === "container" ? `container:${request.target.containerName}` : request.target.projectName;
+    const lockKey = projectLockKey(request.target.kind === "container" ? { containerName: request.target.containerName } : { projectName: request.target.projectName });
     const execute = async (): Promise<UpdateResult> => {
       const snapshots: UpdateSnapshot[] = []; const exchanged: UpdateSnapshot[] = []; const images = new Map<UpdateSnapshot, string>();
       let failure: UpdateResult["updateError"] = null; let rollbackError: UpdateError | null = null; let current: UpdateSnapshot | null = null;

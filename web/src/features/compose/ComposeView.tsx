@@ -10,6 +10,9 @@ import { Card } from "../../platform/ui/shadcn/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../platform/ui/shadcn/tooltip";
 import { AppliedNotice } from "./AppliedNotice";
 import { ComposeApply } from "./ComposeApply";
+import { useEditorDocument } from "../../platform/editor/useEditorDocument";
+import { composeEditorAdapter, composeMaskRanges } from "./editor-adapter";
+import { maskProjection } from "../../platform/editor/masking";
 import { ComposeEditor } from "./ComposeEditor";
 import { DiffView } from "./DiffView";
 import { EnvView } from "./EnvView";
@@ -91,7 +94,6 @@ export function ComposeView({
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const t = useTranslations();
-  const [draft, setDraft] = useState<string | null>(null);
   const [pane, setPane] = useState<Pane>("file");
   const [activeFile, setActiveFile] = useState<"compose" | "env">("compose");
   const [side, setSide] = useState(false);
@@ -117,7 +119,11 @@ export function ComposeView({
   const file = refreshing ? null : (lookup.data?.file ?? null);
   const anchorId = refreshing ? null : (lookup.data?.anchorId ?? null);
   const content = file?.content ?? "";
-  const dirty = draft !== null && draft !== content;
+  const documentTarget = JSON.stringify([hostId, containerIds, file?.projectDir, file?.composeFileName]);
+  const document = useEditorDocument(documentTarget, file ? { content, hash: file.composeHash } : undefined, composeEditorAdapter.maxBytes);
+  const draft = document.hasDraft ? document.content : null;
+  const setDraft = (value: string | null) => { if (value === null) document.discard(); else document.edit(value); };
+  const dirty = document.dirty;
 
   useEffect(() => {
     onDirtyChange(dirty);
@@ -129,10 +135,7 @@ export function ComposeView({
   // zweites Mal (#265).
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
 
-  // Der Entwurf liegt nirgends sonst; ein Neuladen oder ein geschlossener
-  // Browserreiter nehmen ihn mit. Der Browser zeigt dabei seinen eigenen Text
-  // und nicht unseren — was hier zählt, ist, DASS er fragt. Den Wechsel des
-  // Stack-Reiters sichert `StackScreen` über `onDirtyChange`.
+  // beforeunload protects browser navigation; drafts remain in session memory.
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent): void => {
@@ -151,7 +154,7 @@ export function ComposeView({
   // Zeilen 1.046 ms (#137), und das je Tastendruck.
   const showsDiff = pane === "diff" || pane === "apply";
   const comparison = useMemo(
-    () => (showsDiff ? diffLines(content, draft ?? content) : null),
+    () => (showsDiff ? diffLines(maskProjection(content, composeMaskRanges(content), new Set()).text, maskProjection(draft ?? content, composeMaskRanges(draft ?? content), new Set()).text) : null),
     [showsDiff, content, draft]
   );
 
@@ -333,7 +336,7 @@ export function ComposeView({
                       <span className="sr-only">{t("composeEditKeyboardTitle")}</span>
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent className="max-w-[320px]">{t("composeEditKeyboardHint")}</TooltipContent>
+                  <TooltipContent className="max-w-[320px]">{t("editorKeyboardHint")}</TooltipContent>
                 </Tooltip>
               ) : null}
               {activeFile === "compose" && pane === "edit" ? (
@@ -412,13 +415,13 @@ export function ComposeView({
               </span>
             ) : null}
           </div> : null}
-          {activeFile === "env" ? <EnvView hostId={hostId} containerId={anchorId} /> : null}
+          {activeFile === "env" ? <EnvView key={JSON.stringify([hostId, anchorId])} hostId={hostId} containerId={anchorId} /> : null}
           {activeFile === "compose" && file.fileReadable && pane === "file" ? (
             <YamlCode text={content} className="max-h-[70vh] overflow-y-auto py-3" />
           ) : null}
           {activeFile === "compose" && file.fileReadable && pane === "edit" ? (
             <div className="h-[70vh]">
-              <ComposeEditor value={draft ?? content} onChange={setDraft} />
+              <ComposeEditor key={documentTarget} value={draft ?? content} onChange={setDraft} />
             </div>
           ) : null}
         </Card>

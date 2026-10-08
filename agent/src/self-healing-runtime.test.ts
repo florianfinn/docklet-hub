@@ -213,10 +213,10 @@ test("control storage failures forward only a stable error and audit the diagnos
 
 test("production incident omits logs when the confirmed environment cannot be read", async (t) => {
   const f = fixture(t, { project: true });
-  const read = fs.readFileSync;
-  t.mock.method(fs, "readFileSync", (...args: Parameters<typeof fs.readFileSync>) => {
-    if (args[0] === "/srv/apps/demo/.env") throw Object.assign(new Error("synthetic read refused"), { code: "EACCES" });
-    return read(...args);
+  const open = fs.openSync;
+  t.mock.method(fs, "openSync", (...args: Parameters<typeof fs.openSync>) => {
+    if (args[0] === "/srv/apps/demo") throw Object.assign(new Error("synthetic read refused"), { code: "EACCES" });
+    return open(...args);
   });
   t.mock.method(engine, "logs", async () => { throw new Error("logs must not be fetched without redaction"); });
   f.crash(); await selfHealing.tick(); f.crash(); await selfHealing.tick();

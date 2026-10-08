@@ -1,3 +1,6 @@
+import { projectLockKey } from "../project-lock.js";
+import { stackLocks } from "../runtime/state.js";
+import { KeyedMutexBusyError } from "../concurrency.js";
 import { composeSelectionRequestSchema, envQuerySchema, envWriteRequestSchema } from "contract";
 import { queryObject } from "../request-keys.js";
 import {
@@ -96,9 +99,9 @@ export async function handleCompose(ctx: ContainerRouteContext): Promise<void> {
     } else {
       specReason = read.reason;
     }
-  } catch (error) {
+  } catch {
     specReason = "compose-config-failed";
-    console.error("[agent] compose config failed:", error);
+    console.error("[agent] compose config failed", { reason: specReason });
   }
 
   audit.write({
@@ -201,7 +204,7 @@ export async function handleStackServices(ctx: ContainerRouteContext): Promise<v
 // The directory comes from the LABELS of the running container, never from
 // the request (security review 5c, finding 4). There is no way to name a path
 // to the agent here.
-export async function handleEnv(ctx: ContainerRouteContext): Promise<void> {
+async function handleEnvUnlocked(ctx: ContainerRouteContext): Promise<void> {
   const { request, response, url, actor, containerId } = ctx;
   const writing = request.method === "PUT";
 
@@ -328,10 +331,10 @@ export async function handleEnv(ctx: ContainerRouteContext): Promise<void> {
       expectedHash,
       basePath: composeBasePath
     });
-  } catch (error) {
+  } catch {
     send(response, 400, {
       error: "invalid-env-key",
-      detail: error instanceof Error ? error.message : String(error)
+      detail: "invalid-env-key"
     });
     return;
   }
@@ -444,4 +447,18 @@ export async function handleComposeCandidates(ctx: ContainerRouteContext): Promi
     outcome: "allowed", reason: "cleared" });
   send(response, 200, { ok: true, selectedFilePath: null });
   return;
+}
+
+export async function handleEnv(ctx: ContainerRouteContext): Promise<void> {
+  if (ctx.request.method === "GET") return handleEnvUnlocked(ctx);
+  const anchor = registry.get(ctx.containerId)?.compose;
+  const inspect = anchor?.projectName ? null : await engine.inspect(ctx.containerId);
+  const labelProject = inspect?.Config?.Labels?.["com.docker.compose.project"];
+  const containerName = inspect?.Name?.replace(/^\//, "") ?? registry.get(ctx.containerId)?.containerName;
+  const key = projectLockKey({ registryProject: anchor?.projectName, labelProject, containerName, containerId: ctx.containerId });
+  try { await stackLocks.runExclusive(key, () => handleEnvUnlocked(ctx)); }
+  catch (error) {
+    if (!(error instanceof KeyedMutexBusyError)) throw error;
+    send(ctx.response, 409, { error: "busy" });
+  }
 }

@@ -1,3 +1,4 @@
+import { projectLockKey } from "../project-lock.js";
 import { RuntimeBudget, type RuntimeCallOptions } from "../runtime-budget.js";
 import { RuntimeActionFailure } from "../action-failure.js";
 import type { RawInspect } from "../engine.js";
@@ -24,7 +25,7 @@ export async function runStackRuntimeAction(
 ) {
   const lastStates = new Map<string, ReturnType<typeof runtimeStateOf>>();
   const onInspect = (serviceName: string, inspect: RawInspect) => { lastStates.set(serviceName, runtimeStateOf(inspect)); };
-  try { return await stackLocks.runExclusive(project.projectName, async () => {
+  try { return await stackLocks.runExclusive(projectLockKey({ projectName: project.projectName }), async () => {
     if (!registry.isAllowed(anchor) && ![...registryEntriesByService(project).values()].some((entry) => registry.isAllowed(entry.containerId))) {
       throw new StackEndpointError(409, "state-changed");
     }

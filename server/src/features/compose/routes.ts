@@ -180,6 +180,14 @@ export function registerComposeRoutes(router: Router, options: ComposeRouteOptio
     })
   );
 
+  router.put("/hosts/:hostId/containers/:containerId/compose/env", requireAdmin(auth),
+    withSession(auth, async (request, response, user) => {
+      const result = await service.writeEnv(containerRef(request, user.id), request.body);
+      if (!result.ok) { respondWithFailure(response, result.failure, writeRejection); return; }
+      response.json({ hash: result.hash });
+    })
+  );
+
   router.get(
     "/hosts/:hostId/containers/:containerId/compose/env",
     requireAdmin(auth),

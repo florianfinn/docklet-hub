@@ -1,3 +1,4 @@
+import { useFileSource } from "./source-context";
 import { CornerLeftUp, Download, FileText } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
@@ -52,21 +53,7 @@ function TruncatedNote() {
   );
 }
 
-/**
- * Was in diesem Verzeichnis geht und was nicht.
- *
- * ⚠️ `diagnostics: null` HEISST „KEINE AUSKUNFT" UND NICHT „NEIN". Der Agent
- * konnte das Verzeichnis nicht beurteilen; daraus „darf nicht" zu machen wäre
- * eine Behauptung über etwas, das niemand geprüft hat. Der Fall bekommt deshalb
- * einen eigenen Satz.
- *
- * ⚠️ `deletable` IST DAS RECHT AM VERZEICHNIS, nicht an der Datei: Löschen und
- * Umbenennen brauchen Schreibrecht an dem Verzeichnis, in dem die Datei liegt.
- *
- * ⚠️ `uploadable` HÄNGT NICHT AN `deletable`. Die beiden anderen sind die
- * Rechte des Agenten am Host; hochgeladen wird über den Daemon, und dafür zählt
- * allein, ob der Container dieses Verzeichnis schreibbar gemountet hat.
- */
+// Capabilities describe daemon operations, not agent filesystem permissions.
 function Diagnostics({ listing }: { listing: FileListing }) {
   const t = useTranslations();
   const diagnostics = listing.diagnostics;
@@ -118,6 +105,7 @@ function EntryRow({
 }) {
   const t = useTranslations();
   const { language } = useLanguage();
+  const sourceId = useFileSource();
   const here = childPath(listing.path, entry.name);
   const size = byteSize(entry.size, language);
 
@@ -182,7 +170,7 @@ function EntryRow({
             // Anwendung, sondern eine der API. Ein `Link` fingen den Klick ab und
             // suchte eine Route, die es nicht gibt.
             <a
-              href={containerFileUrl(hostId, containerId, here)}
+              href={containerFileUrl(hostId, containerId, here, sourceId)}
               download={entry.name}
               data-testid="files-entry-download"
               className="inline-flex items-center gap-1 text-[13px] underline-offset-2 hover:underline"

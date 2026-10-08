@@ -39,6 +39,7 @@ const EXPECTED_LAYERS = [
   // `PUT /settings/logs`, so the order changes no answer; the case below holds
   // (`MOVED_BY_FEATURES`).
   "PUT /settings/logs",
+  "GET /hosts/:hostId/containers/:containerId/file-sources",
   "GET /hosts/:hostId/containers/:containerId/share-candidates",
   "GET /hosts/:hostId/containers/:containerId/share",
   "PUT /hosts/:hostId/containers/:containerId/share",
@@ -54,6 +55,7 @@ const EXPECTED_LAYERS = [
   "GET /hosts/:hostId/containers/:containerId/compose/candidates",
   "PUT /hosts/:hostId/containers/:containerId/compose/selection",
   "DELETE /hosts/:hostId/containers/:containerId/compose/selection",
+  "PUT /hosts/:hostId/containers/:containerId/compose/env",
   "GET /hosts/:hostId/containers/:containerId/compose/env",
   "POST /hosts/:hostId/containers/:containerId/compose/preview",
   "POST /hosts/:hostId/containers/:containerId/compose",

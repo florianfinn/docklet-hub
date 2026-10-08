@@ -38,6 +38,8 @@
 // differ (`create-directory`), and sending one of them would end in a `400`.
 
 import {
+  fileSourcesResponseSchema,
+  type FileSource,
   WEBFTP_ENTRY_KINDS,
   type FileActionDone,
   type FileListing,
@@ -83,7 +85,8 @@ export type FileRequestOptions = Omit<RequestOptions, "actor"> & { actor: Sessio
 /** Ein Verzeichnis der Freigabe, in dem gearbeitet wird. */
 export type SharePath = {
   /** Der relative Pfad der Freigabe, wie ihn `share-candidates` nennt. */
-  share: string;
+  share?: string;
+  sourceId?: string;
   /** Der Pfad INNERHALB der Freigabe; leer heißt ihre Wurzel. */
   path: string;
 };
@@ -153,7 +156,8 @@ export type FileCommand = {
 // des Wächters liest genau sie.
 function shareQuery(location: SharePath): string {
   const params = new URLSearchParams();
-  params.set("share", location.share);
+  if (location.sourceId) params.set("sourceId", location.sourceId);
+  else params.set("share", location.share ?? "");
   params.set("path", location.path);
   return params.toString();
 }
@@ -340,7 +344,8 @@ export async function uploadFile(
   options: FileRequestOptions
 ): Promise<FileUploaded> {
   const params = new URLSearchParams();
-  params.set("share", destination.share);
+  if (destination.sourceId) params.set("sourceId", destination.sourceId);
+  else params.set("share", destination.share ?? "");
   params.set("path", destination.path);
   params.set("name", destination.name);
   const id = encodeId(containerId);
@@ -403,7 +408,8 @@ export async function writeFileText(
     const refusal = typeof error.detail === "object" && error.detail !== null
       ? (error.detail as Record<string, unknown>)
       : {};
-    return { ok: false, reason: asText(refusal.error, "konflikt"), hash: asText(refusal.hash) };
+    if (refusal.error !== "file-changed-externally" || typeof refusal.hash !== "string") throw error;
+    return { ok: false, reason: refusal.error, hash: refusal.hash };
   }
 }
 
@@ -425,10 +431,12 @@ export async function applyFileAction(
   containerId: string,
   share: string,
   command: FileCommand,
-  options: FileRequestOptions
+  options: FileRequestOptions,
+  sourceId?: string
 ): Promise<FileActionDone> {
   const params = new URLSearchParams();
-  params.set("share", share);
+  if (sourceId) params.set("sourceId", sourceId);
+  else params.set("share", share);
   const id = encodeId(containerId);
   const actionRoute = `/containers/${id}/files?${params.toString()}`;
   const payload: Record<string, unknown> = { action: command.action, path: command.path };
@@ -438,4 +446,9 @@ export async function applyFileAction(
     name: typeof answer.name === "string" ? answer.name : null,
     kind: typeof answer.kind === "string" ? answer.kind : null
   };
+}
+
+export async function listFileSources(target: AgentTarget, containerId: string, options: FileRequestOptions): Promise<FileSource[]> {
+  const sourcesRoute = `/containers/${encodeId(containerId)}/file-sources`;
+  return fileSourcesResponseSchema.parse(await agentGet(target, sourcesRoute, options)).sources;
 }

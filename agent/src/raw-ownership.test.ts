@@ -116,7 +116,8 @@ test("apply and preview check ownership again under the project lock", () => {
 const composeRoutes = fs.readFileSync(new URL("./routes/compose-routes.ts", import.meta.url), "utf8");
 
 test("the .env write refuses an externally managed stack right before writing, but not the read", () => {
-  const start = composeRoutes.indexOf("export async function handleEnv(");
+  assert.match(composeRoutes, /stackLocks.runExclusive\(key, \(\) => handleEnvUnlocked\(ctx\)\)/);
+  const start = composeRoutes.indexOf("async function handleEnvUnlocked(");
   assert.ok(start >= 0, "handleEnv is gone");
   const body = composeRoutes.slice(start, composeRoutes.indexOf("\n}\n", start));
   const read = body.indexOf("if (!writing) {");

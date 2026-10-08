@@ -71,6 +71,7 @@ import {
   AgentError,
   agentGet,
   agentPost,
+  agentPut,
   agentStreamPost,
   streamBodyOf,
   type AgentTarget
@@ -370,6 +371,7 @@ export async function readProjectEnv(
   const answer = asRecord(await agentGet(target, readRoute + (plaintext ? "?plaintext=1" : ""), options), readRoute);
   const entries = Array.isArray(answer.entries) ? answer.entries : [];
   return {
+    envHash: typeof answer.envHash === "string" ? answer.envHash : null,
     projectDir: asText(answer.projectDir),
     composeFileName: asText(answer.composeFileName),
     filePresent: answer.filePresent === true,
@@ -386,4 +388,10 @@ export async function readProjectEnv(
       }];
     })
   };
+}
+
+export async function writeProjectEnv(target: AgentTarget, containerId: string, change: unknown, options: ComposeRequestOptions): Promise<{ hash: string }> {
+  const writeRoute = `/containers/${encodeURIComponent(containerId)}/env`;
+  const answer = asRecord(await agentPut(target, writeRoute, change, options), writeRoute);
+  return { hash: asText(answer.envHash) };
 }

@@ -307,8 +307,7 @@ test("das Löschen fragt nach und schickt vor der Bestätigung nichts", async ()
 });
 
 test("Löschen und Umbenennen sind gesperrt, wenn im Verzeichnis nicht geschrieben werden darf", async () => {
-  // ⚠️ `deletable` IST DAS RECHT AM VERZEICHNIS und nicht an der Datei — genau
-  // deshalb hängen BEIDE Handlungen daran, auch das Umbenennen.
+  // Sources outside the visible base allow uploads while rename/delete stay blocked.
   const server = stubHub({
     listings: {
       "": listing({
@@ -326,7 +325,17 @@ test("Löschen und Umbenennen sind gesperrt, wenn im Verzeichnis nicht geschrieb
     assert.ok(rename instanceof HTMLButtonElement, "der Knopf zum Umbenennen fehlt");
     assert.equal(remove.disabled, true, "das Löschen steht offen, obwohl im Verzeichnis nicht geschrieben werden darf");
     assert.equal(rename.disabled, true, "das Umbenennen steht offen, obwohl es am Verzeichnis scheitern wird");
-    assert.ok(at("files-write-blocked") !== null, "der Satz, warum hier nichts geht, fehlt");
+    assert.ok(at("files-write-blocked") !== null, "der Sperrgrund fehlt");
+    assert.equal(saysEither(de.filesWriteBlocked, en.filesWriteBlocked), true);
+    assert.equal(de.filesWriteBlocked.includes("Basispfad"), true);
+    assert.equal(en.filesWriteBlocked.includes("base path"), true);
+    const nameInput = at("files-create-directory-name");
+    assert.ok(nameInput instanceof HTMLInputElement);
+    assert.equal(nameInput.disabled, false);
+    await typeInto(nameInput, "new-folder");
+    const create = at("files-create-directory-submit");
+    assert.ok(create instanceof HTMLButtonElement);
+    assert.equal(create.disabled, false);
   } finally {
     await mounted.unmount();
     server.restore();
@@ -581,4 +590,33 @@ test("beim Wechsel des Verzeichnisses steht die alte Liste nicht weiter da", asy
     await mounted.unmount();
     server.restore();
   }
+});
+
+test("Archiv-Ersetzen erklärt den Verlust und speichert erst nach Bestätigung", async () => {
+  const server = stubHub({
+    listings: { "": listing({ entries: [entry({ name: "archive.txt" })], diagnostics: { readable: true, deletable: false, uid: 2100, gid: 2200, uploadable: true } }) },
+    texts: { "archive.txt": { content: "old", hash: "actual-hash" } }, saves: [{ ok: "new-hash" }]
+  });
+  const original = window.confirm;
+  let confirmed = false;
+  const questions: string[] = [];
+  window.confirm = (message) => { questions.push(message ?? ""); return confirmed; };
+  const mounted = await mountAt(`/container/${HOST_ID}/demo/files?edit=archive.txt`);
+  try {
+    assert.equal(at("files-editor-replacement-warning") !== null, true);
+    assert.equal(saysEither(de.filesArchiveReplaceWarning, en.filesArchiveReplaceWarning), true);
+    const field = at("files-editor-input");
+    assert.ok(field instanceof HTMLTextAreaElement);
+    await typeInto(field, "draft");
+    await click(at("files-editor-save")!);
+    assert.equal(asked(server, "PUT", "/file-text").length, 0);
+    assert.equal(field.value, "draft");
+    assert.equal(questions.length, 1);
+    assert.equal([de.filesArchiveReplaceConfirm, en.filesArchiveReplaceConfirm].includes(questions[0]), true);
+    confirmed = true;
+    await click(at("files-editor-save")!);
+    assert.equal(asked(server, "PUT", "/file-text").length, 1);
+    assert.equal(asked(server, "PUT", "/file-text")[0].body, "draft");
+    assert.equal(questions.length, 2);
+  } finally { await mounted.unmount(); window.confirm = original; server.restore(); }
 });

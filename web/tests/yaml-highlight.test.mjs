@@ -94,9 +94,9 @@ test("Compose-Variablen bekommen eine feste Syntaxart auch über Prism-Grenzen h
   );
   assert.ok(lines[0].some((piece) => piece.kind === "comment" && piece.text.includes("${COMMENT}")));
   assert.ok(lines[1].some((piece) => piece.kind !== "variable" && piece.text.includes("$$HOME")));
-  assert.equal(classOfKind("variable"), "compose-syntax-variable");
-  assert.equal(classOfKind("atrule"), "compose-syntax-key");
-  assert.equal(classOfKind("string"), "compose-syntax-string");
+  assert.equal(classOfKind("variable"), "editor-syntax-variable");
+  assert.equal(classOfKind("atrule"), "editor-syntax-key");
+  assert.equal(classOfKind("string"), "editor-syntax-string");
 });
 
 test("ein VERSCHACHTELTER Baum verliert seinen inneren Text nicht", () => {

@@ -30,7 +30,7 @@ after(() => fs.rmSync(directory, { recursive: true, force: true }));
 
 const id = "a".repeat(64);
 const otherId = "b".repeat(64);
-const target = { kind: "container", containerName: "demo" };
+const target = { kind: "container" as const, containerName: "demo" };
 const expectedContainer = { containerId: id, status: "running", startedAt: "seen" };
 const service = { target, expectedContainer, startDeadlineSeconds: 120, backup: null,
   offeredDigest: `sha256:${"c".repeat(64)}`, definitionHash: "hash" };
@@ -67,6 +67,7 @@ function fixture(t: TestContext, flags: { observeOnly?: boolean; externallyManag
     ...flags, compose: { projectDir: "/srv/apps/demo", projectName: "demo", serviceName: "web",
       composeFileName: "compose.yaml", origin: "dashboard" } }]);
   t.mock.property(config, "readOnly", false);
+  t.mock.method(engine, "info", async () => ({ DockerRootDir: "/var/lib/docker" }));
   t.mock.method(engine, "inspect", async (containerId: string) => ({ Id: containerId, Name: "/demo",
     Config: { Labels: own ? { "com.docker.compose.project.working_dir": "/home/docker/dashboard-repo" } : {} },
     HostConfig: {}, State: { Status: "running", StartedAt: "seen" }
@@ -77,7 +78,6 @@ function fixture(t: TestContext, flags: { observeOnly?: boolean; externallyManag
 }
 
 const routes = [
-  ["GET", `/containers/${id}/file-sources`, false, "file-sources", "file-sources", undefined],
   ["POST", "/update-previews", false, "update-preview", "update", updatePreviewBody],
   ["POST", "/updates", true, "update", "update", updateBody],
   ["GET", `/containers/${id}/backups`, false, "backups", "backups", undefined],
@@ -206,7 +206,8 @@ test("contract 13 exposes route response shapes, optional file source selection 
 
 test("nine coordinated routes replace all three GET preview paths", async (t) => {
   fixture(t);
-  assert.equal(routes.length, 9);
+  assert.equal(routes.length + 1, 9);
+  assert.ok(findRoute("GET", `/containers/${id}/file-sources`));
   for (const url of [`/containers/${id}/update-preview`, `/projects/${id}/update-preview`,
     `/containers/${id}/restore-preview?backupId=backup`]) {
     assert.equal(findRoute("GET", url.split("?")[0]), null);
@@ -330,6 +331,73 @@ test("not-implemented follows the unchanged shared HTTP error sequence", () => {
     ["invalid-request", "invalid-json", "unauthorized", "actor-not-allowed", "observe-only", "externally-managed",
       "too-many-streams", "too-many-sessions"]);
 });
+
+test("file source discovery authenticates, checks the allowlist and returns contract 13", async (t) => {
+  fixture(t);
+  t.mock.method(engine, "listContainerIds", async () => [id]);
+  const url = `/containers/${id}/file-sources`;
+  assert.equal((await request("GET", url, undefined, false)).status, 401);
+  const allowed = await request("GET", url);
+  assert.equal(allowed.status, 200);
+  assert.equal(fileSourcesResponseSchema.safeParse(allowed.body()).success, true);
+  registry.replaceAll([]);
+  assert.equal((await request("GET", url)).status, 404);
+});
+
+test("every file mutation immediately rejects a held Compose project lock", async (t) => {
+  fixture(t);
+  const { stackLocks } = await import("./runtime/state.js");
+  let release!: () => void;
+  const active = stackLocks.runExclusive("demo", () => new Promise<void>((resolve) => { release = resolve; }));
+  try {
+    for (const [method, endpoint] of [["PUT", "file"], ["PUT", "file-text"], ["POST", "files"], ["PUT", "env"]]) {
+      const response = await request(method, `/containers/${id}/${endpoint}`, {});
+      assert.equal(response.status, 409, endpoint);
+      assert.equal(response.body().error, "busy", endpoint);
+    }
+  } finally { release(); await active; }
+});
+
+test("Compose failures log a sanitized reason without stderr or file content", async (t) => {
+  fixture(t);
+  const projectDir = "/srv/apps/log-config";
+  const originalRead = fs.readFileSync;
+  t.mock.method(fs, "readFileSync", (...args: Parameters<typeof fs.readFileSync>) => String(args[0]) === projectDir + "/compose.yaml" ? "services: {}\n" : originalRead(...args));
+  t.mock.method(engine, "inspect", async () => ({ Id: id, Name: "/demo", Config: { Labels: {
+    "com.docker.compose.project": "demo", "com.docker.compose.service": "web",
+    "com.docker.compose.project.working_dir": projectDir,
+    "com.docker.compose.project.config_files": path.join(projectDir, "compose.yaml")
+  } } }));
+  const child = await import("node:child_process");
+  const { syncBuiltinESMExports } = await import("node:module");
+  t.mock.method(child.default, "execFile", (_file: unknown, _args: unknown, _options: unknown, callback: (error: Error, stdout: string, stderr: string) => void) => {
+    callback(new Error("API_KEY=private-fixture"), "", "PASSWORD=private-fixture");
+    return {};
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const logged: unknown[][] = [];
+  t.mock.method(console, "error", (...values: unknown[]) => { logged.push(values); });
+  const response = await request("GET", `/containers/${id}/compose`);
+  assert.equal(response.status, 200);
+  assert.equal(logged.length, 1);
+  assert.deepEqual(logged[0], ["[agent] compose config failed", { reason: "compose-config-failed" }]);
+  assert.equal(response.payload.includes("private-fixture"), false);
+});
+
+test("protected or noncanonical user paths reject before archive discovery", async (t) => {
+  fixture(t);
+  t.mock.method(engine, "statArchive", async () => { throw new Error("invalid paths must not reach archive HEAD"); });
+  t.mock.method(engine, "getArchive", async () => { throw new Error("invalid paths must not reach archive GET"); });
+  for (const path of [".env", "compose.yaml", "../outside", "/absolute", "sub/../value", "control\x01"]) {
+    const query = new URLSearchParams({ sourceId: "unknown", path });
+    for (const endpoint of ["file", "file-text", "files"]) {
+      const response = await request("GET", `/containers/${id}/${endpoint}?${query}`);
+      assert.equal(response.status, 400, path);
+    }
+  }
+});
+
 test("manifest-only preview and ID-only start expose a completed job after the request ends", async (t) => {
   fixture(t); registry.replaceAll([{ containerId: id, containerName: "demo", imageRef: "example/app:1.0", allowed: true }]);
   const digest = `sha256:${"c".repeat(64)}`;
@@ -369,4 +437,60 @@ test("new updates are denied before gates or job creation until recovery succeed
   t.mock.method(engine, "inspect", async () => { assert.fail("Recovery blocks updates before Docker access"); });
   const result = await request("POST", "/updates", updateBody);
   assert.equal(result.status, 409); assert.deepEqual(result.body(), { error: "update-rollback-unavailable" });
+});
+
+for (const standalone of [false, true]) test(`file mutations share the actual update lock${standalone ? " by container name" : " with Compose apply"}`, { timeout: 10_000 }, async (t) => {
+  fixture(t);
+  if (standalone) registry.replaceAll([{ containerId: id, containerName: "demo", imageRef: "example/app:1.0", allowed: true }]);
+  else t.mock.method(engine, "inspect", async () => ({ Id: id, Name: "/demo", Config: { Labels: { "com.docker.compose.project": "drifted" } } }));
+  const { stackLocks } = await import("./runtime/state.js");
+  const { UpdateRunner } = await import("./update-runner.js");
+  const { AgentJobs } = await import("./agent-jobs.js");
+  const { executeRaw, rawLockKey } = await import("./runtime/raw-ops.js");
+  const digest = `sha256:${"d".repeat(64)}`;
+  let enter!: () => void; let release!: () => void; let finish!: () => void;
+  const entered = new Promise<void>((resolve) => { enter = resolve; });
+  const blocked = new Promise<void>((resolve) => { release = resolve; });
+  const finished = new Promise<void>((resolve) => { finish = resolve; });
+  let preparing = 0;
+  const runner = new UpdateRunner(new AgentJobs(() => true), stackLocks, {
+    prepare: async (selection) => {
+      if (++preparing === 2) { enter(); await blocked; }
+      return { raw: { Id: id, Name: "/demo" }, definition: {}, dependencies: [], preview: {
+        ...selection, imageRef: "example/app:1.0", currentDigest: digest, offeredDigest: null,
+        rollbackImageId: "old-image", definitionHash: "definition", acceptance: "service",
+        initialState: { ...expectedContainer, health: null, exitCode: 0 }, mounts: [], warnings: [], blocker: null
+      } };
+    },
+    manifest: async () => digest,
+    pull: async () => { throw new Error("unchanged image must not pull"); },
+    exchange: async () => { throw new Error("unchanged image must not exchange"); },
+    rollback: async () => { throw new Error("unchanged image must not roll back"); },
+    read: async () => ({ Id: id, Name: "/demo" }),
+    intentional: () => () => {},
+    finished: () => { finish(); }
+  });
+  if (!standalone) t.mock.timers.enable({ apis: ["setTimeout"] });
+  const selectionTarget = standalone ? target : { kind: "compose" as const, projectName: "demo", serviceName: "web" };
+  const preview = await runner.preview({ target: standalone ? target : { kind: "stack", projectName: "demo" },
+    services: [{ target: selectionTarget, expectedContainer, startDeadlineSeconds: 120, backup: null }] }, null);
+  runner.start({ previewId: preview.previewId, target: preview.target, confirmed: true,
+    services: preview.services.map((s) => ({ ...s, offeredDigest: s.offeredDigest! })) }, null);
+  await entered;
+  try {
+    for (const [method, endpoint] of [["PUT", "file"], ["PUT", "file-text"], ["POST", "files"], ["PUT", "env"]]) {
+      const response = await request(method, `/containers/${id}/${endpoint}`, {});
+      assert.equal(response.status, 409, endpoint);
+      assert.equal(response.body().error, "busy", endpoint);
+    }
+    if (!standalone) {
+      const operation = { containerId: id, stackName: "drifted", location: {
+        projectName: "drifted", projectDir: "/srv/apps/demo", composeFileName: "compose.yaml"
+      } } as Parameters<typeof executeRaw>[0];
+      assert.equal(rawLockKey(operation), "demo");
+      const applying = executeRaw(operation);
+      t.mock.timers.tick(60_001);
+      assert.deepEqual(await applying, { status: 409, body: { error: "action-queue-timeout" } });
+    }
+  } finally { release(); await finished; }
 });
