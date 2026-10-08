@@ -29,6 +29,7 @@ export const deContainers = {
   backupRefreshPreview: "Sicherungsauswahl prüfen",
   restoreAction: "Daten wiederherstellen",
   restoreTitle: "Daten für {target} wiederherstellen",
+  restoreArchiveLinkWarning: "Beim Restore über die Docker-Archiv-API können Links ausgelassen werden. Die ausgelassenen Einträge werden in den privaten Metadaten des Agenten vermerkt.",
   restoreDescription: "Restore überschreibt vorhandene Daten der gewählten Ziele und stoppt den Container. Danach wird sein vorheriger Laufzustand wiederhergestellt.",
   restoreBackup: "Sicherung",
   restoreEmpty: "Keine vollständige Sicherung vorhanden.",

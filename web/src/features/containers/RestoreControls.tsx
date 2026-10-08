@@ -76,6 +76,7 @@ export function RestoreControls({ target }: { target: Extract<LifecycleTarget, {
           {preview.targets.map((source) => <p key={source.sourceId}>{source.source} → {source.target} · {t("backupBytes", {
             bytes: preview.backup.archives.find((archive) => archive.sourceId === source.sourceId)!.bytes })}</p>)}
           <p>{t("backupConsistencyWarning")}</p>
+          <p>{t("restoreArchiveLinkWarning")}</p>
         </> : <>
           {!selection?.backups.length ? <p>{t("restoreEmpty")}</p> : <label>{t("restoreBackup")} <select value={backupId} onChange={(event) => { setBackupId(event.target.value); setMounts([]); }}>
             {selection.backups.map((entry) => <option key={entry.backupId} value={entry.backupId}>{entry.completedAt} · {t(entry.mode === "stop" ? "backupModeStop" : "backupModeLive")}</option>)}

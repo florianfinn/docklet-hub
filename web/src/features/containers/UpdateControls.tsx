@@ -65,7 +65,7 @@ export function UpdateControls({ target, detail = false }: { target: LifecycleTa
       startDeadlineSeconds: service.startDeadlineSeconds, backup: service.backup })) }),
     onSuccess: (value) => { setPreview(value); setSelectionDirty(false); }, onError: (caught) => setError({ code: errorCode(caught) }) });
   const start = useMutation({ mutationFn: async () => {
-    if (!preview || preview.services.some((service) => service.blocker || !service.offeredDigest)) throw new Error("blocked");
+    if (!preview || preview.services.some((service) => service.backup?.mounts.some((mount) => service.mounts.find((source) => source.sourceId === mount.sourceId)?.estimatedBytes === null) || service.blocker || !service.offeredDigest)) throw new Error("blocked");
     return startUpdate(target.hostId, { target: preview.target, previewId: preview.previewId, confirmed: true,
       services: preview.services.map((service) => ({ target: service.target, expectedContainer: service.expectedContainer,
         startDeadlineSeconds: service.startDeadlineSeconds, backup: service.backup, offeredDigest: service.offeredDigest!, definitionHash: service.definitionHash })) });
@@ -77,7 +77,7 @@ export function UpdateControls({ target, detail = false }: { target: LifecycleTa
     onSuccess: () => { setDeadline(""); void client.invalidateQueries({ queryKey: settingKey }); }, onError: (caught) => setError({ code: errorCode(caught) }) });
 
   const disabled = Boolean(blocker || foreign || active || prepare.isPending || start.isPending);
-  const blockedPreview = preview?.services.some((service) => service.blocker !== null || service.offeredDigest === null);
+  const blockedPreview = preview?.services.some((service) => service.blocker !== null || service.offeredDigest === null || service.backup?.mounts.some((mount) => service.mounts.find((source) => source.sourceId === mount.sourceId)?.estimatedBytes == null));
   return <div className="space-y-2" data-update={name}>
     <Button variant="outline" className="min-h-11" aria-disabled={disabled}
       aria-label={t("updateActionFor", { target: name })} onClick={() => { if (!disabled) prepare.mutate(); }}>{t("updateAction")}</Button>

@@ -15,6 +15,7 @@ export const enContainers = {
   backupRefreshPreview: "Review backup selection",
   restoreAction: "Restore data",
   restoreTitle: "Restore data for {target}",
+  restoreArchiveLinkWarning: "Restores through the Docker archive API may omit links. Omitted entries are recorded in the agent’s private metadata.",
   restoreDescription: "Restore overwrites existing data at the selected targets and stops the container. Its previous runtime state is restored afterwards.",
   restoreBackup: "Backup",
   restoreEmpty: "No complete backup available.",

@@ -33,6 +33,7 @@ test("K22: restore selects a complete backup and mount, previews bytes and requi
     assert.equal(await waitFor(() => dialog.textContent?.includes("Überschreiben bestätigen") === true), true);
     assert.equal(f.calls.some((call) => call.path.endsWith("/restores")), false);
     assert.equal(dialog.textContent?.includes("keine konsistente Datenbanksicherung"), true);
+    assert.equal(dialog.textContent?.includes("Docker-Archiv-API können Links ausgelassen werden"), true);
     await click(textButton("Überschreiben bestätigen und wiederherstellen", dialog));
     assert.equal(await waitFor(() => f.calls.some((call) => call.path.endsWith("/restores"))), true);
     assert.equal(await waitFor(() => f.queryClient.isMutating() === 0), true);

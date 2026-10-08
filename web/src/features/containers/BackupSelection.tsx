@@ -14,7 +14,7 @@ export function BackupSelection({ service, disabled, change }: { service: Update
     <p>{t(mode === "live" ? "backupLiveWarning" : "backupConsistencyWarning")}</p>
     {service.mounts.map((mount) => <div key={mount.sourceId}>
       <label className="flex gap-2"><input type="checkbox" checked={options?.mounts.some((item) => item.sourceId === mount.sourceId) ?? false}
-        disabled={!mount.backupEligible || mount.estimatedBytes === null} onChange={(event) => {
+        disabled={!mount.backupEligible} onChange={(event) => {
           const selected = options?.mounts ?? [];
           const mounts = event.target.checked ? [...selected, { sourceId: mount.sourceId, estimatedBytes: mount.estimatedBytes }]
             : selected.filter((item) => item.sourceId !== mount.sourceId);

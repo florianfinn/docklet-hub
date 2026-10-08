@@ -119,3 +119,26 @@ test("K19: backup selection defaults to stop, warns for live and requires a new 
     assert.deepEqual(body.services[0].backup, { mode: "live", mounts: [{ sourceId: "data", estimatedBytes: 4096 }] });
   } finally { await f.close(); }
 });
+test("R3: unknown backup size blocks only the selected backup and can be deselected", async () => {
+  const f = await fixture();
+  try {
+    f.preview.services[0].mounts = [{ sourceId: "data", service: "web", kind: "volume", source: "demo-data", target: "/data",
+      readOnly: false, shared: false, readable: true, writable: true, writeBlocker: null, estimatedBytes: null,
+      backupEligible: true, restoreEligible: true, protection: "none", ownership: "exclusive" }];
+    const previous = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (String(input).endsWith("update-previews") && init?.body) f.preview.services[0].backup = JSON.parse(String(init.body)).services[0].backup;
+      return previous(input, init);
+    };
+    await click(textButton("Update")); await waitFor(() => document.querySelector('[role="dialog"]') !== null);
+    const dialog = document.querySelector('[role="dialog"]')!; const checkbox = dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    assert.equal(checkbox.disabled, false); assert.equal(textButton("Update starten", dialog).disabled, false);
+    await click(checkbox); await click(textButton("Sicherungsauswahl prüfen", dialog));
+    await waitFor(() => [...dialog.querySelectorAll("button")].some((button) => button.textContent === "Update starten"));
+    assert.equal(textButton("Update starten", dialog).disabled, true);
+    assert.equal(dialog.textContent?.includes("Sicherungsumfang ist unbekannt"), true);
+    await click(checkbox); await click(textButton("Sicherungsauswahl prüfen", dialog));
+    await waitFor(() => [...dialog.querySelectorAll("button")].some((button) => button.textContent === "Update starten"));
+    assert.equal(textButton("Update starten", dialog).disabled, false);
+  } finally { await f.close(); }
+});
