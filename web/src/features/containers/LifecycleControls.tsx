@@ -11,7 +11,7 @@ import { LifecycleStatus } from "./LifecycleStatus";
 import { UpdateControls } from "./UpdateControls";
 import { MaintenanceControls } from "./MaintenanceControls";
 
-export function LifecycleControls({ target, detail = false }: { target: LifecycleTarget; detail?: boolean }) {
+export function LifecycleControls({ target }: { target: LifecycleTarget }) {
   const t = useTranslations();
   const descriptionId = useId();
   const { host, role, operation, busy, operations } = useLifecycleState(target);
@@ -42,14 +42,14 @@ export function LifecycleControls({ target, detail = false }: { target: Lifecycl
             {label(kind)}
           </Button>;
         })}
-        <MaintenanceControls target={target} detail={detail} reload={action.reload}
+        <MaintenanceControls target={target} reload={action.reload}
           reasonId={maintenanceReason ? reasonId(maintenanceReason) : undefined} />
       </div>
       {hints.map((reason) => <p key={reason} id={reasonId(reason)} className="text-xs text-muted-foreground">
         {t(BLOCKER_MESSAGES[reason])}
       </p>)}
     </div>
-    <UpdateControls target={target} detail={detail} />
+    <UpdateControls target={target} />
     {target.kind === "container" ? <RestoreControls target={target} /> : null}
     <LifecycleStatus target={target} reload={action.reload} />
     <LifecycleNotice operation={operation} dismiss={dismiss} reload={() => { void action.reload().catch(() => undefined); }} />

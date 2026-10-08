@@ -29,7 +29,7 @@ test("known successful one-shot completion is never shown as a crash", async () 
 });
 for (const duration of [null, 7200]) test(`maintenance uses the configured default ${duration}, supports keyboard duration choice and DELETE`, async () => {
   const current = host(); current.lifecycle!.maintenanceDurationSeconds = duration;
-  const f = await fixture({ current, detail: true });
+  const f = await fixture({ current });
   try {
     await click(textButton("Wartung einschalten"));
     assert.equal(await waitFor(() => document.querySelector('[role="dialog"]') !== null), true);
@@ -50,22 +50,19 @@ for (const duration of [null, 7200]) test(`maintenance uses the configured defau
   } finally { await f.close(); }
 });
 test("enabling maintenance without choosing a duration sends the current setting", async () => {
-  const f = await fixture({ detail: true });
+  const f = await fixture();
   try {
     await click(textButton("Wartung einschalten")); await click(textButton("Wartung einschalten", document.querySelector('[role="dialog"]')!));
     assert.equal(await waitFor(() => f.calls.some((call) => call.method === "PUT")), true);
     assert.equal((f.calls.find((call) => call.method === "PUT")!.body as { durationSeconds: number }).durationSeconds, 7200);
   } finally { await f.close(); }
 });
-test("row maintenance is reachable in its keyboard menu; inherited maintenance names the stack", async () => {
+test("inherited maintenance names the stack and the maintenance toggle stays available", async () => {
   const current = host(); current.lifecycle!.selfHealing!.maintenance = [{ target: { kind: "stack", projectName: "demo" }, actor: "user:demo-human", startedAt: "2026-10-07T01:00:00Z", expiresAt: "2099-10-07T04:00:00Z" }];
   const f = await fixture({ current });
   try {
     assert.equal(document.body.textContent?.includes("Wartung bis"), true); assert.equal(document.body.textContent?.includes("vom Stack übernommen"), true);
-    const trigger = textButton("Wartung"); await React.act(async () => trigger.focus()); await press(trigger, "Enter");
-    assert.equal(await waitFor(() => document.querySelector('[role="menu"]') !== null), true);
-    assert.equal(document.querySelector('[role="menuitem"]')?.textContent, "Wartung einschalten");
-    await press(document.activeElement!, "Escape");
+    assert.equal(textButton("Wartung einschalten").getAttribute("aria-disabled"), "false");
   } finally { await f.close(); }
 });
 for (const available of [true, false]) test(`incident ${available ? "with logs" : "without redaction"} shows cause, attempts, recommendation and acknowledgement`, async () => {
@@ -91,7 +88,7 @@ for (const available of [true, false]) test(`incident ${available ? "with logs" 
 test("agent-removed maintenance and closed incidents are not shown as active", async () => {
   const current = host(); current.lifecycle!.selfHealing!.maintenance = [];
   current.lifecycle!.selfHealing!.incidents = [{ ...incident, closedAt: "2026-10-07T01:35:00Z", closedReason: "acknowledged" }];
-  const f = await fixture({ current, detail: true });
+  const f = await fixture({ current });
   try { assert.equal(document.body.textContent?.includes("Wartung bis"), false); assert.equal(document.querySelector('details') === null, true); }
   finally { await f.close(); }
 });
@@ -121,7 +118,7 @@ test("agent budgets and pending times are shown without reconstructing healing d
 test("maintenance follows the agent status despite a past wall-clock expiry", async () => {
   const current = host();
   current.lifecycle!.selfHealing!.maintenance = [{ target, actor: null, startedAt: "2020-01-01T00:00:00Z", expiresAt: "2020-01-01T01:00:00Z" }];
-  const f = await fixture({ current, detail: true });
+  const f = await fixture({ current });
   try {
     assert.equal(document.body.textContent?.includes("Wartung bis"), true);
     assert.equal(textButton("Wartung ausschalten").getAttribute("aria-disabled"), "false");

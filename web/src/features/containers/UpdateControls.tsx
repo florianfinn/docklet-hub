@@ -12,7 +12,7 @@ import { runtimeBlocker, maintenanceTarget, intentTarget, sameTarget, targetCont
 import { fetchUpdateJobs, previewUpdate, startUpdate, cancelUpdate, fetchUpdateSetting, saveUpdateSetting } from "./api";
 import { UPDATE_REASON_MESSAGES, UPDATE_PHASE_MESSAGES, UPDATE_OUTCOME_MESSAGES } from "./update-messages";
 
-export function UpdateControls({ target, detail = false }: { target: LifecycleTarget; detail?: boolean }) {
+export function UpdateControls({ target }: { target: LifecycleTarget }) {
   const t = useTranslations(); const client = useQueryClient();
   const { host, role, busy, operations } = useLifecycleState(target);
   const scope = maintenanceTarget(target); const name = targetName(target);
@@ -45,7 +45,7 @@ export function UpdateControls({ target, detail = false }: { target: LifecycleTa
   const settingKey = ["update-setting", target.hostId, first?.name];
   const setting = useQuery({ queryKey: settingKey,
     queryFn: ({ signal }) => fetchUpdateSetting(target.hostId, first.id, intentTarget(first), signal),
-    enabled: detail && target.kind === "container" && runtimeBlocker(target, host, role, false) === null });
+    enabled: target.kind === "container" && runtimeBlocker(target, host, role, false) === null });
   const foreign = targetContainers(target).some((container) => container.externalManagement !== null && container.externalManagement !== undefined);
   const blocker = runtimeBlocker(target, host, role, busy);
   const reason = (code: string | null) => {
@@ -83,7 +83,7 @@ export function UpdateControls({ target, detail = false }: { target: LifecycleTa
       aria-label={t("updateActionFor", { target: name })} onClick={() => { if (!disabled) prepare.mutate(); }}>{t("updateAction")}</Button>
     {foreign ? <p className="text-xs">{t("updateForeign")}</p> : null}
     {error && !preview ? <p role="alert">{reason(error.code)}</p> : null}
-    {detail && target.kind === "container" && setting.data ? <form className="flex flex-wrap gap-2 items-center"
+    {target.kind === "container" && setting.data ? <form className="flex flex-wrap gap-2 items-center"
       onSubmit={(event) => { event.preventDefault(); if (!disabled && deadline) save.mutate(); }}>
       <label>{t("updateStartDeadline")} <input type="number" min={UPDATE_START_DEADLINE_SECONDS.min} max={UPDATE_START_DEADLINE_SECONDS.max}
         value={deadline || setting.data.startDeadlineSeconds} onChange={(event) => setDeadline(event.target.value)} disabled={disabled}

@@ -176,15 +176,10 @@ test("offline group shares one visible hint and every action keeps its descripti
       assert.equal(control.className.includes("aria-disabled:cursor-not-allowed"), true);
       assert.equal(control.getAttribute("aria-describedby"), ids[0]);
     }
-    const trigger = textButton("Wartung");
-    await React.act(async () => trigger.focus());
-    for (const key of ["Enter", " ", "ArrowDown"]) {
-      await press(trigger, key);
-      assert.equal(document.querySelector('[role="menu"]') === null, true);
-    }
-    await React.act(async () => trigger.dispatchEvent(new PointerEvent("pointerdown", { button: 0, bubbles: true, cancelable: true })));
-    await settle();
-    assert.equal(document.querySelector('[role="menu"]') === null, true);
+    const toggle = textButton("Wartung einschalten");
+    assert.equal(toggle.getAttribute("aria-disabled"), "true");
+    await click(toggle);
+    assert.equal(document.querySelector('[role="dialog"]') === null, true);
     assert.equal(f.calls.length, 0);
   } finally { await f.close(); }
 });
@@ -200,27 +195,5 @@ for (const action of ["start", "stop", "restart"]) test(`unknown ownership ${act
     assert.equal(dialog.textContent?.includes("Der Agent bestimmt den wirksamen Modus"), true);
     assert.equal(dialog.textContent?.includes("betrifft die bestehenden Container"), false);
     assert.equal(f.calls.some((call) => call.method === "POST"), false);
-  } finally { await f.close(); }
-});
-
-test("maintenance menu closes when blocked and cannot reopen by keyboard or pointer", async () => {
-  const f = await fixture();
-  try {
-    const trigger = textButton("Wartung");
-    await press(trigger, "ArrowDown");
-    assert.equal(await waitFor(() => document.querySelector('[role="menu"]') !== null), true);
-    const offline = host(); offline.host.status = "offline";
-    await f.update(offline);
-    assert.equal(await waitFor(() => document.querySelector('[role="menu"]') === null), true);
-    for (const key of ["Enter", " ", "ArrowDown"]) {
-      await press(trigger, key);
-      assert.equal(document.querySelector('[role="menu"]') === null, true);
-    }
-    await React.act(async () => trigger.dispatchEvent(new PointerEvent("pointerdown", {
-      button: 0, pointerType: "mouse", ctrlKey: false, bubbles: true, cancelable: true
-    })));
-    await settle();
-    assert.equal(document.querySelector('[role="menu"]') === null, true);
-    assert.equal(f.calls.length, 0);
   } finally { await f.close(); }
 });
