@@ -71,25 +71,55 @@ test("canonical paths and symlink ancestors never reach outside the share", asyn
     assert.equal((await f.actions.delete(relative)).ok, false);
   }
 });
-for (const operation of ["rename", "delete"] as const) test(`${operation} detects a symlink swap before mutation`, async (t) => {
-  const f = await fixture(t);
-  const outside = path.join(f.base, "outside.txt");
-  await fs.promises.writeFile(outside, "outside");
-  const lstat = fs.promises.lstat.bind(fs.promises);
-  let leafChecks = 0;
-  t.mock.method(fs.promises, "lstat", async (...args: Parameters<typeof fs.promises.lstat>) => {
-    if (String(args[0]).endsWith("/value.txt") && ++leafChecks === 2) {
-      await fs.promises.unlink(path.join(f.root, "value.txt"));
-      await fs.promises.symlink(outside, path.join(f.root, "value.txt"));
+for (const operation of ["rename", "delete"] as const) for (const directory of [false, true]) for (const reusedInode of [false, true]) {
+  test(`${operation} detects a symlink swap before mutation${directory ? " for a directory" : ""}${reusedInode ? " even with reused dev/ino" : ""}`, async (t) => {
+    const f = await fixture(t);
+    const outside = path.join(f.base, "outside.txt");
+    await fs.promises.writeFile(outside, "outside");
+    const source = path.join(f.root, "value.txt");
+    if (directory) {
+      await fs.promises.unlink(source);
+      await fs.promises.mkdir(source);
     }
-    return lstat(...args);
+    const lstat = fs.promises.lstat.bind(fs.promises);
+    type Prepared = { leaf: string; stat: fs.Stats };
+    const checks = f.actions as unknown as { unchanged(entry: Prepared): Promise<void> };
+    const unchanged = checks.unchanged.bind(checks);
+    let swapped = false;
+    let reusedIdentityChecked = false;
+    t.mock.method(checks, "unchanged", async (entry: Prepared) => {
+      if (!swapped) {
+        // Inject after the snapshot, immediately before the production identity check.
+        swapped = true;
+        if (reusedInode) { if (directory) await fs.promises.rmdir(source); else await fs.promises.unlink(source); }
+        else await fs.promises.rename(source, path.join(f.base, "retained.txt"));
+        await fs.promises.symlink(outside, source);
+        if (reusedInode) t.mock.method(fs.promises, "lstat", async (...args: Parameters<typeof fs.promises.lstat>) => {
+          const stat = await lstat(...args);
+          if (String(args[0]) === entry.leaf || String(args[0]) === path.join(path.dirname(entry.leaf), "renamed.txt")) {
+            // Model inode reuse without depending on the filesystem allocator.
+            assert.equal(stat.isSymbolicLink(), true);
+            Object.defineProperties(stat, { dev: { value: entry.stat.dev }, ino: { value: entry.stat.ino } });
+            reusedIdentityChecked = true;
+          }
+          return stat;
+        });
+      }
+      return unchanged(entry);
+    });
+    const result = operation === "rename" ? await f.actions.rename("value.txt", "renamed.txt") : await f.actions.delete("value.txt");
+    assert.equal(swapped, true);
+    assert.equal(reusedIdentityChecked, reusedInode);
+    assert.deepEqual(result, { ok: false, reason: "file-replaced" });
+    assert.equal(await fs.promises.readFile(outside, "utf8"), "outside");
+    assert.equal((await lstat(source)).isSymbolicLink(), true);
+    if (!reusedInode) {
+      if (directory) assert.equal((await fs.promises.stat(path.join(f.base, "retained.txt"))).isDirectory(), true);
+      else assert.equal(await fs.promises.readFile(path.join(f.base, "retained.txt"), "utf8"), "preserved");
+    }
+    await assert.rejects(fs.promises.access(path.join(f.root, "renamed.txt")), { code: "ENOENT" });
   });
-  const result = operation === "rename" ? await f.actions.rename("value.txt", "renamed.txt") : await f.actions.delete("value.txt");
-  assert.deepEqual(result, { ok: false, reason: "file-replaced" });
-  assert.equal(await fs.promises.readFile(outside, "utf8"), "outside");
-  assert.equal((await lstat(path.join(f.root, "value.txt"))).isSymbolicLink(), true);
-  await assert.rejects(fs.promises.access(path.join(f.root, "renamed.txt")), { code: "ENOENT" });
-});
+}
 test("missing directory permissions deny both actions and diagnostics", async (t) => {
   const f = await fixture(t);
   t.mock.method(fs.promises, "access", () => { throw Object.assign(new Error("denied"), { code: "EACCES" }); });
@@ -116,4 +146,18 @@ for (const operation of ["rename", "delete"] as const) test(`${operation} detect
   assert.deepEqual(result, { ok: false, reason: "file-replaced" });
   assert.equal(await fs.promises.readFile(path.join(outside, "value.txt"), "utf8"), "outside");
   assert.equal(await fs.promises.readFile(path.join(f.root + "-original", "value.txt"), "utf8"), "preserved");
+});
+
+for (const operation of ["rename", "delete"] as const) test(`${operation} requires directory permission without requiring leaf read permission`, async (t) => {
+  const f = await fixture(t);
+  await fs.promises.chmod(path.join(f.root, "value.txt"), 0);
+  if (operation === "rename") {
+    assert.deepEqual(await f.actions.rename("value.txt", "renamed.txt"), { ok: true, name: "renamed.txt" });
+    assert.equal((await fs.promises.stat(path.join(f.root, "renamed.txt"))).mode & 0o777, 0);
+    await fs.promises.chmod(path.join(f.root, "renamed.txt"), 0o600);
+    assert.equal(await fs.promises.readFile(path.join(f.root, "renamed.txt"), "utf8"), "preserved");
+  } else {
+    assert.deepEqual(await f.actions.delete("value.txt"), { ok: true, kind: "file" });
+    await assert.rejects(fs.promises.access(path.join(f.root, "value.txt")), { code: "ENOENT" });
+  }
 });

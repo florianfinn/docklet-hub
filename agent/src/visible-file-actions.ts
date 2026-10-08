@@ -6,7 +6,10 @@ import { checkEntryPath, checkName } from "./webftp.js";
 import type { FileAccessError } from "contract";
 
 class Denied extends Error { constructor(readonly reason: FileAccessError) { super(reason); } }
-function same(a: fs.Stats, b: fs.Stats) { return a.dev === b.dev && a.ino === b.ino; }
+function same(a: fs.Stats, b: fs.Stats) {
+  // An unpinned inode number can be reused by an entry of a different kind.
+  return a.dev === b.dev && a.ino === b.ino && (a.mode & fs.constants.S_IFMT) === (b.mode & fs.constants.S_IFMT);
+}
 function failure(error: unknown) {
   const code = (error as NodeJS.ErrnoException).code;
   return { ok: false as const, reason: error instanceof Denied ? error.reason
