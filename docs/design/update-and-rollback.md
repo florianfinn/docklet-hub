@@ -17,16 +17,22 @@ gesperrt. `compose run`-Container mit dem Label
 eine verlässliche Grundlage für Austausch und Rückweg, ohne fremde Definitionen
 oder vorübergehende Ausführungen zu übernehmen.
 
+Skalierte Compose-Services mit mehr als einer Replika sind weder Update-,
+Sicherungs- noch Restore-Ziele. Jeder Einstieg lehnt sie mit
+`scaled-service-unsupported` ab; es wird keine Replika willkürlich ausgewählt.
+
 Ein Update wird ausdrücklich angefordert und immer vorab mit Vorschau bestätigt.
 Die Vorschau nennt Ziel, betroffene Services, bisherige und angebotene Digests,
-den Rückweg und die gewählte Sicherung. Bei einem vor dem Update `unhealthy`
-gemeldeten Dienst zeigt sie zusätzlich eine Warnung. Den angebotenen Digest
-ermittelt sie per Registry-Manifest-Abfrage ohne Pull.
+den Rückweg und die gewählte Sicherung. Bei einem vor dem Update `unhealthy`, `restarting` oder `paused`
+gemeldeten Dienst zeigt sie zusätzlich die entsprechende Warnung. Den angebotenen Digest
+ermittelt sie per Registry-Manifest-Abfrage ohne Pull. Lokal gebaute Images ohne
+Registry-Digest sind keine Update-Ziele; die Vorschau erklärt dies mit
+`local-image-no-registry-digest`, statt einen Pull zu versuchen.
 
 Die Reihenfolge ist: Digest prüfen, dieselbe Image-Referenz ziehen, dann sichern
 und im Stoppmodus stoppen, dann austauschen. Nur ein vom bisherigen Image
 abweichender Digest führt zum Austausch. Bei gleichem Digest endet der Auftrag
-ohne Sicherung, Stopp oder Austausch. Das gezogene Image muss dem bestätigten
+ohne Pull, Sicherung, Stopp oder Austausch. Das gezogene Image muss dem bestätigten
 Digest entsprechen. Eine Abweichung bricht den Lauf vor jeder Daten- oder
 Containeränderung ab und verlangt eine neue Vorschau. Bei einem Stack werden
 alle benötigten Images gezogen und ihre Digests geprüft, bevor die erste
@@ -75,7 +81,8 @@ nicht neu begonnen. Auch ein Exit mit Code 0 scheitert bei einem Dienst. Ein
 einmaliges Nachlesen von `running` würde eine Startschleife übersehen. Das
 Fenster ist keine Zusage fachlicher Erreichbarkeit und ersetzt keinen Healthcheck.
 
-Ein Compose-Service gilt im Update als Abschlussauftrag, wenn beide Bedingungen
+Ein Compose-Service gilt nur bei Updatebeginn in `running` oder `restarting`
+als Abschlussauftrag, wenn beide Bedingungen
 aus der aufgelösten Compose-Definition erfüllt sind: Er hat keine Restart-Policy
 oder `restart: "no"`, und mindestens ein anderer Service im selben Projekt hängt
 mit `condition: service_completed_successfully` von ihm ab. Ein Abschlussauftrag
@@ -84,7 +91,8 @@ Container konfigurierte und mit dem Auftrag übertragene Startfrist; sie beginnt
 mit seinem Start. Ein anderer Exit-Code oder Zeitüberschreitung ist ein Fehlschlag. Jeder andere Service und jeder
 Einzelcontainer gilt als Dienst; bei ihm ist jeder Exit ein Fehlschlag,
 auch Exit-Code 0. Die Regel für ursprünglich gestoppte Ziele hat Vorrang:
-Sie werden aktualisiert, bleiben gestoppt und erhalten keine Laufprüfung.
+Sie werden nur neu erzeugt (`created`), bleiben gestoppt und erhalten keine Laufprüfung.
+Das gilt insbesondere für bereits erfolgreich beendete Abschlussaufträge.
 So beruht eine erfolgreiche Beendigung auf einer ausdrücklichen
 Compose-Abhängigkeit und nicht auf der Vermutung, ein Exit-Code 0 reiche aus.
 
@@ -109,7 +117,8 @@ War ein Dienst vorher `unhealthy`, `paused` oder `restarting`, verlangt der
 Rückweg kein `healthy`, sondern einen wie vorher laufenden Container.
 `restarting` zählt dabei wie bei Laufzeitaktionen als laufend; eine
 Neustartschleife muss für einen erfolgreichen Rückweg nicht erzeugt werden.
-Ein vorher pausierter Dienst wird nach dem Rückweg wieder pausiert.
+Ein vorher pausierter Dienst wird nach erfolgreichem Update ebenso wie nach
+dem Rückweg wieder pausiert; geprüft wird er davor im laufenden Zustand.
 Damit setzt der Rückweg einen mangelhaften, aber bekannten Ausgangszustand
 nicht mit einem zusätzlichen Rollback-Fehler gleich. Ein erfolgreicher
 Rückweg macht das Update nicht erfolgreich: Das Ergebnis unterscheidet
@@ -157,7 +166,10 @@ Der gesamte Update-Lauf einschließlich Sicherung, Prüfung und Rückweg verwend
 dieselbe Projekt- und Containersperre wie Dateischreiben, Compose-Apply
 und Restore. Alle vier Wege koordinieren sich über diese gemeinsame Sperre,
 einschließlich direkter Agent-Anfragen. Parallele Aktionen
-am selben Ziel dürfen währenddessen keine Mutation ausführen. Für einen Stack
+am selben Ziel dürfen währenddessen keine Mutation ausführen. Update, Restore
+und Compose-Apply warten wie Laufzeitaktionen höchstens 60 Sekunden in der
+Projekt-/Containerwarteschlange und melden danach `action-queue-timeout`.
+Dateischreiben wartet nicht und weist bei belegter Sperre sofort mit `busy` ab. Für einen Stack
 umfasst die Sperre sein Projekt und dessen Services. Wartende Aktionen müssen
 anschließend den erwarteten Zustand erneut prüfen; ein überholter Auftrag darf
 nicht einfach auf den Ersatzcontainer angewendet werden. Damit können manuelle
@@ -165,28 +177,38 @@ Aktionen und Selbstheilung den Rückweg nicht überholen. Auch Restore hält die
 entsprechende Sperre bis zur Wiederherstellung des vorherigen Laufzustands.
 
 Während eines Update- oder Restore-Laufs gelten Stopp, Entfernen und Tod des
-Ersatzcontainers für die [Selbstheilung](self-healing.md) als beabsichtigt.
+Originalcontainers und des Ersatzcontainers, einschließlich des Stopps vor dem
+Entpacken beim Restore, für die [Selbstheilung](self-healing.md) als beabsichtigt.
 Sie verbrauchen kein Selbstheilungsbudget, merken keine Heilung vor und erzeugen
 keinen Selbstheilungsvorfall. Fehler meldet allein der zuständige Update- oder
 Restore-Lauf; die Eskalation eines fehlgeschlagenen Rückwegs bleibt seine Aufgabe.
 Damit führt derselbe Fehler nicht zu zwei konkurrierenden Reparaturabläufen.
 
-Ein Betreiber kann bis unmittelbar vor dem Austausch ausdrücklich abbrechen.
+Ein Betreiber kann bis unmittelbar vor dem ersten Austausch im gesamten Stack
+ausdrücklich abbrechen. Nach diesem ersten Austausch ist auch zwischen weiteren
+Services kein Abbruch mehr möglich (`update-cancel-too-late`).
 Ein bereits für die Sicherung gestoppter Container erhält dabei seinen vorherigen
-Laufzustand zurück; scheitert das, wird der Fehler sichtbar gemeldet. Sobald der
+Laufzustand zurück; scheitert das, wird der Fehler sichtbar gemeldet. Sobald der erste
 Austausch beginnt, läuft die Prüfung samt gegebenenfalls nötigem Rückweg zu Ende.
 Eine getrennte Browserverbindung ist kein Abbruchauftrag. Diese Grenze verhindert
 einen absichtlich zurückgelassenen, unbewerteten Ersatzcontainer.
 
-Der Update-Lauf ist ein Auftrag im Agenten mit abfragbarem beziehungsweise
-gestreamtem Fortschritt. Er kann länger als eine HTTP-Anfrage dauern; ein
-Verbindungsabbruch beendet ihn in keiner Phase. Nach erneutem Verbinden kann der
-Hub Fortschritt und Ergebnis wieder abfragen. Die Auftragsdauer erhält eigene
+Update und Restore sind Aufträge im Agenten mit abfragbarem beziehungsweise
+gestreamtem Fortschritt. Ihr Start antwortet nur mit `jobId`; das Ergebnis steht
+im abfragbaren Fortschritt. Beide laufen unabhängig von der HTTP-Verbindung und
+können die 760-s-Frist für synchrone Laufzeitaktionen überschreiten; ein
+Verbindungsabbruch beendet sie in keiner Phase. Nach erneutem Verbinden kann der
+Hub Fortschritt und Ergebnis wieder abfragen. Eine Auftragsliste liefert ohne
+bekannte `jobId` aktive und zuletzt beendete Update-/Restore-Aufträge, für den
+Host insgesamt oder gefiltert nach stabilem Ziel und Auftragsart. Ergebnisse
+bleiben ab `completedAt` 24 Stunden verfügbar (`AGENT_JOB_RESULT_RETENTION_MS`);
+aktive Aufträge werden nicht durch diese Aufbewahrungsfrist entfernt. Die Auftragsdauer erhält eigene
 Fristen je Phase: Ziehen, Sicherung, Austausch mit Prüfung und Rückweg. Sie werden
 in `contract/` gemeinsam geführt und übernehmen nicht die Restart-Fristen aus
-`runtime-deadlines.ts`. Ihre Werte legt der Vertragsschritt fest; Austausch und
-Rückweg müssen die übertragene Startfrist beziehungsweise das Stabilitätsfenster
-berücksichtigen. Eine abgelaufene Phase wird als Fehler behandelt und durchläuft
+`runtime-deadlines.ts`. Die Werte und die Budgetrechnung stehen im folgenden
+Abschnitt. Jede Phasenfrist gilt je Service, nicht einmal für den gesamten Stack; Austausch und
+Rückweg berücksichtigen die übertragene Startfrist beziehungsweise das
+Stabilitätsfenster. Eine abgelaufene Phase wird als Fehler behandelt und durchläuft
 den jeweils erforderlichen sicheren Abschluss, statt still weiterzumachen.
 So begrenzt der Vertrag einzelne Arbeiten, ohne HTTP-Fristen mit der fachlichen
 Prüfung zu verwechseln.
@@ -209,12 +231,60 @@ nachträglichen Update-Rollback aus. Die Selbstheilung beschreibt unerwartete
 Ausfälle; Health-Ausfälle sind dort gesondert abgegrenzt. So werden
 Update-Abnahme und dauerhafte Betriebsüberwachung nicht vermischt.
 
+## Phasenfristen und Budgetrechnung
+
+`contract/src/agent/update-deadlines.ts` führt eigene Update-Fristen, unabhängig
+von den Restart-Fristen. Dies sind begrenzte Produktbudgets, keine gemessenen
+Durchsatzgarantien. Die synchrone Vorschau fragt die Registry-Manifeste parallel
+ab und hat insgesamt 60 Sekunden (`UPDATE_PREVIEW_TIMEOUT_MS`), unabhängig von
+der Zahl der Services. Sie liegt damit deutlich unter der 760-s-Hub-Frist für
+Laufzeitaktionen. Die Vorprüfung im gestarteten Agent-Auftrag erhält 60 Sekunden je Service;
+Pull erhält 900 Sekunden je Service, um große Images bei langsamer Verbindung
+zuzulassen. Eine Datenkopie erhält 3.600 Sekunden je Service. Größere Datenmengen,
+die diese Frist überschreiten, benötigen ein gesondertes Sicherungsverfahren.
+
+Für jede Mutation werden 600 Sekunden für Stopp, 90 Sekunden für Erzeugung bzw.
+Wiederanlauf und 30 Sekunden für Zustandsnachlesen reserviert: zusammen 720 Sekunden.
+Die Stoppfrist begrenzt das Warten, ohne Dockers konfigurierte Grace-Period zu
+ändern oder einen nicht bestätigten Stopp als Erfolg zu behandeln. Die
+Sicherungsphase hat damit 4.320 Sekunden inklusive Stopp und Wiederanlauf.
+Austausch einschließlich Prüfung und Rückweg erhalten jeweils
+`720 s + max(Startfrist, 30 s)` je Service. Die getrennte Reserve für den
+Rückweg wird bei Ablauf einer Vorwärtsphase nicht verbraucht; auch ein nur für
+die Sicherung gestopptes Ziel kann wiederhergestellt werden. Restore erhält
+`4.320 s + max(Startfrist, 30 s)` einschließlich Wiederanlauf.
+
+Das konservative Update-Laufbudget addiert je Service 60 Sekunden Vorprüfung,
+900 Sekunden Pull, gegebenenfalls 4.320 Sekunden Sicherung, Austauschbudget und
+Rückwegbudget, plus 30 Sekunden abschließendes Nachlesen. Die Warteschlange liegt
+davor und addiert höchstens 60 Sekunden. Bei Standardstartfrist ohne Sicherung
+sind das für einen Service 2.670 Sekunden, für drei Services 7.950 Sekunden;
+mit Sicherung 6.990 bzw. 20.910 Sekunden. Bei maximaler Startfrist mit Sicherung
+sind es je Service 10.320 Sekunden plus 30 Sekunden je Lauf. Unveränderte Digests
+brauchen keinen Pull und verkürzen den tatsächlichen Lauf. Die additive Rechnung
+verhindert, dass ein mehrgliedriger Stack dieselbe Frist unter seinen Services
+aufteilen muss. Ein Fristablauf ist ein Fehler mit sicherem Abschluss und
+getrennter Rückwegreserve, keine Erlaubnis zum stillen Weiterlaufen.
+
+Fortschritt unterscheidet `precheck`, `pull`, `backup`, `exchange`, `verify`,
+`rollback` und `resume` sowie `queued` und `completed`. Austausch und Ergebnisprüfung
+teilen das Austauschbudget. `firstExchangeStarted` macht die globale
+Abbruchgrenze sichtbar. `acceptance` benennt `created`, `service` oder
+`completion-job`; der Agent leitet dies selbst aus Vorzustand und Definition ab.
+Vorschau und Start sind über `previewId`, erwarteten Containerzustand,
+Definitionshash und bestätigten Digest verbunden. Der Agent prüft diese Werte
+nach dem Warten erneut; eine abgelaufene oder veränderte Vorschau ist kein Auftrag.
+
 ## Optionale Datensicherung
 
 Im Update-Dialog wird eine Datensicherung bewusst gewählt; sie ist optional.
 Für jeden zulässigen Bind-Mount und jedes zulässige benannte Volume gibt es einen
 eigenen Schalter. Die Auswahl nennt Quelle, Zuordnung zum Container und Umfang.
-Sie gilt beim Stack je betroffenem Service und ist vor Beginn der Kopie
+Die Quellen der Update-Vorschau und jeder ausgewählte Sicherungs-Mount tragen
+`estimatedBytes`; `null` bedeutet, dass der Umfang nicht ermittelbar ist. Die
+Platzprüfung darf daraus keinen Umfang von null Bytes ableiten und lehnt bei
+unbekanntem Umfang mit `backup-size-unavailable` ab.
+Die Auswahl gilt beim Stack je betroffenem Service und ist vor Beginn der Kopie
 festgelegt. Gesichert wird nach dem Ziehen und der Digest-Prüfung, beim Stack
 je Service direkt vor dessen eigenem Austausch. Im Stoppmodus wird dieser
 Service für seine Kopie gestoppt; im Live-Modus erfolgt die Kopie ohne diesen
@@ -242,10 +312,24 @@ jeweiligen Anwendung nötig. Der gewählte Modus und geteilte Quellen werden vor
 der Bestätigung sichtbar, damit die Einschränkung nicht hinter „Sicherung“
 verschwindet.
 
-Der Agent legt die Sicherung als tar in seinem Sicherungsverzeichnis ab.
+Eine Sicherung ist ein erfolgreich abgeschlossener Lauf mit genau einem
+tar-Archiv je gewähltem Mount. Der Nutzer wählt für Restore ausdrücklich eine
+der bis zu drei Sicherungen über deren `backupId` und daraus die Mounts.
+Unvollständige Läufe werden nicht in dieser Liste angeboten.
+
+Sicherung und Restore lassen Compose-Dateien und `.env` im Projektverzeichnis
+aus, auch wenn das Projektverzeichnis selbst ein gewählter Mount ist. Diese
+Dateien bleiben ausschließlich dem geschützten Bearbeitungsweg vorbehalten;
+der Ausschluss gilt beim Kopieren und Entpacken.
+
+Der Agent legt die Archive in seinem Sicherungsverzeichnis ab.
 Standardort ist das Unterverzeichnis `backups` im Agent-Datenpfad. Das
 Verzeichnis ist per Umgebungsvariable übersteuerbar; der konkrete technische
-Schlüssel wird bei der Umsetzung in der generischen `.env.example` dokumentiert.
+Schlüssel ist `DOCKER_AGENT_BACKUP_DIR`, dokumentiert in den generischen
+Agent-Deploy-`.env.example`-Dateien. Das gebündelte Setup verwendet ohne
+Durchreichen einer Override-Variable das Datenvolume unter `/state`; dessen
+Unterverzeichnis `backups` ist bereits persistent. Leer bedeutet `backups` relativ zum Agent-Datenpfad;
+eine gesetzte Angabe bezeichnet das alternative Sicherungsverzeichnis.
 Archive sind nur für den Agenten lesbar (Rechte `0600`), das Verzeichnis hat
 Rechte `0700`. Das Sicherungsverzeichnis ist über den Dateibrowser nicht
 erreichbar. Damit wird eine Sicherung nicht zur ungeprüften zweiten Quelle
@@ -264,8 +348,11 @@ Platzbedarf verständlich und bewahrt mehrere Rückgriffsmöglichkeiten.
 
 Vor der Kopie prüft der Agent den verfügbaren Platz am Sicherungsziel gegen den
 ermittelten Sicherungsumfang und hält zusätzlich eine feste Reserve frei,
-damit der Agent-Zustand schreibbar bleibt. Den Reservewert legt der Vertragsschritt
-in `contract/` fest. Reicht der Platz nicht für Sicherung plus Reserve oder ist
+damit der Agent-Zustand schreibbar bleibt. Die feste Reserve
+`BACKUP_FREE_RESERVE_BYTES` beträgt 1 GiB (1.073.741.824 Bytes).
+Sie hält Platz für Agent-Zustand und atomare Schreibvorgänge frei; sie ist keine
+Schätzung der Archivgröße. Der ermittelte Kopierumfang wird zusätzlich benötigt.
+Reicht der Platz nicht für Sicherung plus Reserve oder ist
 die Reserve bereits unterschritten, wird keine Sicherung angelegt und das
 Update nicht gestartet. Das gilt vor jedem Sicherungsschritt im Stack; bereits
 ausgetauschte Services gehen bei einem solchen Fehler in den Rückweg.
@@ -278,7 +365,15 @@ gewählte Sicherung eine Vorbedingung des Auftrags.
 
 ## Gesonderter Restore
 
-Restore ist eine eigene, gesondert bestätigte Aktion. Die Vorschau nennt
+Restore ist eine eigene, gesondert bestätigte Aktion als Agent-Auftrag. Seine
+Phasen sind `queued`, `stop`, `extract`, `resume` und `completed`. Abbruch ist nur
+vor `extract` möglich; ein bereits gestopptes Ziel wird dabei in seinen Vorzustand
+zurückgeführt. Nach Entpackbeginn werden Entpacken und Wiederanlauf abgeschlossen.
+Das Fortschrittsresultat enthält Restore- und Wiederanlauffehler getrennt.
+Die Vorschau enthält die gewählte Sicherung mit `completedAt`, Modus und der
+Archivliste je Mount einschließlich Bytes sowie die ausgewählten betroffenen
+Zielquellen. Die Sicherungsliste je stabilem Ziel trägt dieselben Sicherungsangaben.
+Die Vorschau nennt
 Ziel anhand des stabilen Schlüssels, zugehörige Sicherung und die ausgewählten
 zulässigen Mount-Ziele sowie die betroffenen vorhandenen Daten. Die Zuordnung
 verwendet Compose-Projekt plus Service beziehungsweise den Einzelcontainernamen,
@@ -312,10 +407,12 @@ Dateikopien versprechen auch beim Restore keine Datenbankkonsistenz.
   `com.docker.compose.oneoff=True` sind keine Update-Ziele.
 - Jedes Update verlangt vorab Vorschau und Bestätigung von Ziel, Services,
   betroffenen Digests, Rückweg und gewählter Sicherung. Es zieht dieselbe
-  Image-Referenz; gleicher Digest führt zu keinem Austausch. Ein abweichender
+  Image-Referenz; gleicher Digest führt zu keinem Pull oder Austausch. Ein abweichender
   Zieldigest bricht vor jeder Daten- oder Containeränderung ab und verlangt eine
   neue Vorschau. Sie ermittelt das Angebot per Registry-Manifest-Abfrage ohne Pull
-  und warnt bei vorher `unhealthy`. Versionswechsel sind Definitionsänderungen;
+  und warnt bei vorher `unhealthy`, `restarting` und `paused`. Lokal gebaute
+  Images ohne Registry-Digest werden mit erklärtem Sperrgrund abgelehnt.
+  Versionswechsel sind Definitionsänderungen;
   #70 behandelt Anzeige und Erklärung von Pins und Versionen.
 - Nach Digest-Prüfung und Bestätigung werden zuerst alle benötigten Images
   gezogen und mit den bestätigten Digests verglichen. Erst danach wird gesichert
@@ -334,7 +431,8 @@ Dateikopien versprechen auch beim Restore keine Datenbankkonsistenz.
   werden und laufen. Ohne Healthcheck muss er 30 Sekunden ohne Neustart und Exit
   laufen. Ein Neustart im Stabilitätsfenster beendet die Prüfung als Fehlschlag;
   auch Exit-Code 0 scheitert bei Diensten.
-- Ein Update-Abschlussauftrag wird nur aus der aufgelösten Compose-Definition
+- Ein Update-Abschlussauftrag gilt nur bei Beginn in `running` oder `restarting`
+  und wird aus der aufgelösten Compose-Definition
   erkannt: keine Restart-Policy oder `restart: "no"`, und mindestens ein anderer
   Service desselben Projekts hängt von ihm mit
   `condition: service_completed_successfully` ab. Er besteht nur mit Exit 0
@@ -361,10 +459,11 @@ Dateikopien versprechen auch beim Restore keine Datenbankkonsistenz.
   und Containersperre, auch bei direkten Agent-Anfragen. Kein konkurrierender
   Weg mutiert dasselbe Ziel während eines Laufs; nach dem Warten wird sein
   erwarteter Zustand geprüft.
-- Stopp, Entfernen und Tod des Ersatzcontainers während Update oder Restore sind
+- Stopp, Entfernen und Tod von Original und Ersatz während Update oder Restore,
+  einschließlich des Restore-Stopps, sind
   für die Selbstheilung beabsichtigt: kein Budgetverbrauch, keine vorgemerkte
   Heilung, kein Selbstheilungsvorfall. Fehler meldet allein der zuständige Lauf.
-- Ausdrücklicher Abbruch vor dem Austausch verhindert ihn; nach Austauschbeginn
+- Ausdrücklicher Abbruch vor dem ersten Austausch im Stack verhindert ihn; danach
   werden Prüfung und nötiger Rückweg abgeschlossen. Ein nur für die Sicherung
   gestopptes Ziel erhält seinen vorherigen Laufzustand zurück oder einen sichtbaren
   Wiederanlauffehler.
@@ -392,8 +491,8 @@ Dateikopien versprechen auch beim Restore keine Datenbankkonsistenz.
   Compose-Projekt plus Service oder Einzelcontainername, auch nach Containerwechsel.
   Ältere Sicherungen werden erst nach erfolgreichem Abschluss einer neuen entfernt.
 - Die Platzprüfung vor jeder Sicherung berücksichtigt Sicherungsumfang plus
-  feste Reserve für den Agent-Zustand. Der Vertragsschritt legt den Reservewert
-  in `contract/` fest. Bei unterschrittener Reserve wird keine Sicherung angelegt und
+  feste Reserve für den Agent-Zustand. Die feste Reserve beträgt 1 GiB und steht
+  in `contract/`. Bei unterschrittener Reserve wird keine Sicherung angelegt und
   kein Update gestartet. Zu wenig Platz oder ein Sicherungsfehler verhindert den
   jeweiligen Austausch und löst beim Stack den Rückweg für bereits ausgetauschte
   Services aus; der Fehler wird sichtbar gemeldet. Ein Wiederanlauffehler nach

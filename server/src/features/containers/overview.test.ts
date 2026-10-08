@@ -58,7 +58,7 @@ function container(name: string, compose: { project: string; service: string } |
 
 function deps(overrides: Partial<OverviewDeps> = {}): OverviewDeps {
   return {
-    probeHost: () => Promise.resolve({ reachable: true, version: MIN_AGENT_VERSION, contractVersion: 12, readOnly: true, entries: null }),
+    probeHost: () => Promise.resolve({ reachable: true, version: MIN_AGENT_VERSION, contractVersion: 13, readOnly: true, entries: null }),
     fetchContainersFor: () => Promise.resolve([]),
     // Ein Arm, dem der Betreiber nichts vergeben hat — der Normalfall.
     decorationFor: () => Promise.resolve(EMPTY_DECORATION),

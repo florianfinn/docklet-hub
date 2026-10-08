@@ -10,7 +10,7 @@ import { AgentError } from "../../platform/agent-transport/protocol.js";
 import { runContainer, runStack } from "./agent-client.js";
 
 // Stale state and a fake config failure stop before any Docker mutation.
-test("runtime clients reach the real agent handlers with contract 12 expectations and mode", async (t) => {
+test("runtime clients reach the real agent handlers with contract 13 expectations and mode", async (t) => {
   let composeCalls = 0;
   t.mock.method(childProcess, "execFile", ((_binary: string, _args: string[], _options: unknown,
     callback: (error: Error, stdout: string, stderr: string) => void) => {

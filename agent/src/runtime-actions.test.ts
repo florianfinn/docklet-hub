@@ -24,8 +24,8 @@ async function containerResult(...args: Parameters<typeof executeContainerRuntim
 const state = runtimeStateOf({ Id: "id", Name: "/app", State: { Status: "running", ExitCode: 0, StartedAt: "seen", Health: { Status: "unhealthy" } } });
 const expected = { containerId: "id", status: "running", startedAt: "seen" };
 
-test("contract 12 requires the mode and observed runtime state", () => {
-  assert.equal(CONTRACT_VERSION, 12);
+test("contract 13 retains the mode and observed runtime state", () => {
+  assert.equal(CONTRACT_VERSION, 13);
   assert.equal(containerActionRequestSchema.safeParse({}).success, false);
   assert.equal(containerActionRequestSchema.safeParse({ expectedContainer: expected }).success, true);
   const stack = { projectName: "app", projectDir: "/srv/apps/app", composeFileName: "compose.yaml", services: [{ serviceName: "web", ...expected }] };
