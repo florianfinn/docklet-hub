@@ -1,3 +1,4 @@
+import { projectLockKey } from "../project-lock.js";
 import { RuntimeBudget } from "../runtime-budget.js";
 import { runContainerAction } from "../container-action.js";
 import { actionConnection } from "../runtime/action-connection.js";
@@ -181,7 +182,7 @@ export async function handleApplySpec(ctx: ContainerRouteContext): Promise<void>
     reason: `${parsed.fullRef} (${targetImageId.slice(0, 19)}) in ${context.projectDir}`
   });
 
-  const lockedOutcome = await stackLocks.runExclusive(context.project, async () => {
+  const lockedOutcome = await stackLocks.runExclusive(projectLockKey({ registryProject: registry.get(containerId)?.compose?.projectName, projectName: context.project, containerId }), async () => {
     // Gate/inspect happened before waiting for the project lock. If an
     // immediately preceding stack action moved the id anchor, this request
     // must not continue with the old grant.
@@ -340,7 +341,7 @@ export async function handleRemove(ctx: ContainerRouteContext): Promise<void> {
     return true;
   };
   const removed = removeProject
-    ? await stackLocks.runExclusive(removeProject.projectName, performRemove)
+    ? await stackLocks.runExclusive(projectLockKey({ registryProject: registry.get(containerId)?.compose?.projectName, projectName: removeProject.projectName, containerId }), performRemove)
     : await performRemove();
   if (!removed) {
     audit.write({

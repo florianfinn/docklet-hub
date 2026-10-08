@@ -105,6 +105,7 @@ export type RawStats = {
 };
 
 export type EngineInfo = {
+  DockerRootDir?: string;
   NCPU?: number;
   MemTotal?: number;
 };

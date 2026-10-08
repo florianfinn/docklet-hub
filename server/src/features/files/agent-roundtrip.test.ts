@@ -74,23 +74,23 @@ test("Dateien: Liste, Text, Speichern, Upload, Download und die drei Aktionen tr
   );
   assert.equal(written.ok, true);
 
-  // Descriptor writes change the local fixture; downloads return those bytes.
+  // Archive writes change the fake container; downloads return those bytes.
   await uploadFile(agent.target, CONTAINER_ID, { ...root, name: "robots.txt" }, new TextEncoder().encode("x"), options);
   const download = await downloadFile(agent.target, CONTAINER_ID, file, options);
   assert.equal(await new Response(download.stream).text(), "<h1>hallo</h1>\n");
 
-  // The three actions, each with the fields it takes. Whether the agent can
-  // carry them out against the fake is not the question here; that it reads
-  // them is (`schemaRefusals` below).
-  // Taken from the contract by position (create a folder, rename, delete).
   const [createFolder, rename, remove] = FILE_ACTIONS;
-  for (const command of [
-    { action: createFolder, path: "", name: "assets" },
-    { action: rename, path: "index.html", name: "start.html" },
-    { action: remove, path: "start.html" }
-  ]) {
-    await applyFileAction(agent.target, CONTAINER_ID, SHARE, command, options);
+  await applyFileAction(agent.target, CONTAINER_ID, SHARE, { action: createFolder, path: "", name: "assets" }, options);
+  for (const command of [{ action: rename, path: "index.html", name: "start.html" }, { action: remove, path: "index.html" }]) {
+    await assert.rejects(applyFileAction(agent.target, CONTAINER_ID, SHARE, command, options), (error: unknown) => {
+      assert.equal((error as { status: number }).status, 403);
+      assert.equal((error as { detail: { error: string } }).detail.error, "not-writable");
+      return true;
+    });
   }
+  assert.equal((await listFiles(agent.target, CONTAINER_ID, root, options)).diagnostics?.deletable, false);
+  const preserved = await downloadFile(agent.target, CONTAINER_ID, file, options);
+  assert.equal(await new Response(preserved.stream).text(), "<h1>hallo</h1>\n");
 
   assert.deepEqual(schemaRefusals(agent), []);
 });

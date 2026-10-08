@@ -1,3 +1,4 @@
+import { projectLockKey } from "../project-lock.js";
 import {
   EngineError
 } from "../engine.js";
@@ -471,10 +472,8 @@ export function rawLockKey(operation: {
   containerId: string | null;
   stackName: string;
 }): string {
-  const projectName = operation.location.projectName ?? (operation.containerId
-    ? registry.get(operation.containerId)?.compose?.projectName
-    : operation.stackName);
-  return projectName || `project-dir:${operation.location.projectDir}`;
+  return projectLockKey({ registryProject: operation.containerId ? registry.get(operation.containerId)?.compose?.projectName : null,
+    projectName: operation.location.projectName, labelProject: operation.stackName, projectDir: operation.location.projectDir });
 }
 
 // The ownership check under the project lock: a container may have changed

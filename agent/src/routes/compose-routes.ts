@@ -1,3 +1,4 @@
+import { projectLockKey } from "../project-lock.js";
 import { stackLocks } from "../runtime/state.js";
 import { KeyedMutexBusyError } from "../concurrency.js";
 import { composeSelectionRequestSchema, envQuerySchema, envWriteRequestSchema } from "contract";
@@ -98,9 +99,9 @@ export async function handleCompose(ctx: ContainerRouteContext): Promise<void> {
     } else {
       specReason = read.reason;
     }
-  } catch (error) {
+  } catch {
     specReason = "compose-config-failed";
-    void error;
+    console.error("[agent] compose config failed", { reason: specReason });
   }
 
   audit.write({
@@ -450,7 +451,9 @@ export async function handleComposeCandidates(ctx: ContainerRouteContext): Promi
 
 export async function handleEnv(ctx: ContainerRouteContext): Promise<void> {
   if (ctx.request.method === "GET") return handleEnvUnlocked(ctx);
-  const key = registry.get(ctx.containerId)?.compose?.projectName || `container:${ctx.containerId}`;
+  const anchor = registry.get(ctx.containerId)?.compose;
+  const labelProject = anchor?.projectName ? null : (await engine.inspect(ctx.containerId)).Config?.Labels?.["com.docker.compose.project"];
+  const key = projectLockKey({ registryProject: anchor?.projectName, labelProject, containerId: ctx.containerId });
   try { await stackLocks.runExclusive(key, () => handleEnvUnlocked(ctx)); }
   catch (error) {
     if (!(error instanceof KeyedMutexBusyError)) throw error;

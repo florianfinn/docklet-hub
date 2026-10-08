@@ -1,6 +1,7 @@
 import path from "node:path";
+import { FileArchive } from "../file-archive.js";
 import { BACKUP_DIRECTORY_DEFAULT, BACKUP_DIRECTORY_ENV } from "contract";
-import { within, resolveFileSources, type SourcePolicy } from "../file-sources.js";
+import { withMountAliases, resolveFileSources, type SourcePolicy } from "../file-sources.js";
 import { mountSourcesOf } from "../mount-sources.js";
 import { verifiedComposeContextForLogs } from "../log-compose-context.js";
 import { forcedManagement } from "../stacks.js";
@@ -8,33 +9,29 @@ import { ownContainerId, config, engine, registry } from "./state.js";
 import { composeBasePath } from "./containers.js";
 import { rawOps } from "./raw-ops.js";
 import { gate } from "./gate.js";
-import { protectFilePaths } from "../webftp.js";
 
 export async function fileSourcePolicy(): Promise<SourcePolicy> {
   const stateDirectory = path.dirname(config.registryFile);
   const backupDirectory = process.env[BACKUP_DIRECTORY_ENV]?.trim() || path.join(stateDirectory, BACKUP_DIRECTORY_DEFAULT);
-  const backupAliases: string[] = [];
-  const agentPaths = [...config.selfPaths, stateDirectory, path.dirname(config.auditFile), path.dirname(config.monitorFile)];
-  const own = ownContainerId();
-  if (own) {
-    try {
-      for (const mount of (await engine.inspect(own)).Mounts ?? []) {
-        if (mount.Source && mount.Destination && within(backupDirectory, mount.Destination))
-          backupAliases.push(path.join(mount.Source, path.relative(mount.Destination, backupDirectory)));
-        if (mount.Source && mount.Destination) for (const protectedPath of [...agentPaths]) {
-          if (within(protectedPath, mount.Destination)) agentPaths.push(path.join(mount.Source, path.relative(mount.Destination, protectedPath)));
-        }
-      }
-    } catch { throw new Error("source-protection-unavailable"); }
-  }
-  return {
-    backupAliases,
-    blockedFiles: registry.knownIds().flatMap((id) => { const compose = registry.get(id)?.compose; return compose ? [path.join(compose.projectDir, compose.composeFileName)] : []; }),
-    socketPath: config.socketPath,
-    agentPaths,
-    backupDirectory
+  const dockerRootDir = (await engine.info()).DockerRootDir;
+  if (!dockerRootDir?.startsWith("/")) throw new Error("source-protection-unavailable");
+  const policy: SourcePolicy = {
+    dockerRootDir, socketPath: config.socketPath, backupDirectory,
+    agentPaths: [...config.selfPaths, stateDirectory, path.dirname(config.auditFile), path.dirname(config.monitorFile)],
+    blockedFiles: registry.knownIds().flatMap((id) => { const compose = registry.get(id)?.compose; return compose ? [path.join(compose.projectDir, compose.composeFileName)] : []; })
   };
+  const own = ownContainerId();
+  if (!own) return policy;
+  const mounts = (await engine.inspect(own)).Mounts ?? [];
+  const volumes = new Map();
+  for (const mount of mounts) if (mount.Type === "volume" && mount.Name) {
+    const volume = await engine.inspectVolume(mount.Name);
+    if (!volume) throw new Error("source-protection-unavailable");
+    volumes.set(mount.Name, volume);
+  }
+  return withMountAliases(policy, mounts, volumes);
 }
+
 export async function fileSources(containerId: string, actor: string | null) {
   const gated = await gate(containerId, { mutating: false, action: "webftp-read", actor });
   if (!gated.ok) return gated;
@@ -42,7 +39,6 @@ export async function fileSources(containerId: string, actor: string | null) {
   const context = verifiedComposeContextForLogs(entry, gated.inspect.Config?.Labels ?? undefined, composeBasePath);
   if (forcedManagement(context?.projectDir ?? "") === "read-only") return { ok: false as const, status: 403, reason: "self-management-locked" };
   const policy = await fileSourcePolicy();
-  protectFilePaths(policy);
   let definitions: ReturnType<typeof mountSourcesOf> = [];
   try { if (context) definitions = mountSourcesOf(await rawOps.config(context.projectDir, context.composeFileName, context.project), [context.serviceName], context.projectDir); }
   catch { /* A failed definition lookup never grants writing. */ }
@@ -60,5 +56,18 @@ export async function fileSources(containerId: string, actor: string | null) {
     shares: entry?.shares ?? [], containers, volumes, policy,
     readOnly: config.readOnly, writeBlocker: entry?.observeOnly ? "source-read-only" : null
   });
-  return { ok: true as const, resolved, inspect: gated.inspect, context };
+  const volumeRoots = [...volumes.values()].filter((volume) => volume.Driver === "local" && !volume.Options?.device && volume.Mountpoint).map((volume) => volume.Mountpoint as string);
+  const volumeDevices = new Map([...volumes.values()].filter((volume) => volume.Options?.device?.startsWith("/")).map((volume) => [volume.Name as string, volume.Options!.device]));
+  for (const item of resolved) {
+    if (!item.source.readable || !item.absolute) continue;
+    const files = new FileArchive(engine, { containerId, root: item.source.target, hostRoot: item.absolute, policy, mounts: gated.inspect.Mounts ?? [], volumeRoots, volumeDevices });
+    try {
+      const stat = await files.stat(item.source.target);
+      if (!stat) throw new Error("not-readable");
+      if ((stat.mode & 0x8f280000) === 0) item.source.estimatedBytes = stat.size;
+    } catch {
+      Object.assign(item.source, { readable: false, writable: false, backupEligible: false, restoreEligible: false, writeBlocker: "not-readable" });
+    }
+  }
+  return { ok: true as const, resolved, inspect: gated.inspect, context, policy, volumeRoots, volumeDevices };
 }

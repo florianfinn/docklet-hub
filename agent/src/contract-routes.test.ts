@@ -63,6 +63,7 @@ function fixture(t: TestContext, flags: { observeOnly?: boolean; externallyManag
     ...flags, compose: { projectDir: "/srv/apps/demo", projectName: "demo", serviceName: "web",
       composeFileName: "compose.yaml", origin: "dashboard" } }]);
   t.mock.property(config, "readOnly", false);
+  t.mock.method(engine, "info", async () => ({ DockerRootDir: "/var/lib/docker" }));
   t.mock.method(engine, "inspect", async (containerId: string) => ({ Id: containerId, Name: "/demo",
     Config: { Labels: own ? { "com.docker.compose.project.working_dir": "/home/docker/dashboard-repo" } : {} },
     HostConfig: {}, State: { Status: "running", StartedAt: "seen" }
@@ -341,4 +342,44 @@ test("every file mutation immediately rejects a held Compose project lock", asyn
       assert.equal(response.body().error, "busy", endpoint);
     }
   } finally { release(); await active; }
+});
+
+test("Compose failures log a sanitized reason without stderr or file content", async (t) => {
+  fixture(t);
+  const projectDir = "/srv/apps/log-config";
+  const originalRead = fs.readFileSync;
+  t.mock.method(fs, "readFileSync", (...args: Parameters<typeof fs.readFileSync>) => String(args[0]) === projectDir + "/compose.yaml" ? "services: {}\n" : originalRead(...args));
+  t.mock.method(engine, "inspect", async () => ({ Id: id, Name: "/demo", Config: { Labels: {
+    "com.docker.compose.project": "demo", "com.docker.compose.service": "web",
+    "com.docker.compose.project.working_dir": projectDir,
+    "com.docker.compose.project.config_files": path.join(projectDir, "compose.yaml")
+  } } }));
+  const child = await import("node:child_process");
+  const { syncBuiltinESMExports } = await import("node:module");
+  t.mock.method(child.default, "execFile", (_file: unknown, _args: unknown, _options: unknown, callback: (error: Error, stdout: string, stderr: string) => void) => {
+    callback(new Error("API_KEY=private-fixture"), "", "PASSWORD=private-fixture");
+    return {};
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const logged: unknown[][] = [];
+  t.mock.method(console, "error", (...values: unknown[]) => { logged.push(values); });
+  const response = await request("GET", `/containers/${id}/compose`);
+  assert.equal(response.status, 200);
+  assert.equal(logged.length, 1);
+  assert.deepEqual(logged[0], ["[agent] compose config failed", { reason: "compose-config-failed" }]);
+  assert.equal(response.payload.includes("private-fixture"), false);
+});
+
+test("protected or noncanonical user paths reject before archive discovery", async (t) => {
+  fixture(t);
+  t.mock.method(engine, "statArchive", async () => { throw new Error("invalid paths must not reach archive HEAD"); });
+  t.mock.method(engine, "getArchive", async () => { throw new Error("invalid paths must not reach archive GET"); });
+  for (const path of [".env", "compose.yaml", "../outside", "/absolute", "sub/../value", "control\x01"]) {
+    const query = new URLSearchParams({ sourceId: "unknown", path });
+    for (const endpoint of ["file", "file-text", "files"]) {
+      const response = await request("GET", `/containers/${id}/${endpoint}?${query}`);
+      assert.equal(response.status, 400, path);
+    }
+  }
 });

@@ -109,7 +109,11 @@ function inspectOf(projectDir: string): Record<string, unknown> {
   };
 }
 
-function installFakeDocker(modules: AgentModules, projectDir: string): void {
+async function installFakeDocker(modules: AgentModules, projectDir: string): Promise<void> {
+  const { archiveOf } = await loadAgentModule<{ archiveOf: (entries: object[]) => Buffer }>("archive-test-support.ts");
+  const { archiveEntries } = await loadAgentModule<{ archiveEntries: (archive: Buffer) => { name: string; kind: string; mode: number; content: Buffer }[] }>("archive-reader.ts");
+  const targetRoot = "/usr/share/nginx/html";
+  const localPath = (target: string) => path.join(projectDir, SHARE, target.slice(targetRoot.length));
   const { engine, rawOps, EngineError, ComposeError } = modules;
   const known = (id: string) => id === CONTAINER_ID || id === CONTAINER_NAME;
   const gone = () => new EngineError("engine responded 404: no such container", 404);
@@ -144,11 +148,35 @@ function installFakeDocker(modules: AgentModules, projectDir: string): void {
       for (const line of FAKE_LOG_LINES) onLine({ ...line });
       throw gone();
     },
-    // Uploads and text edits arrive as a tar archive. The fake takes it and
-    // writes nothing: what the agent sends to Docker is not this test's
-    // question, only that the hub's request got that far.
-    async putArchive(id: string) {
+    async info() { return { DockerRootDir: "/var/lib/docker" }; },
+    async statArchive(id: string, target: string) {
       if (!known(id)) throw gone();
+      if (!target.startsWith(targetRoot)) return { name: path.basename(target), size: 0, mode: 0x80000000, mtime: "2026-01-01T00:00:00Z", linkTarget: "" };
+      let stat;
+      try { stat = fs.lstatSync(localPath(target)); } catch { return null; }
+      return { name: path.basename(target), size: stat.size, mode: stat.isDirectory() ? 0x80000000 : stat.isSymbolicLink() ? 0x08000000 : stat.mode & 0o7777, mtime: stat.mtime.toISOString(), linkTarget: stat.isSymbolicLink() ? fs.readlinkSync(localPath(target)) : "" };
+    },
+    async getArchive(id: string, target: string, limit: number) {
+      if (!known(id)) throw gone();
+      const entries: object[] = [];
+      const visit = (local: string, name: string) => {
+        const stat = fs.lstatSync(local);
+        entries.push({ name, path: name, kind: stat.isDirectory() ? "directory" : "file", mode: stat.mode & 0o7777, uid: stat.uid, gid: stat.gid,
+          mtime: Math.floor(stat.mtimeMs / 1000), content: stat.isFile() ? fs.readFileSync(local) : undefined, linkTarget: stat.isSymbolicLink() ? fs.readlinkSync(local) : undefined });
+        if (stat.isDirectory()) for (const child of fs.readdirSync(local)) visit(path.join(local, child), name + "/" + child);
+      };
+      visit(localPath(target), path.posix.basename(target));
+      const archive = archiveOf(entries);
+      if (archive.length > limit) throw new Error("archive-limit");
+      return archive;
+    },
+    async putArchive(id: string, target: string, archive: Buffer) {
+      if (!known(id)) throw gone();
+      for (const entry of archiveEntries(archive)) {
+        const local = path.join(localPath(target), entry.name);
+        if (entry.kind === "directory") fs.mkdirSync(local, { mode: entry.mode });
+        else fs.writeFileSync(local, entry.content, { mode: entry.mode });
+      }
     },
     async execAvailable() {
       return true;
@@ -240,7 +268,7 @@ export async function startAgent(): Promise<AgentUnderTest> {
   const { rawOps } = await load<Pick<AgentModules, "rawOps">>("runtime/raw-ops.ts");
   const { EngineError } = await load<Pick<AgentModules, "EngineError">>("engine.ts");
   const { ComposeError } = await load<Pick<AgentModules, "ComposeError">>("compose-cli.ts");
-  installFakeDocker({ handleRequest, engine, rawOps, EngineError, ComposeError }, projectDir);
+  await installFakeDocker({ handleRequest, engine, rawOps, EngineError, ComposeError }, projectDir);
 
   const server = http.createServer((request, response) => void handleRequest(request, response));
   const port = await listenOnFetchablePort(server);

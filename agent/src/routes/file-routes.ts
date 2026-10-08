@@ -1,4 +1,6 @@
-import fs from "node:fs";
+import { fileSourcePolicy } from "../runtime/file-sources.js";
+import { protectionOf, definitionBlocked } from "../file-sources.js";
+import { projectLockKey } from "../project-lock.js";
 import {
   fileActionRequestSchema,
   fileTextWriteRequestSchema,
@@ -22,13 +24,6 @@ import {
   EnvRedactionUnavailableError
 } from "../env-file.js";
 import {
-  renameEntry,
-  containerPathFor,
-  shareDiagnostics,
-  readTextFile,
-  listDirectory,
-  deleteEntry,
-  openBelow,
   checkEntryPath,
   checkName
 } from "../webftp.js";
@@ -36,7 +31,7 @@ import {
   requiredComposeContextForFileLogs
 } from "../log-compose-context.js";
 import { KeyedMutexBusyError } from "../concurrency.js";
-import { stackLocks, registry, audit } from "../runtime/state.js";
+import { stackLocks, registry, audit, engine } from "../runtime/state.js";
 import { composeBasePath } from "../runtime/containers.js";
 import { checkWebftpAccess, writeIntoShare } from "../runtime/access.js";
 import {
@@ -53,6 +48,14 @@ function send(response: ContainerRouteContext["response"], status: number, body:
   const aliases: Record<string, string> = { replaced: "file-replaced", "no-write-permission": "not-writable", missing: "not-readable", "not-empty": "already-exists" };
   const error = typeof body.error === "string" ? body.error.split(":")[0] : undefined;
   sendHttp(response, status, error === undefined ? body : { ...body, error: aliases[error] ?? error });
+}
+function validPath(ctx: ContainerRouteContext, value: string, action: string, name?: string): boolean {
+  const entry = checkEntryPath(value, "/selected-source");
+  const checked = entry.ok && name !== undefined ? checkName(name) : entry;
+  if (checked.ok) return true;
+  audit.write({ action, containerId: ctx.containerId, containerName: null, actor: ctx.actor, outcome: "denied", reason: checked.reason });
+  send(ctx.response, 400, { error: checked.reason });
+  return false;
 }
 export async function handleShareCandidates(ctx: ContainerRouteContext): Promise<void> {
   const { response, actor, containerId } = ctx;
@@ -86,14 +89,18 @@ export async function handleShareCandidates(ctx: ContainerRouteContext): Promise
   }
 
   const root = normalizePath(composeContext.projectDir);
+  const policy = await fileSourcePolicy();
   const candidates: Array<{ relative: string; destination: string; writable: boolean }> = [];
   for (const mount of result.inspect.Mounts ?? []) {
     if (mount.Type !== "bind" || !mount.Source || !mount.Destination) continue;
     const source = normalizePath(mount.Source);
     if (!isInsideBase(source, root)) continue;
+    const protection = await protectionOf(source, policy);
+    if (["backup", "agent", "unknown"].includes(protection) || await definitionBlocked(source, policy)) continue;
     let isDirectory: boolean;
     try {
-      isDirectory = (await fs.promises.stat(source)).isDirectory();
+      const stat = await engine.statArchive(containerId, mount.Destination);
+      isDirectory = !!stat && (stat.mode & 0x80000000) !== 0 && !stat.linkTarget;
     } catch {
       continue;
     }
@@ -101,7 +108,7 @@ export async function handleShareCandidates(ctx: ContainerRouteContext): Promise
     candidates.push({
       relative: source.slice(root.length + 1),
       destination: normalizePath(mount.Destination),
-      writable: mount.RW !== false
+      writable: mount.RW !== false && protection === "none"
     });
   }
   candidates.sort((a, b) => a.relative.localeCompare(b.relative, "de"));
@@ -116,6 +123,7 @@ export async function handleFileList(ctx: ContainerRouteContext): Promise<void> 
     rejectRequest(ctx, { action: "webftp-list", containerId, containerName: null }, query.rejection);
     return;
   }
+  if (!validPath(ctx, query.value.path, "webftp-list")) return;
   const before = await checkWebftpAccess(containerId, {
     mutating: false,
     action: "webftp-read",
@@ -153,7 +161,7 @@ export async function handleFileList(ctx: ContainerRouteContext): Promise<void> 
     return;
   }
 
-  const listing = await listDirectory(checked.absolute, before.shareAbsolute);
+  const listing = await before.files.list(checked.absolute);
   if (!listing.ok) {
     audit.write({
       action: "webftp-list",
@@ -163,12 +171,10 @@ export async function handleFileList(ctx: ContainerRouteContext): Promise<void> 
       outcome: "denied",
       reason: listing.reason
     });
-    send(response, listing.reason === "missing" ? 404 : 400, { error: listing.reason });
+    send(response, listing.reason === "not-readable" ? 404 : 400, { error: listing.reason });
     return;
   }
 
-  const diagnostics = await shareDiagnostics(checked.absolute, before.shareAbsolute);
-  const target = containerPathFor(checked.absolute, before.inspect.Mounts ?? []);
 
   audit.write({
     action: "webftp-list",
@@ -183,15 +189,7 @@ export async function handleFileList(ctx: ContainerRouteContext): Promise<void> 
     path: checked.relative,
     entries: listing.list.entries,
     truncated: listing.list.truncated,
-    diagnostics: diagnostics.ok
-      ? {
-          readable: diagnostics.diagnostics.readable,
-          deletable: before.writable && diagnostics.diagnostics.deletable,
-          uid: diagnostics.diagnostics.uid,
-          gid: diagnostics.diagnostics.gid,
-          uploadable: before.writable && target.ok && target.writable
-        }
-      : null
+    diagnostics: { ...listing.diagnostics, uploadable: before.writable }
   });
   return;
 }
@@ -204,6 +202,7 @@ async function handleFileUnlocked(ctx: ContainerRouteContext): Promise<void> {
     rejectRequest(ctx, { action: auditAction, containerId, containerName: null }, query.rejection);
     return;
   }
+  if (!validPath(ctx, query.value.path, auditAction, writing ? query.value.name : undefined)) return;
   const before = await checkWebftpAccess(containerId, {
     mutating: writing,
     action: writing ? "webftp-write" : "webftp-read",
@@ -242,41 +241,15 @@ async function handleFileUnlocked(ctx: ContainerRouteContext): Promise<void> {
       before.shareAbsolute
     );
     if (!checked.ok) return void reject(400, checked.reason);
-    if (!checked.relative) return void reject(400, "path-traversal");
 
-    const opened = await openBelow(checked.absolute, before.shareAbsolute, "file");
-    if (!opened.ok) {
-      return void reject(opened.reason === "missing" ? 404 : 400, opened.reason);
-    }
-
-    audit.write({
-      action: auditAction,
-      containerId,
-      containerName: before.containerName,
-      actor,
-      outcome: "allowed",
-      reason: `${checked.relative} (${opened.entry.size} B)`
-    });
-    const size = opened.entry.size;
-    response.writeHead(200, {
-      "content-type": "application/octet-stream",
-      "content-length": String(size),
-      "cache-control": "no-store"
-    });
-    if (size === 0) {
-      await opened.entry.handle.close().catch(() => {});
-      response.end();
-      return;
-    }
-    const stream = opened.entry.handle.createReadStream({
-      autoClose: true,
-      start: 0,
-      end: size - 1
-    });
-    stream.on("error", () => response.destroy());
-    stream.pipe(response);
+    const loaded = await before.files.read(checked.absolute);
+    if (!loaded.ok) return void reject(400, loaded.reason);
+    audit.write({ action: auditAction, containerId, containerName: before.containerName, actor, outcome: "allowed", reason: checked.relative });
+    response.writeHead(200, { "content-type": "application/octet-stream", "content-length": String(loaded.content.length), "cache-control": "no-store" });
+    response.end(loaded.content);
     return;
   }
+
   const validatedDestination = checkEntryPath(
     query.value.path,
     before.shareAbsolute
@@ -294,10 +267,8 @@ async function handleFileUnlocked(ctx: ContainerRouteContext): Promise<void> {
   }
 
   const result = await writeIntoShare({
-    containerId,
-    inspect: before.inspect,
+    files: before.files,
     targetDirectory: validatedDestination.absolute,
-    shareAbsolute: before.shareAbsolute,
     name: validatedName.name,
     content: content
   });
@@ -323,6 +294,7 @@ async function handleFileTextUnlocked(ctx: ContainerRouteContext): Promise<void>
     rejectRequest(ctx, { action: auditAction, containerId, containerName: null }, query.rejection);
     return;
   }
+  if (!validPath(ctx, query.value.path, auditAction)) return;
   const before = await checkWebftpAccess(containerId, {
     mutating: writing,
     action: writing ? "webftp-write" : "webftp-read",
@@ -360,12 +332,11 @@ async function handleFileTextUnlocked(ctx: ContainerRouteContext): Promise<void>
     before.shareAbsolute
   );
   if (!checked.ok) return void reject(400, checked.reason);
-  if (!checked.relative) return void reject(400, "path-traversal");
 
-  const loaded = await readTextFile(checked.absolute, before.shareAbsolute);
+  const loaded = await before.files.text(checked.absolute);
 
   if (!writing) {
-    if (!loaded.ok) return void reject(loaded.reason === "missing" ? 404 : 400, loaded.reason);
+    if (!loaded.ok) return void reject(loaded.reason === "not-readable" ? 404 : 400, loaded.reason);
     audit.write({
       action: auditAction,
       containerId,
@@ -389,7 +360,7 @@ async function handleFileTextUnlocked(ctx: ContainerRouteContext): Promise<void>
   }
   const { content: newContent, expectedHash: expected } = write.value;
   if (newContent.includes("\0") || Buffer.from(newContent).toString("utf8") !== newContent) return void reject(400, "not-a-text-file");
-  if (!loaded.ok) return void reject(loaded.reason === "missing" ? 404 : 400, loaded.reason);
+  if (!loaded.ok) return void reject(loaded.reason === "not-readable" ? 404 : 400, loaded.reason);
   if (loaded.hash !== expected) {
     audit.write({
       action: auditAction,
@@ -402,16 +373,14 @@ async function handleFileTextUnlocked(ctx: ContainerRouteContext): Promise<void>
     send(response, 409, { error: "file-changed-externally", hash: loaded.hash });
     return;
   }
-  const parts = checked.relative.split("/");
+  const parts = (checked.relative || before.shareAbsolute.split("/").pop() || "").split("/");
   const validatedName = checkName(parts.pop() ?? "");
   if (!validatedName.ok) return void reject(400, validatedName.reason);
-  const parentPath = checkEntryPath(parts.join("/"), before.shareAbsolute);
+  const parentPath = checked.relative ? checkEntryPath(parts.join("/"), before.shareAbsolute) : { ok: true as const, absolute: before.shareAbsolute.slice(0, before.shareAbsolute.lastIndexOf("/")) };
   if (!parentPath.ok) return void reject(400, parentPath.reason);
   const result = await writeIntoShare({
-    containerId,
-    inspect: before.inspect,
+    files: before.files,
     targetDirectory: parentPath.absolute,
-    shareAbsolute: before.shareAbsolute,
     name: validatedName.name,
     content: Buffer.from(newContent, "utf8"),
     expectedHash: expected
@@ -439,13 +408,6 @@ async function handleFileActionUnlocked(ctx: ContainerRouteContext): Promise<voi
     rejectRequest(ctx, { action: "webftp-unknown", containerId, containerName: null }, query.rejection);
     return;
   }
-  const before = await checkWebftpAccess(containerId, {
-    mutating: true,
-    action: "webftp-write",
-    actor,
-    share: query.value.share,
-    sourceId: query.value.sourceId
-  });
   const parsedBody = parseRequest(fileActionRequestSchema, await readJsonBody(request));
   if (!parsedBody.ok) {
     rejectRequest(ctx, { action: "webftp-unknown", containerId, containerName: null }, parsedBody.rejection);
@@ -454,6 +416,14 @@ async function handleFileActionUnlocked(ctx: ContainerRouteContext): Promise<voi
   const body = parsedBody.value;
   const fileAction = body.action;
   const auditAction = `webftp-${fileAction}`;
+  if (!validPath(ctx, body.path, auditAction, body.action === "delete" ? undefined : body.name)) return;
+  const before = await checkWebftpAccess(containerId, {
+    mutating: true,
+    action: "webftp-write",
+    actor,
+    share: query.value.share,
+    sourceId: query.value.sourceId
+  });
   if (!before.ok) {
     audit.write({
       action: auditAction,
@@ -495,11 +465,9 @@ async function handleFileActionUnlocked(ctx: ContainerRouteContext): Promise<voi
     const validatedName = checkName(body.name);
     if (!validatedName.ok) return void reject(400, validatedName.reason);
     const result = await writeIntoShare({
-      containerId,
-      inspect: before.inspect,
+      files: before.files,
       targetDirectory: checked.absolute,
-      shareAbsolute: before.shareAbsolute,
-      name: validatedName.name
+        name: validatedName.name
     });
     if (!result.ok) return void reject(result.status, result.reason);
     confirm(`${[checked.relative, validatedName.name].filter(Boolean).join("/")} (uid=${result.uid})`);
@@ -508,29 +476,18 @@ async function handleFileActionUnlocked(ctx: ContainerRouteContext): Promise<voi
   }
 
   if (body.action === "rename") {
-    if (!checked.relative) return void reject(400, "path-blocked");
-    const validatedName = checkName(body.name);
-    if (!validatedName.ok) return void reject(400, validatedName.reason);
-    const result = await renameEntry(checked.absolute, validatedName.name, before.shareAbsolute);
-    if (!result.ok) {
-      return void reject(["no-write-permission", "already-exists", "not-empty", "replaced"].includes(result.reason) ? 409 : 400, result.reason);
-    }
-    confirm(`${checked.relative} -> ${validatedName.name}`);
-    send(response, 200, { ok: true, name: validatedName.name });
-    return;
+    const name = checkName(body.name);
+    if (!name.ok) return void reject(400, name.reason);
   }
-  if (!checked.relative) return void reject(400, "path-blocked");
-  const result = await deleteEntry(checked.absolute, before.shareAbsolute);
-  if (!result.ok) {
-    return void reject(["no-write-permission", "already-exists", "not-empty", "replaced"].includes(result.reason) ? 409 : 400, result.reason);
-  }
-  confirm(`${checked.relative} (${result.kind})`);
-  send(response, 200, { ok: true, kind: result.kind });
+  // Archive API has no rename/delete; arbitrary images have no trusted tools.
+  reject(403, "not-writable");
 }
+
 async function withFileLock(ctx: ContainerRouteContext, operation: () => Promise<void>): Promise<void> {
   if (ctx.request.method === "GET") return operation();
   const anchor = registry.get(ctx.containerId)?.compose;
-  const key = anchor?.projectName || `container:${ctx.containerId}`;
+  const labelProject = anchor?.projectName ? null : (await engine.inspect(ctx.containerId)).Config?.Labels?.["com.docker.compose.project"];
+  const key = projectLockKey({ registryProject: anchor?.projectName, labelProject, containerId: ctx.containerId });
   try { await stackLocks.runExclusive(key, operation); }
   catch (error) {
     if (!(error instanceof KeyedMutexBusyError)) throw error;

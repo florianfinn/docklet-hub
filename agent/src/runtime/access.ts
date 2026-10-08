@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import { protectionOf, within } from "../file-sources.js";
 import {
   EngineError,
@@ -16,7 +15,7 @@ import {
   containerPathFor,
   checkSharePath
 } from "../webftp.js";
-import { writePinned } from "../file-write.js";
+import { FileArchive } from "../file-archive.js";
 import {
   requiredComposeContextForFileLogs
 } from "../log-compose-context.js";
@@ -25,7 +24,6 @@ import { composeBasePath } from "./containers.js";
 import { rawOps } from "./raw-ops.js";
 import { gate } from "./gate.js";
 import { fileSources, fileSourcePolicy } from "./file-sources.js";
-import { protectFilePaths } from "../webftp.js";
 export type EnvPrecheck =
   | {
       ok: true;
@@ -106,6 +104,7 @@ export type WebftpPrecheck =
       shareRelative: string;
       shareAbsolute: string;
       writable: boolean;
+      files: FileArchive;
     }
   | { ok: false; status: number; reason: string };
 export async function checkWebftpAccess(
@@ -118,7 +117,6 @@ export async function checkWebftpAccess(
     sourceId?: string | null;
   }
 ): Promise<WebftpPrecheck> {
-  protectFilePaths(await fileSourcePolicy());
   if (options.sourceId) {
     const sources = await fileSources(containerId, options.actor);
     if (!sources.ok) return sources;
@@ -131,7 +129,8 @@ export async function checkWebftpAccess(
     if (JSON.stringify(fresh.inspect.Mounts) !== JSON.stringify(sources.inspect.Mounts))
       return { ok: false, status: 409, reason: "file-replaced" };
     return { ok: true, inspect: fresh.inspect, containerName: (fresh.inspect.Name ?? "").replace(/^\//, ""),
-      projectDir: sources.context?.projectDir ?? "", shareRelative: selected.source.sourceId, shareAbsolute: selected.absolute, writable: selected.source.writable };
+      projectDir: sources.context?.projectDir ?? "", shareRelative: selected.source.sourceId, shareAbsolute: selected.source.target, writable: selected.source.writable,
+      files: new FileArchive(engine, { containerId, root: selected.source.target, hostRoot: selected.absolute, policy: sources.policy, mounts: fresh.inspect.Mounts ?? [], volumeRoots: sources.volumeRoots, volumeDevices: sources.volumeDevices }) };
   }
   const result = await gate(containerId, {
     mutating: options.mutating,
@@ -183,36 +182,19 @@ export async function checkWebftpAccess(
     const denied = selected.find((item) => !item.source.readable || options.mutating && !item.source.writable)!;
     return { ok: false, status: 403, reason: denied.source.writeBlocker ?? "source-read-only" };
   }
-  if (options.mutating && selected.length === 0) return { ok: false, status: 403, reason: "source-ownership-unknown" };
-  return {
-    ok: true,
-    inspect: sources.inspect,
-    containerName,
-    projectDir: composeContext.projectDir,
-    shareRelative: share.relative,
-    shareAbsolute: share.absolute,
-    writable: selected.length > 0 && selected.every((item) => item.source.writable)
-  };
+  if (selected.length !== 1 || !selected[0].absolute) return { ok: false, status: 403, reason: "source-ownership-unknown" };
+  const resolved = selected[0];
+  const target = containerPathFor(share.absolute, sources.inspect.Mounts ?? []);
+  if (!target.ok) return { ok: false, status: 409, reason: "not-mounted" };
+  return { ok: true, inspect: sources.inspect, containerName, projectDir: composeContext.projectDir,
+    shareRelative: share.relative, shareAbsolute: target.absolutePath, writable: resolved.source.writable,
+    files: new FileArchive(engine, { containerId, root: target.absolutePath, hostRoot: share.absolute, policy: sources.policy, mounts: sources.inspect.Mounts ?? [], volumeRoots: sources.volumeRoots, volumeDevices: sources.volumeDevices }) };
 }
 
 export type ShareWriteResult = { ok: true; uid: number } | { ok: false; status: number; reason: string; hash?: string };
 export async function writeIntoShare(input: {
-  containerId: string;
-  inspect: RawInspect;
-  targetDirectory: string;
-  shareAbsolute: string;
-  name: string;
-  content?: Buffer;
-  expectedHash?: string;
+  files: FileArchive; targetDirectory: string; name: string; content?: Buffer; expectedHash?: string;
 }): Promise<ShareWriteResult> {
-  const mounts = await Promise.all((input.inspect.Mounts ?? []).map(async (mount) => {
-    if (!mount.Source) return mount;
-    try { return { ...mount, Source: await fs.realpath(mount.Source) }; } catch { return mount; }
-  }));
-  const target = containerPathFor(input.shareAbsolute === `${input.targetDirectory}/${input.name}` ? input.shareAbsolute : input.targetDirectory, mounts);
-  if (!target.ok) return { ok: false, status: 409, reason: "not-mounted" };
-  if (!target.writable) return { ok: false, status: 403, reason: "source-read-only" };
-  const result = await writePinned({ directory: input.targetDirectory, root: input.shareAbsolute,
-    name: input.name, ...(input.content ? { content: input.content } : {}), ...(input.expectedHash ? { expectedHash: input.expectedHash } : {}) });
+  const result = await input.files.write(input.targetDirectory, input.name, input.content, input.expectedHash);
   return result.ok ? result : { ...result, status: result.reason === "file-changed-externally" || result.reason === "already-exists" ? 409 : 403 };
 }

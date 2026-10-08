@@ -1,3 +1,4 @@
+import { projectLockKey } from "./project-lock.js";
 import { RuntimeBudget } from "./runtime-budget.js";
 import type { ExpectedContainer, RuntimeAction } from "contract";
 import { EngineError, type RawInspect } from "./engine.js";
@@ -28,8 +29,8 @@ export async function runContainerAction(
     if (!initial.ok) throw new StackEndpointError(initial.status, initial.reason);
     containerName = initial.inspect.Name.replace(/^\//, "");
     const context = composeContextOf(initial.inspect.Config?.Labels ?? undefined, composeBasePath);
-    const projectName = initial.inspect.Config?.Labels?.["com.docker.compose.project"] ?? registry.get(containerId)?.compose?.projectName;
-    const lockKey = projectName ?? `container:${containerId}`;
+    const lockKey = projectLockKey({ registryProject: registry.get(containerId)?.compose?.projectName,
+      labelProject: initial.inspect.Config?.Labels?.["com.docker.compose.project"], containerId });
     const result = await stackLocks.runExclusive(lockKey, async () => {
       const fresh = await gate(containerId, { mutating: true, action, actor, onDelegation, budget, onInspect });
       if (!fresh.ok && fresh.reason !== "container-gone" && fresh.reason !== "not-allowlisted") return { status: fresh.status, body: { error: fresh.reason } };
