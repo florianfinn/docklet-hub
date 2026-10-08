@@ -1,3 +1,4 @@
+import { DEFAULT_SELF_HEALING_CONFIG } from "contract";
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -47,6 +48,13 @@ function fakePool(): Pool & { view: { showSystem: boolean } } {
   const pool = {
     view,
     query(text: string, values: unknown[] = []) {
+      if (/^SELECT apply_compose_definition FROM runtime_settings/.test(text))
+        return Promise.resolve({ rows: [{ apply_compose_definition: true }], rowCount: 1 });
+      if (/^SELECT self_healing_config, self_healing_revision FROM runtime_settings/.test(text))
+        return Promise.resolve({ rows: [{ self_healing_config: DEFAULT_SELF_HEALING_CONFIG, self_healing_revision: 1 }], rowCount: 1 });
+      if (/FROM docker_host h LEFT JOIN self_healing_delivery/.test(text))
+        return Promise.resolve({ rows: [], rowCount: 0 });
+
       if (/SELECT .* FROM hub_theme/s.test(text)) {
         // ⚠️ Kleingeschriebene Schlüssel, wie Postgres sie liefert, und der
         // gequotete Alias wörtlich (B6/E4, #5). Der lange Grund steht an

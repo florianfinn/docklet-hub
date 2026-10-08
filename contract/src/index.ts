@@ -362,6 +362,7 @@ export {
   expectedStackSchema,
   recreateRequestSchema,
   stackActionRequestSchema,
+  stackRuntimeActionRequestSchema,
   stackAdoptRequestSchema,
   stackRawPreviewRequestSchema,
   stackRawRequestSchema
@@ -401,3 +402,69 @@ export {
   specVolumeSchema
 } from "./agent/spec.js";
 export type { ContainerSpecInput, SpecPort, SpecVolume } from "./agent/spec.js";
+export {
+  COMPOSE_ONE_OFF_LABEL,
+  runtimeActionSchema, expectedContainerSchema, containerActionRequestSchema,
+  runtimeStateSchema, runtimeServiceResultSchema, runtimeOutcomeSchema,
+  RUNTIME_ACTION_ERRORS, runtimeActionErrorSchema, stackRuntimeResultSchema,
+  containerRuntimeResultSchema, stackActionStreamLineSchema
+} from "./agent/runtime-actions.js";
+export type {
+  RuntimeAction, ExpectedContainer, ContainerActionRequest, RuntimeState, RuntimeServiceResult,
+  RuntimeOutcome, RuntimeActionError, StackRuntimeResult, ContainerRuntimeResult,
+  StackActionStreamLine
+} from "./agent/runtime-actions.js";
+
+export { liveEventSchema, liveStatusSchema, liveActionSchema, type LiveEvent, type LiveStatus, type LiveAction } from "./api/live-events.js";
+
+export {
+  DEFAULT_SELF_HEALING_CONFIG,
+  SELF_HEALING_ACTOR,
+  SELF_HEALING_LIMITS,
+  selfHealingConfigSchema,
+  selfHealingConfigResponseSchema
+} from "./agent/self-healing.js";
+export type { SelfHealingConfig } from "./agent/self-healing.js";
+export {
+  runtimeSettingsSchema,
+  runtimeSettingsResponseSchema,
+  selfHealingSettingsSchema,
+  selfHealingSettingsResponseSchema,
+  selfHealingSettingsRequestSchema
+} from "./api/settings.js";
+export type { RuntimeSettings, SelfHealingSettings, SelfHealingDelivery } from "./api/settings.js";
+export {
+  stopIntentTargetSchema, stopIntentSchema, containerExitSchema, stopIntentsResponseSchema,
+  type StopIntentTarget, type StopIntent, type ContainerExit, type StopIntentsResponse
+} from "./agent/stop-intents.js";
+
+export {
+  SELF_HEALING_SYSTEM_ACTOR, SELF_HEALING_RECOMMENDATION,
+  selfHealingMaintenanceTargetSchema, selfHealingMaintenanceRequestSchema,
+  selfHealingTargetRequestSchema, selfHealingMaintenanceDeleteSchema, selfHealingMaintenanceSchema,
+  selfHealingAttemptSchema, selfHealingCauseSchema, selfHealingLogSchema, selfHealingIncidentSchema,
+  selfHealingBudgetSchema, selfHealingStatusResponseSchema
+} from "./agent/self-healing-status.js";
+export type {
+  SelfHealingMaintenanceTarget, SelfHealingMaintenance, SelfHealingAttempt, SelfHealingCause,
+  SelfHealingLog, SelfHealingIncident, SelfHealingStatusResponse
+} from "./agent/self-healing-status.js";
+
+export {
+  HUB_RUNTIME_ERRORS, hubRuntimeErrorSchema, hubRuntimeFailureSchema,
+  hubContainerActionRequestSchema, hubStackActionRequestSchema,
+  hubContainerRuntimeResultSchema, hubStackRuntimeResultSchema, hubStackActionStreamLineSchema
+} from "./api/runtime-actions.js";
+export type { HubRuntimeError, HubContainerRuntimeResult, HubStackRuntimeResult,
+  HubStackActionStreamLine } from "./api/runtime-actions.js";
+
+export { lifecycleSnapshotSchema, runtimeAccessSchema, hubRuntimeContextSchema, lifecycleWriteResultSchema } from "./api/lifecycle.js";
+export type { LifecycleSnapshot, HubRuntimeContext } from "./api/lifecycle.js";
+
+export {
+  DEFAULT_STOP_GRACE_SECONDS, ACTION_QUEUE_WAIT_MS, STOP_BUFFER_MS, STACK_BUFFER_MS, RESTART_START_RESERVE_MS,
+  MAX_STOP_GRACE_MS, MAX_STACK_ACTION_MS, MIN_STACK_ACTION_MS, MAX_CONTAINER_ACTION_MS,
+  MAX_AGENT_ACTION_MS, RUNTIME_READBACK_RESERVE_MS, RUNTIME_TRANSPORT_RESERVE_MS,
+  LIFECYCLE_DELIVERY_RESERVE_MS, HUB_RUNTIME_TIMEOUT_MS, LIFECYCLE_TIMEOUT_MS,
+  stopTimeoutSeconds, containerActionTimeoutMs, stackActionTimeoutMs
+} from "./agent/runtime-deadlines.js";

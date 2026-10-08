@@ -5,7 +5,6 @@ import {
   isStackAction,
   stackActionDeny,
   stackDefinitionFromConfig,
-  stackNeedsDependencySafeRestart,
   stackMutationBaseDeny
 } from "./stack-control.js";
 
@@ -15,21 +14,21 @@ test("stack expectation binds project, path, file and the exact service set", ()
     projectDir: "/srv/compose/homepage",
     composeFileName: "compose.yml",
     services: [
-      { serviceName: "db", containerId: "db-id" },
-      { serviceName: "web", containerId: "web-id" }
+      { serviceName: "db", containerId: "db-id", status: "running", startedAt: null },
+      { serviceName: "web", containerId: "web-id", status: "running", startedAt: null }
     ]
   };
   assert.equal(expectedStackMatches({ ...actual, services: [...actual.services].reverse() }, actual), true);
   assert.equal(
     expectedStackMatches(
-      { ...actual, services: [...actual.services, { serviceName: "admin", containerId: "admin-id" }] },
+      { ...actual, services: [...actual.services, { serviceName: "admin", containerId: "admin-id", status: "running", startedAt: null }] },
       actual
     ),
     false
   );
   assert.equal(
     expectedStackMatches(
-      { ...actual, services: [{ serviceName: "db", containerId: "other" }, actual.services[1]] },
+      { ...actual, services: [{ serviceName: "db", containerId: "other", status: "running", startedAt: null }, actual.services[1]] },
       actual
     ),
     false
@@ -113,16 +112,6 @@ test("ignores plain depends_on relations and host namespaces", () => {
   assert.deepEqual(result?.couplings, []);
 });
 
-test("coupled stacks need a dependency-safe restart", () => {
-  assert.equal(stackNeedsDependencySafeRestart([]), false);
-  for (const kind of ["network_mode", "pid", "ipc", "service_healthy"] as const) {
-    assert.equal(
-      stackNeedsDependencySafeRestart([{ kind, sourceService: "app", targetService: "anchor" }]),
-      true
-    );
-  }
-});
-
 test("invalid or empty service objects are detected fail-closed", () => {
   assert.equal(stackDefinitionFromConfig(null), null);
   assert.equal(stackDefinitionFromConfig({ services: [] }), null);
@@ -150,55 +139,11 @@ test("kill switch and self-management block every stack mutation", () => {
   assert.equal(stackMutationBaseDeny({ readOnly: false, selfManaged: false }), null);
 });
 
-test("stack action policy enforces the start fallback and exact down confirmation", () => {
-  assert.deepEqual(
-    stackActionDeny({
-      action: "start",
-      missingServices: ["db"],
-      projectName: "homepage",
-      confirmation: undefined,
-      allowFallbackUp: false
-    }),
-    { status: 409, code: "stack-start-requires-apply" }
-  );
-  for (const action of ["apply", "stop", "restart"] as const) {
-    assert.equal(
-      stackActionDeny({ action, missingServices: ["db"], projectName: "homepage", confirmation: undefined, allowFallbackUp: false }),
-      null
-    );
+test("stack action policy requires an exact down confirmation", () => {
+  for (const action of ["start", "apply", "stop", "restart"] as const) {
+    assert.equal(stackActionDeny({ action, projectName: "homepage", confirmation: undefined }), null);
   }
-  assert.deepEqual(
-    stackActionDeny({
-      action: "down",
-      missingServices: [],
-      projectName: "homepage",
-      confirmation: "Homepage",
-      allowFallbackUp: false
-    }),
-    { status: 409, code: "stack-confirmation-wrong" }
-  );
-  assert.equal(
-    stackActionDeny({
-      action: "down",
-      missingServices: [],
-      projectName: "homepage",
-      confirmation: "homepage",
-      allowFallbackUp: false
-    }),
-    null
-  );
-});
-
-test("start fallback needs the explicit server approval", () => {
-  const base = {
-    action: "start" as const,
-    missingServices: ["db"],
-    projectName: "homepage",
-    confirmation: undefined
-  };
-  assert.deepEqual(
-    stackActionDeny({ ...base, allowFallbackUp: false }),
-    { status: 409, code: "stack-start-requires-apply" }
-  );
-  assert.equal(stackActionDeny({ ...base, allowFallbackUp: true }), null);
+  assert.deepEqual(stackActionDeny({ action: "down", projectName: "homepage", confirmation: "Homepage" }),
+    { status: 409, code: "stack-confirmation-wrong" });
+  assert.equal(stackActionDeny({ action: "down", projectName: "homepage", confirmation: "homepage" }), null);
 });

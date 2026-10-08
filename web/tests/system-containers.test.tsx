@@ -1,3 +1,4 @@
+import { DEFAULT_SELF_HEALING_CONFIG } from "contract";
 // Die Container des Leitstands selbst (Hub, Agenten): in Übersicht und
 // Container-Fläche nach Vorgabe ausgeblendet, im Reiter „Hub & Agenten" der
 // Einstellungen immer sichtbar.
@@ -106,6 +107,8 @@ function stubHub(showSystem: boolean): () => void {
       // contract since #248.
       const settings: Settings = {
         theme: DEFAULT_GLOBAL_THEME,
+        runtime: { applyComposeDefinition: true },
+        selfHealing: { config: DEFAULT_SELF_HEALING_CONFIG, revision: 1, hosts: [] },
         logs: { tailLines: 500 },
         containers: { showSystem },
         network: { externalEndpoint: null, internalTarget: null, externalTarget: null, externalTargetUnreachable: false }

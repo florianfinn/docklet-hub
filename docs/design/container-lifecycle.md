@@ -34,9 +34,14 @@ Ein Neustart über die Laufzeit verwendet den bestehenden Container weiter. Änd
 | Neustart | `up -d --force-recreate` | Stopp und Start |
 | Stopp | `compose stop` | `compose stop` |
 
-In beiden Stellungen erzeugt der Start fehlende Services. Mit „Aus“ ersetzt er keinen bestehenden Container; mit „An“ ersetzt er Container, deren Definition sich geändert hat, und der Neustart ersetzt alle. Jeder `up` trägt zusätzlich `--no-build` und `--pull never` und läuft ohne `--wait`. Bevor ein Weg etwas erzeugt, prüft der Agent die Definition mit `compose config` und die lokalen Images. Scheitert eine Prüfung, bleibt der Stack unverändert.
+In beiden Stellungen erzeugt der Start fehlende Services. Mit „Aus“ ersetzt er keinen bestehenden Container; mit „An“ ersetzt er Container, deren Definition sich geändert hat, und der Neustart ersetzt alle. Jeder `up` trägt zusätzlich `--no-build` und `--pull never` und läuft ohne `--wait`. Vor einem erzeugenden Vorgang, beim Neustart also bereits vor dem Stopp, prüft der Agent die Definition mit `compose config` und die lokalen Images. Scheitert eine Prüfung, bleibt der Stack unverändert.
 
-Die Einstellung gilt global; die Ersteinrichtung fragt sie mit der Vorauswahl „An“ ab. Eine Übersteuerung je Projekt und die Anzeige abweichender Definitionen verfolgt #149. Die Einstellung wirkt nur auf Hub-eigene Projekte. Fremdverwaltete Stacks ersetzen nie einen Container und erzeugen auch beim Start nichts: Dort startet `compose start` nur die bestehenden Container, und fehlende Services erscheinen im Ergebnis als nicht erzeugt, weil Erzeugen und Ersetzen dem Verwalter gehören. Ihr Neustart ist Stopp und Start auf demselben Weg. Der Button nennt den wirksamen Modus, damit ein Neustart nie stillschweigend zum Recreate wird.
+Der Neustart mit „Aus“ verwendet nach `compose stop` denselben `up -d --no-recreate --no-build --pull never` ohne `--wait` wie der Start. Compose bestimmt die Reihenfolge anhand von `depends_on`, `links`, `volumes_from` und Service-Verweisen in `network_mode`, `ipc` und `pid`; damit bleiben die S11-Kopplungen im selben Projekt abhängigkeitssicher. Vorhandene Container werden erhalten, fehlende Services werden erzeugt. Fremdverwaltete Stacks bleiben bei `compose stop` und `compose start` mit der Compose-Reihenfolge für vorhandene Container.
+
+Die Einstellung gilt global; die Ersteinrichtung fragt sie mit der Vorauswahl „An“ ab.
+Bestehende Installationen erhalten „An“ durch eine Vorwärtsmigration, ohne die
+Ersteinrichtung erneut zu öffnen. Der Wert steht in der Hub-Datenbank und wird
+über die Settings-API gelesen und geschrieben. Eine Übersteuerung je Projekt und die Anzeige abweichender Definitionen verfolgt #149. Die Einstellung wirkt nur auf Hub-eigene Projekte. Fremdverwaltete Stacks ersetzen nie einen Container und erzeugen auch beim Start nichts: Dort startet `compose start` nur die bestehenden Container, und fehlende Services erscheinen im Ergebnis als nicht erzeugt, weil Erzeugen und Ersetzen dem Verwalter gehören. Ihr Neustart ist Stopp und Start auf demselben Weg. Der Button nennt den wirksamen Modus, damit ein Neustart nie stillschweigend zum Recreate wird.
 
 `down` und `up` als Ersatz für Stopp und Start scheiden aus. Nach `down` fehlen die Container und mit ihnen die Logs, an denen sich ein Fehler nachvollziehen ließe, und der Hub verliert den Anker, über den er den Stack wieder starten kann. Scheitert das anschließende `up`, ist der Stack aus, ohne dass ein alter Container zurückbleibt. Anonyme Volumes bleiben verwaist zurück, während `up --force-recreate` sie in den neuen Container übernimmt.
 
@@ -44,14 +49,121 @@ Die Einstellung gilt global; die Ersteinrichtung fragt sie mit der Vorauswahl �
 
 Ein Vorgang ist abgeschlossen, wenn der Agent den Laufzustand jedes betroffenen Containers nachgelesen hat. Erfolgreich ist er, wenn jeder Container den Zielzustand `running` oder `exited` erreicht hat. Ein Container, der nach dem Start mit Exit-Code 0 endet, hat einen Einmalauftrag erledigt und zählt beim Start als erfolgreich; ein anderer Exit-Code ist ein Fehler. Health meldet der Agent mit, macht sie aber nicht zum Erfolgskriterium; deshalb fehlt `--wait`. Nur wo `depends_on` mit `service_healthy` die Reihenfolge bestimmt, wartet Compose vor dem Start des abhängigen Service auf die Health seiner Voraussetzung. Ein Health-Kriterium würde Start und Neustart an Zeitgrenzen binden, die zum Update-Erfolg gehören (#13).
 
+Ein fehlender Service erfüllt beim Stopp bereits den Zielzustand, auch bei Fremdverwaltung. Beim Start oder Neustart bleibt er ein Teilfehler; bei Fremdverwaltung wird er als nicht erzeugt gemeldet.
+
 Das Ergebnis nennt jeden Service mit seinem Zustand und fasst den Vorgang als `ok`, `partial` oder `failed` zusammen. Auch ein gescheiterter Vorgang kann Container ersetzt haben, deshalb verankert der Agent die Container-IDs vor jeder Antwort neu.
 
 Stack-Aktionen melden Fortschritt je Service als NDJSON-Strom wie die übrigen Compose-Wege und fallen auf eine synchrone Antwort zurück. Containeraktionen antworten synchron.
+
+Der Stream für Start, Stopp und Neustart ist über den Suffix `-stream` am Aktionsnamen oder den Accept-Header `application/x-ndjson` erreichbar. Ohne Stream-Anforderung antwortet derselbe Vorgang synchron. Vorprüfungsfehler vor der ersten Stream-Zeile behalten ihren HTTP-Status und liefern JSON. Während des Compose-Vorgangs liest der Agent vorhandene erlaubte Container im Sekundentakt nach und meldet Zustandsänderungen je Service; das Abschlussresultat enthält die neu verankerten IDs. Nach Beginn einer Mutation läuft der Vorgang auch bei getrennter Verbindung bis zum Nachlesen zu Ende. Die Gesamtbewertung beschreibt die nachgelesenen Zielzustände; ein zusätzlicher Ausführungs- oder Vorprüfungsfehler wird als Fehler mitgemeldet und verhindert `ok: true`, auch wenn der Zielzustand bereits erreicht war. Ein Accept-Header für NDJSON bei `apply` oder `down` führt zur synchronen JSON-Antwort; ein Fehler nach Stream-Beginn meldet eine Fehlerzeile mit spezifischem Schlüssel in `reason`, Fehlerstatus in `status` und bereinigtem Ergebnis in `body`.
+
+Eine Fehlergrenze je Laufzeithandler umfasst das erste Gate, die Vorbereitung, die Warteschlange, die Mutation, die Nachlese und die Neuverankerung. Jeder Fehler wird genau einmal auditiert: vor Mutationsbeginn als `denied`, danach als `error`. Delegationshinweise aus den Gates stehen im selben Eintrag. Engine-Fehler behalten ihren HTTP-Status und `engine-action-failed`, Compose-Fehler erhalten `502 compose-action-failed`, unbekannte Fehler `500 internal-error`. Auch eine fehlgeschlagene Definitionsabfrage wird vor der Mutation so beantwortet. Ankerkonflikte behalten ihren eigenen Schlüssel. Engine-Text, Compose-Exitcode und stderr werden an das Audit übergeben und fehlen in der Antwort; bei fehlgeschlagenem Wiederanlauf oder zusätzlichem Nachlesefehler bleiben beide Diagnosen erhalten.
+
+Bei Fehlern verwenden Container- und Stack-Aktionen dasselbe Format: zuerst der Fehlerschlüssel,
+danach genau ein `delegation-lock-allowed: <Regeln>` mit alphabetisch sortierten,
+einmalig genannten Regeln aus allen Gates, danach die Diagnose. Ohne
+Delegationssperre entfällt der Nachweis. Die primäre Diagnose wiederholt den
+führenden Schlüssel nicht. Erfolgreiche Vorgänge behalten ihren Ergebnisgrund. Die allgemeine
+Audit-Feldgrenze von 240 Zeichen bleibt bestehen; eine sichtbare Kürzung betrifft
+damit zuerst die nachgeordneten Diagnosen, nicht Schlüssel oder Regeln.
 
 ### Gleichzeitige Vorgänge und Zeitgrenzen
 
 Vorgänge auf denselben Container oder dasselbe Projekt laufen nacheinander. Ein wartender Vorgang wartet begrenzt und entfällt, wenn sein Aufrufer die Verbindung getrennt hat. Er läuft nur, wenn der Ist-Stand noch dem entspricht, den der Aufrufer gesehen hat; sonst antwortet der Agent mit `state-changed`. Eine unbegrenzte Warteschlange würde Aufträge ausführen, deren Absender nicht mehr wartet oder einen längst überholten Stand gesehen hat, und das Ergebnis hinge von der Reihenfolge ab. Sofortiges Ablehnen würde dagegen jeden Doppelklick und jedes zweite Gerät zum Fehler machen.
 
-Ein Stopp wartet so lange, wie Docker dem Container zum Beenden gibt (`StopTimeout` bzw. `stop_grace_period`), zuzüglich eines Puffers. Eine feste Zeitgrenze darunter würde einen korrekt laufenden Stopp als gescheitert melden. Stack-Zeitgrenzen leiten sich aus der längsten dieser Fristen ab und sind nach oben begrenzt. Ist ein Host nicht erreichbar, lehnt der Hub die Aktion sofort ab und merkt sie nicht vor.
+Ein Stopp leitet seine Wartefrist aus der Docker-Grace-Period (`StopTimeout` bzw. `stop_grace_period`) zuzüglich eines Puffers ab. Für die Container-HTTP-Frist berücksichtigt der Agent höchstens 600 Sekunden Grace-Period; Stack-Zeitgrenzen sind für den gesamten Compose-Vorgang begrenzt. Die Docker-Konfiguration wird dadurch nicht verkürzt. Nach Ablauf der Agent-Frist kann die Engine-Aktion weiterlaufen; erst das Nachlesen bestimmt den gemeldeten Zustand. Ist ein Host nicht erreichbar, lehnt der Hub die Aktion sofort ab und merkt sie nicht vor.
 
 Einen manuellen Stopp erkennt der Agent als Absicht für die Selbstheilung (siehe [self-healing.md](self-healing.md)).
+
+Der Agent begrenzt die Wartezeit auf eine Vorgangssperre auf 60 Sekunden. Containeraktionen prüfen Container-ID, Status und Startzeit unter dieser Sperre; bei Stacks enthält `expectedStack` dieselben Laufzeitwerte je Service. Health gehört nicht zur Erwartung, weil sie sich auch ohne einen Laufzeitvorgang ändert.
+
+Ein nie gestarteter Container im Zustand `created` gilt beim Stopp bereits als gestoppt; die idempotente Engine-Antwort 304 bleibt erfolgreich.
+
+Die HTTP-Frist für einen Container-Stopp beträgt höchstens 600 Sekunden
+berücksichtigte Grace-Period plus 10 Sekunden Puffer.
+Ein Container-Neustart erhält zusätzlich 30 Sekunden für den Start, also
+höchstens 600 Sekunden Grace-Period plus 40 Sekunden. Docker führt beide Phasen im selben
+`restart`-Aufruf aus; eine eigene Stoppfrist innerhalb dieses Aufrufs kann der
+Agent nicht setzen. Die zusätzliche Reserve entspricht der Frist eines reinen
+Starts und bleibt auch bei `StopTimeout: 0` vollständig erhalten. Ohne gesetzten Wert gelten Dockers 10 Sekunden. Ein explizit unbegrenzter Docker-Stopp (`StopTimeout: -1`) erhält beim Stopp eine Agent-Frist von 610 Sekunden, beim Neustart 640 Sekunden. Die Stack-Frist beträgt die längste konfigurierte oder nachgelesene Stoppfrist plus 30 Sekunden, mindestens 60 Sekunden. Beim Neustart wird dieser Wert für die beiden Phasen verdoppelt; der gesamte Compose-Vorgang ist auf 600 Sekunden begrenzt. Beide Neustartphasen teilen diese Frist, auch beim bestmöglichen Start nach einem fehlgeschlagenen Stopp. Der Stopp erhält höchstens die Gesamtfrist abzüglich 30 Sekunden; dieser feste Anteil bleibt für den Start reserviert. Er entspricht dem Stack-Puffer und verhindert, dass ein ausgeschöpfter Stopp dem Wiederanlauf nur eine praktisch unbrauchbare Restfrist lässt.
+
+### Hub-API und Offline-Ablehnung
+
+Der Hub bietet `POST /api/hosts/:hostId/containers/:containerId/:action` und
+`POST /api/hosts/:hostId/stacks/:containerId/actions/:action` für `start`, `stop`
+und `restart`. Beide Wege verlangen Adminrechte und bestehen die gemeinsame
+Herkunftsprüfung. Der Containerpfad antwortet synchron; der Stackpfad liefert
+NDJSON und verpackt einen synchronen Agent-Rückfall als Abschlusszeile.
+`expectedContainer` beziehungsweise `expectedStack` kommen vom Client und
+werden unverändert durchgereicht. Stack-Start und -Neustart erhalten zusätzlich
+`applyDefinition` aus den gespeicherten Hub-Einstellungen; die Fremdverwaltung
+beurteilt ausschließlich der Agent.
+
+Der Hub übernimmt die Service-Zustände und Ergebnisse nach Schema. Fehler
+tragen eigene stabile Schlüssel aus `contract/src/api/runtime-actions.ts`,
+insbesondere `state-changed`, `action-queue-timeout`, `action-caller-disconnected`,
+`runtime-target-not-reached`, `runtime-deadline-exceeded` und `scaled-service-unsupported`. Diagnosetexte,
+Engine-Meldungen und zusätzliche Agent-Felder gelangen nicht ins Web.
+Unbekannte Agent-Schlüssel ergeben `runtime-agent-failed`. Ein sicher vor dem
+Versand gescheiterter Verbindungsaufbau ergibt `runtime-agent-unreachable`;
+Fristablauf oder Verbindungsabriss nach dem Versand ergibt `runtime-outcome-unknown`,
+weil die Aktion auf dem Host bereits laufen kann. Unlesbare Ergebnisse ergeben
+`runtime-invalid-response`, ein abgerissener oder unvollständiger Stack-Strom
+`runtime-stream-broken`. Synchrone Laufzeitaufrufe verwenden denselben HTTP-Transport
+ohne implizite Kopfzeilenfrist wie die Ströme; ihre Gesamtfrist beträgt 760 Sekunden.
+
+Alle Fristen und Berechnungen stehen gemeinsam in
+`contract/src/agent/runtime-deadlines.ts`. Die Hub-Frist summiert 60 Sekunden
+Warteschlange, die längste Agent-Aktion (Maximum aus 640 Sekunden
+Container-Neustart einschließlich Startreserve und 600 Sekunden Stack-Aktion),
+30 Sekunden Nachlesereserve und 30 Sekunden Transportreserve. Die Browserfrist
+`LIFECYCLE_TIMEOUT_MS` beträgt 770 Sekunden und lässt weitere 10 Sekunden für
+die Zustellung der Hub-Antwort.
+
+Der Agent bildet beim Eingang einer Laufzeitanfrage eine absolute monotone
+Frist von 730 Sekunden: Hub-Frist abzüglich Transportreserve. Gates einschließlich
+aller Volumen- und Service-Inspects, Warteschlange, Inventar- und Image-Prüfungen,
+Compose-Konfiguration, Mutation, Fortschrittsbeobachtung und Nachlesen teilen
+sich dieses Budget. Jede asynchrone Abfrage erhält die verbleibende Zeit und
+ein Abbruchsignal. Engine- und Compose-Fristen sind zusätzlich durch ihre
+jeweiligen lokalen Grenzen begrenzt; auch die zweite Neustartphase erhält
+höchstens die tatsächlich verbleibende Zeit. Vorprüfungen dürfen deshalb die
+für eine maximale Mutation verfügbare Zeit verkürzen. Die Nachlesereserve ist
+Teil der Gesamtfrist und kein zusätzliches Budget nach deren Ablauf.
+
+Bei Ablauf beendet der Agent das Warten mit `504 runtime-deadline-exceeded`
+und liefert den zuletzt erfolgreich gelesenen Zustand, soweit vorhanden.
+Weitere Phasen beginnen dann nicht. Ein Abbruch des Enginekontakts beweist
+keinen Abbruch einer bereits angenommenen Mutation. Der genau eine Aktionsaudit
+trägt vor Mutationsbeginn `denied`, danach `error`; die Antwort behauptet
+keinen unveränderten oder garantiert nicht ausgeführten Vorgang.
+Mutationsbeginn ist der Engine- oder Compose-Aufruf unmittelbar nach der letzten
+Budgetprüfung. Läuft die Frist beim Speichern einer Neustartmarkierung ab,
+nimmt der Agent diese zurück und stellt die vorherigen Stop-Absichten wieder her.
+Das Web behandelt auch strukturierte Fristergebnisse mit `ok: false` als
+„Ergebnis unbekannt, Vorgang kann auf dem Host weiterlaufen“ und liest den
+aktuellen Zustand neu. Fehlerdiagnosen erscheinen dabei nicht im Web.
+Selbstheilungsstarts verwenden dieselbe endliche Frist von 730 Sekunden ohne
+Hub-Aufrufer: Große Volumenprüfungen bleiben möglich, während ein Heilungsstart
+den gemeinsamen Projekt-Lock nicht unbegrenzt belegt.
+
+Virtuelle Integrationstests verbinden reale Agent-Handler mit dem Hub-Client
+für Container-Start, -Stopp und -Neustart sowie eigene und fremd verwaltete
+Stack-Aktionen über Stream und synchronen Rückfall. Langsame Abfragen in jeder
+Phase, kumulierte Inspects und Warteschlange teilen sich die Frist. Die Antwort
+kommt einschließlich 29 Sekunden simulierter Zustellung spätestens bei
+759 Sekunden an, vor der Hub-Frist von 760 Sekunden. Die Matrix enthält
+insbesondere Container-Neustart mit vier Volumenprüfungen und Stack-Stopp mit
+zehn Services bei jeweils 14 Sekunden pro Engine-Abfrage sowie 59 Sekunden
+Warteschlange. Gezielt entfernte Budgetweitergaben müssen die Tests verletzen.
+
+Die gemeinsame Erreichbarkeitsprüfung bestimmt, ob ein Host Aktionen annehmen
+kann; ein als offline erkannter Host erhält `503 runtime-host-offline` ohne
+Vormerkung. Der Live-Stand beschreibt dagegen die Beobachtung: `/monitor-events`
+kann wegen fehlender Docker-Beobachtung mit `503` antworten, während `/health`
+erreichbar bleibt. Ein solcher Host darf Aktionen ausführen. Die erwarteten
+Zustände werden weiterhin vom Agent geprüft; ein veralteter Client-Stand kann
+deshalb mit `state-changed` abgelehnt werden.
+Nach Erfolg, Teilfehler, Fehler oder Browserabbruch löst der Hub einen gezielten
+Live-Refresh aus; dessen Fehlschlag oder Dauer überdeckt das Aktionsergebnis
+nicht. Der Browserabbruch beendet auch den Agentkontakt im synchronen Rückfall.

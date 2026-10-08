@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -154,15 +155,15 @@ const STACK_PROJECT = {
 };
 
 test("stack actions bind the fixed project name from the registry", () => {
-  const args = buildSafeStackActionArgs(STACK_PROJECT, "restart");
+  const args = buildSafeStackActionArgs(STACK_PROJECT, "stop");
   const index = args.indexOf("--project-name");
   assert.notEqual(index, -1);
   assert.equal(args[index + 1], "homepage-prod");
-  assert.equal(args.at(-1), "restart");
+  assert.equal(args.at(-1), "stop");
 });
 
-test("stack start/stop/restart can neither build nor pull nor delete volumes", () => {
-  for (const action of ["start", "stop", "restart"] as const) {
+test("stack start/stop can neither build nor pull nor delete volumes", () => {
+  for (const action of ["start", "stop"] as const) {
     const args = buildSafeStackActionArgs(STACK_PROJECT, action);
     assert.equal(args.includes("--build"), false);
     assert.equal(args.includes("build"), false);
@@ -172,10 +173,11 @@ test("stack start/stop/restart can neither build nor pull nor delete volumes", (
   }
 });
 
-test("coupled stack restart stops first and starts in order with a health wait condition", () => {
+test("coupled stack restart stops first and starts in order without a health wait condition", () => {
   const [stop, start] = buildDependencySafeRestartArgs(STACK_PROJECT);
   assert.equal(stop.at(-1), "stop");
-  assert.deepEqual(start.slice(-2), ["start", "--wait"]);
+  assert.equal(start.at(-1), "start");
+  assert.equal(start.includes("--wait"), false);
   for (const args of [stop, start]) {
     assert.equal(args[args.indexOf("--project-name") + 1], "homepage-prod");
     assert.equal(args.includes("up"), false);
@@ -191,7 +193,7 @@ test("a stop error does not prevent the subsequent healing start", async () => {
   const calls: string[][] = [];
   const stopError = new Error("stop fehlgeschlagen");
   await assert.rejects(
-    composeDependencySafeRestart(STACK_PROJECT, async (args) => {
+    composeDependencySafeRestart(STACK_PROJECT, 60_000, async (args) => {
       calls.push(args);
       if (args.at(-1) === "stop") throw stopError;
       return { stdout: "", stderr: "" };
@@ -200,12 +202,12 @@ test("a stop error does not prevent the subsequent healing start", async () => {
   );
   assert.equal(calls.length, 2);
   assert.equal(calls[0]?.at(-1), "stop");
-  assert.deepEqual(calls[1]?.slice(-2), ["start", "--wait"]);
+  assert.equal(calls[1]?.at(-1), "start");
 });
 
 test("the safe restart runs both phases one after the other and collects stderr", async () => {
   const calls: string[] = [];
-  const stderr = await composeDependencySafeRestart(STACK_PROJECT, async (args) => {
+  const stderr = await composeDependencySafeRestart(STACK_PROJECT, 60_000, async (args) => {
     const action = args.includes("stop") ? "stop" : "start";
     calls.push(action);
     return { stdout: "", stderr: `${action}-ausgabe` };
@@ -216,7 +218,7 @@ test("the safe restart runs both phases one after the other and collects stderr"
 
 test("errors of both restart phases remain diagnosable together", async () => {
   await assert.rejects(
-    composeDependencySafeRestart(STACK_PROJECT, async (args) => {
+    composeDependencySafeRestart(STACK_PROJECT, 60_000, async (args) => {
       throw new Error(args.includes("stop") ? "stop-fehler" : "start-fehler");
     }),
     (error: unknown) =>
@@ -241,4 +243,54 @@ test("stack apply/up forbids build and pull and removes no orphans", () => {
   assert.equal(args.includes("--remove-orphans"), false);
   assert.equal(args.includes("--volumes"), false);
   assert.equal(args[args.indexOf("--project-name") + 1], "homepage-prod");
+});
+
+test("both restart phases share a single total deadline", async (t) => {
+  const times = [1000, 2500];
+  t.mock.method(performance, "now", () => times.shift() ?? 2500);
+  const deadlines: number[] = [];
+  await composeDependencySafeRestart(STACK_PROJECT, 2000, async (_args, options) => {
+    deadlines.push(options.timeoutMs);
+    return { stdout: "", stderr: "" };
+  });
+  assert.deepEqual(deadlines, [1000, 500]);
+});
+
+test("restart reserves thirty seconds for recovery when stop exhausts its budget", async (t) => {
+  let now = 1000;
+  t.mock.method(performance, "now", () => now);
+  const calls: Array<{ args: string[]; timeout: number }> = [];
+  await assert.rejects(composeDependencySafeRestart(STACK_PROJECT, 600_000, async (args, options) => {
+    calls.push({ args, timeout: options.timeoutMs });
+    if (calls.length === 1) { now += options.timeoutMs; throw new Error("stop timeout"); }
+    return { stdout: "", stderr: "" };
+  }), /stop timeout/);
+  assert.deepEqual(calls.map((call) => call.timeout), [570_000, 30_000]);
+  assert.equal(calls[1].args.at(-1), "start");
+});
+
+test("own restart recovers with safe no-recreate up after a failed stop", async () => {
+  const calls: string[][] = [];
+  const stopFailure = new Error("stop failed");
+  await assert.rejects(composeDependencySafeRestart(STACK_PROJECT, 120_000, async (args) => {
+    calls.push(args);
+    if (args.at(-1) === "stop") throw stopFailure;
+    return { stdout: "", stderr: "" };
+  }, { removeOrphans: false, pullNever: true, wait: false, noRecreate: true }),
+  (error: unknown) => error === stopFailure);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].at(-1), "stop");
+  assert.deepEqual(calls[1], buildUpArgs(STACK_PROJECT, { removeOrphans: false, pullNever: true, wait: false, noRecreate: true }));
+});
+
+test("an exhausted restart budget never launches a recovery start", async (t) => {
+  let now = 0;
+  t.mock.method(performance, "now", () => now);
+  let calls = 0;
+  await assert.rejects(composeDependencySafeRestart(STACK_PROJECT, 2000, async () => {
+    calls++;
+    now = 2001;
+    return { stdout: "", stderr: "" };
+  }), /deadline exceeded/);
+  assert.equal(calls, 1);
 });

@@ -12,3 +12,8 @@ in der Reihenfolge des Routers hatten.
 
 Regeln und Begründung: `docs/design/feature-architecture.md`, Abschnitte 2
 und 3. Die Grenzen prüft `.dependency-cruiser.mjs`.
+
+`live-events/` verteilt die gemeinsamen Host-Monitorhinweise über den
+sitzungsgeschützten NDJSON-Strom `/live-events`. Der Lebenszyklus und die
+Refresh-Schnittstelle liegen in `domain/live-events/`; die App übergibt dieselbe
+Instanz an den Router. Begründung: `docs/design/live-events.md`.

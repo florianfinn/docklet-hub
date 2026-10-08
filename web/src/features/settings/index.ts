@@ -13,3 +13,5 @@ export { HubNetworkPanel } from "./HubNetworkPanel";
 export type { SettingsTab, SettingsTabContext } from "./settings-tabs";
 export { deSettingsPage } from "./messages/de";
 export { enSettingsPage } from "./messages/en";
+
+export { RuntimeSettingsPanel } from "./RuntimeSettingsPanel";

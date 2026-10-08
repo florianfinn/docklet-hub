@@ -1,3 +1,4 @@
+import { readLifecycleActorNames } from "../../domain/lifecycle/index.js";
 import type { Router } from "express";
 import type { Pool } from "pg";
 
@@ -34,12 +35,13 @@ export type ContainersRouteOptions = {
   agentSecret: string;
   probeHost?: (record: HostRecord) => Promise<AgentHealth>;
   /** The marks and the display of one arm, handed in by `server/src/app/features.ts`. */
+  readLifecycleSettings?: () => Promise<{ applyDefinition: boolean; maintenanceDurationSeconds: number | null }>;
   decorationFor: (record: HostRecord) => Promise<HostDecoration>;
 };
 
 export function registerContainersRoutes(
   router: Router,
-  { auth, pool, repository, agentSecret, probeHost, decorationFor }: ContainersRouteOptions
+  { auth, pool, repository, agentSecret, probeHost, decorationFor, readLifecycleSettings }: ContainersRouteOptions
 ): void {
   // ⚠️ Resolved ONCE when the routes are registered and not per request: the
   // fall back to the own probe is a property of this router and not one that
@@ -48,6 +50,8 @@ export function registerContainersRoutes(
     hosts: createHostAccess({ repository, pool, agentSecret }),
     probe: resolveProbeHost({ probeHost }),
     decorationFor,
+    readActorNames: (ids) => readLifecycleActorNames(pool, ids),
+    ...(readLifecycleSettings ? { readLifecycleSettings } : {}),
     writeViewSettings: (settings) => writeContainerViewSettings(pool, settings)
   });
 
@@ -67,6 +71,15 @@ export function registerContainersRoutes(
     "/overview",
     withSession(auth, async (_request, response, user) => {
       response.json({ hosts: await service.overview({ userId: user.id }) });
+    })
+  );
+
+  router.get(
+    "/hosts/:hostId/overview",
+    withSession(auth, async (request, response, user) => {
+      const hosts = await service.overview({ userId: user.id, hostId: String(request.params.hostId) });
+      if (hosts.length === 0) { response.status(404).json({ error: "host-unknown" }); return; }
+      response.json({ hosts });
     })
   );
 

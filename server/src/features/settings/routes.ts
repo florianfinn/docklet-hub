@@ -6,15 +6,9 @@ import { requireAdmin } from "../../platform/auth/require-admin.js";
 import { withSession } from "../../platform/auth/session.js";
 import { normalizeExternalEndpoint, readHubNetwork, writeHubNetwork } from "../../domain/hosts/index.js";
 import { failWith, guarded } from "../../platform/http/route-responses.js";
+import { changeRuntimeSettings, changeSelfHealingSettings } from "./runtime-service.js";
+import type { SelfHealingSync } from "./self-healing-sync.js";
 import { readSettings, type SettingsConfig, type SettingsReaders } from "./service.js";
-
-// The routes of the feature `settings` (#269): `GET /settings` with every
-// setting of the hub and the address of the hub from outside
-// (`PUT /settings/network`, #4). They took the place of the group
-// `settings-routes` (B4a-A2, #5). Its other routes went where they belong:
-// `PUT /settings/logs` is the feature `logs` (#254), `PUT /settings/theme` the
-// feature `appearance` (#268), and `PUT /settings/containers` is the feature
-// `containers` (#282).
 
 /** The readers of the other surfaces, handed in by `server/src/app/features.ts`. */
 export type SettingsRouteOptions = {
@@ -22,19 +16,11 @@ export type SettingsRouteOptions = {
   pool: Pool;
   config: SettingsConfig;
   readers: Omit<SettingsReaders, "readNetwork">;
+  selfHealingSync: SelfHealingSync;
 };
 
-export function registerSettingsRoutes(router: Router, { auth, pool, config, readers }: SettingsRouteOptions): void {
-  // Every setting of the hub in ONE answer: the theme, the log lines, the
-  // container view and the network. One answer because the surface expects one;
-  // reading by target field would mean several requests for it.
-  //
-  // ⚠️ Behind `withSession` and not behind `requireAdmin`: since #17 an
-  // administrator writes, everybody reads. The interface needs these values
-  // BEFORE it draws anything (a user without admin rights would otherwise get a
-  // shell in default colours and the administrator next to them another) and
-  // before the first request to an arm. None of it is a secret: the network
-  // targets stand in every `wg0.conf` this hub hands out.
+export function registerSettingsRoutes(router: Router, { auth, pool, config, readers, selfHealingSync }: SettingsRouteOptions): void {
+  // Settings contain no secrets and are readable by every signed-in account.
   router.get(
     "/settings",
     withSession(auth, async (_request, response) => {
@@ -43,6 +29,17 @@ export function registerSettingsRoutes(router: Router, { auth, pool, config, rea
       );
     })
   );
+
+  router.put("/settings/runtime", requireAdmin(auth), guarded(async (request, response) => {
+    const runtime = await changeRuntimeSettings(pool, request.body);
+    if (!runtime) { failWith(response, 400, "invalid-input", "Ungültige Laufzeiteinstellungen."); return; }
+    response.json({ runtime });
+  }));
+  router.put("/settings/self-healing", requireAdmin(auth), guarded(async (request, response) => {
+    const selfHealing = await changeSelfHealingSettings(pool, request.body, selfHealingSync);
+    if (!selfHealing) { failWith(response, 400, "invalid-input", "Ungültige Selbstheilungseinstellungen."); return; }
+    response.json({ selfHealing });
+  }));
 
   // Set the address of this hub from outside (#4).
   //

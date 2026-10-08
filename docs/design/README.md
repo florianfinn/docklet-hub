@@ -11,6 +11,8 @@ Zielbild und Begründungen. Arbeitsstand steht in GitHub Issues und Meilensteine
 | [game-console.md](game-console.md) | Games-Konsole |
 | [hub-color-and-structure.md](hub-color-and-structure.md) | Farbsystem und Gliederung der Oberfläche |
 | [language-layer.md](language-layer.md) | Die Sprachschicht der Oberfläche |
+| [lifecycle-controls.md](lifecycle-controls.md) | Bedienvertrag für Start, Stopp und Neustart |
+| [live-events.md](live-events.md) | Live-Ereignisse, begrenzte Wiederverbindung, Cache und Refresh-Schnittstelle |
 | [management-aids.md](management-aids.md) | Arbeitshilfen der Verwaltung |
 | [notification-channels.md](notification-channels.md) | Meldekanäle und Eskalation |
 | [outage-signals.md](outage-signals.md) | Ausfälle und Wiederherstellung |
@@ -21,7 +23,7 @@ Zielbild und Begründungen. Arbeitsstand steht in GitHub Issues und Meilensteine
 | [proxy-management.md](proxy-management.md) | Proxyverwaltung HTTP/S |
 | [publication-policy.md](publication-policy.md) | Öffentliche Daten und Prüfungen |
 | [review-workflow.md](review-workflow.md) | Push, unabhängige Reviews, Befundbehandlung und Merge |
-| [self-healing.md](self-healing.md) | Begrenzte Selbstheilung und manuelle Stopp-Absicht |
+| [self-healing.md](self-healing.md) | Begrenzte Selbstheilung, Budget, Wartung, Vorfall und manuelle Stopp-Absicht |
 | [sign-in-and-setup.md](sign-in-and-setup.md) | Anmeldung und Erstanmeldung |
 | [update-and-rollback.md](update-and-rollback.md) | Updates, Rollback und Sicherungen |
 

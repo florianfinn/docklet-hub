@@ -19,6 +19,8 @@ export {
   type ContainerStatsSample
 } from "./containers.js";
 export { fetchHostContainers } from "./host-containers.js";
+export { stackOwnership } from "./stack-ownership.js";
+export type { StackDiscovery } from "./stack-discovery.js";
 export { fetchStackDiscovery } from "./stack-discovery.js";
 export { groupIntoStacks, type HostStacks, type OverviewContainer, type StackView } from "./stacks.js";
 export {

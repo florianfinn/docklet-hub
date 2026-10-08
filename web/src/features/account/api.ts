@@ -46,7 +46,7 @@ export function fetchUsers(): Promise<{ users: UserAccount[] }> {
 // stehen hier als Funktionen und nicht als Zeichenketten an der Aufrufstelle:
 // ein Tippfehler in einem Pfad ergibt sonst eine 404, die wie ein Serverfehler
 // aussieht.
-export function signUp(input: { name: string; email: string; password: string }): Promise<unknown> {
+export function signUp(input: { name: string; email: string; password: string; applyComposeDefinition: boolean }): Promise<unknown> {
   return postJson("/api/auth/sign-up/email", input);
 }
 

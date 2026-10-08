@@ -1,8 +1,8 @@
-import type { HostOverview } from "contract";
+import type { HostOverview, LifecycleSnapshot } from "contract";
 
 import { toHostView, type AgentHealth, type HostRecord } from "../../domain/hosts/index.js";
 import {
-  groupIntoStacks,
+  groupIntoStacks, stackOwnership, type StackDiscovery,
   withoutHistory,
   type ContainerOverviewEntry,
   type HostStacks,
@@ -32,6 +32,7 @@ import type { HostDecoration } from "./decoration.js";
 export type { HostOverview };
 
 export type OverviewDeps = {
+  lifecycleFor?: (record: HostRecord) => Promise<{ lifecycle: LifecycleSnapshot; discovery: StackDiscovery | null }>;
   probeHost: (record: HostRecord) => Promise<AgentHealth>;
   fetchContainersFor: (record: HostRecord) => Promise<ContainerOverviewEntry[]>;
   // Was der Betreiber diesem Arm an eigenen Marken und an Einrückung vergeben
@@ -103,18 +104,23 @@ async function overviewFor(record: HostRecord, deps: OverviewDeps): Promise<Host
     // ⚠️ Die Marken werden NUR hier geholt — nicht für einen wartenden und
     // nicht für einen stillen Arm. Beide liefern keine Container, und Marken
     // ohne Ziel sind eine Abfrage ohne Empfänger.
-    const [containers, decoration] = await Promise.all([
+    const [containers, decoration, lifecycle] = await Promise.all([
       deps.fetchContainersFor(record),
-      deps.decorationFor(record)
+      deps.decorationFor(record),
+      deps.lifecycleFor?.(record)
     ]);
+    const grouped = decorate(groupIntoStacks(containers.map(withoutHistory)), decoration);
+    if (lifecycle) grouped.stacks = grouped.stacks.map((stack) => ({ ...stack,
+      hubOwned: stackOwnership(stack.project, stack.containers, lifecycle.discovery) }));
     return {
+      ...(lifecycle ? { lifecycle: lifecycle.lifecycle } : {}),
       host: toHostView(record, agent),
       agent,
       // ⚠️ OHNE VERLAUF (#213). Die Übersicht zeigt den letzten Wert; 60
       // Messpunkte je Container machten jede Zeile rund sechzehnmal so groß
       // (Messung in `container-load.ts`). Das Detail holt den Verlauf über
       // seine eigene Route.
-      ...decorate(groupIntoStacks(containers.map(withoutHistory)), decoration),
+      ...grouped,
       error: null
     };
   } catch (error) {

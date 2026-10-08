@@ -1,4 +1,6 @@
+import { containerActionTimeoutMs } from "./runtime-actions.js";
 import http from "node:http";
+import type { RuntimeCallOptions } from "./runtime-budget.js";
 import type { Socket } from "node:net";
 import type { ParsedImageRef } from "./image-ref.js";
 import { LogDemuxer, renderDemuxedLines, type DemuxedLine } from "./log-demux.js";
@@ -60,10 +62,8 @@ type RequestOptions = {
   // JSON body (create only). The only way to hand structures to the engine —
   // never glued-together strings, let alone through a shell.
   body?: unknown;
-  // Honoured by `stream()` only: aborts the request when the caller loses the
-  // connection to ITS caller (user request: cancel a pull manually). Docker
-  // cancels the pull itself when the engine connection closes during it —
-  // which is why destroying the socket here is enough.
+  // Abort closes the request. It does not prove that Docker cancelled an
+  // already accepted container mutation.
   signal?: AbortSignal;
   // Non-stream responses are collected in memory. Every caller gets a sane
   // ceiling; log snapshots use a tighter one because a container controls the
@@ -72,6 +72,7 @@ type RequestOptions = {
   // Additional fixed engine headers. Currently exclusively for the transient
   // X-Registry-Auth of a private image pull.
   headers?: Record<string, string>;
+  onConnected?: () => void;
   // A body that is NOT JSON — so far only the tar stream of put-archive
   // (S19). Excludes `body`; at most one of the two is ever set.
   rawBody?: Buffer;
@@ -104,18 +105,12 @@ export class DockerEngine {
           headers: {
             Host: "docker",
             Accept: "application/json",
-            // ⚠️ Found live on 2026-08-26: `options.headers` was NOT here,
-            // only in the stream path below. The pull uses the stream, which
-            // is why it never showed — the first request that wanted to send
-            // an X-Registry-Auth over THIS path (remoteManifestDigest) lost it
-            // silently and got the same answer as without a login. A dropped
-            // header is the least conspicuous kind of bug: the request
-            // succeeds, it just says something else.
             ...options.headers,
             ...(payload
               ? { "Content-Type": contentType, "Content-Length": String(payload.length) }
               : {})
           },
+          signal: options.signal,
           timeout: options.timeoutMs ?? this.options.timeoutMs ?? 15_000
         },
         (response) => {
@@ -169,6 +164,7 @@ export class DockerEngine {
         (response) => {
           const status = response.statusCode ?? 0;
           const failed = status < 200 || status >= 300;
+          if (!failed) options.onConnected?.();
           const errorChunks: Buffer[] = [];
           let errorSize = 0;
           response.on("data", (chunk: Buffer) => {
@@ -219,10 +215,11 @@ export class DockerEngine {
     return list.map((entry) => entry.Id);
   }
 
-  async inspect(containerId: string): Promise<RawInspect> {
+  async inspect(containerId: string, options: RuntimeCallOptions = {}): Promise<RawInspect> {
     return this.json<RawInspect>({
       method: "GET",
-      path: `/containers/${encodeURIComponent(containerId)}/json`
+      path: `/containers/${encodeURIComponent(containerId)}/json`,
+      ...options, timeoutMs: Math.min(options.timeoutMs ?? Infinity, this.options.timeoutMs ?? 15_000)
     });
   }
 
@@ -232,11 +229,12 @@ export class DockerEngine {
   // `null` stays visible to the caller as NOT RESOLVED, though, and leads there
   // fail-closed to the delegation lock; as an empty bind list the same state
   // would be a bypass.
-  async inspectVolume(name: string): Promise<RawVolume | null> {
+  async inspectVolume(name: string, options: RuntimeCallOptions = {}): Promise<RawVolume | null> {
     try {
       return await this.json<RawVolume>({
         method: "GET",
-        path: `/volumes/${encodeURIComponent(name)}`
+        path: `/volumes/${encodeURIComponent(name)}`,
+        ...options, timeoutMs: Math.min(options.timeoutMs ?? Infinity, this.options.timeoutMs ?? 15_000)
       });
     } catch (error) {
       if (error instanceof EngineError && error.status === 404) return null;
@@ -274,20 +272,23 @@ export class DockerEngine {
     );
   }
 
-  async start(containerId: string): Promise<void> {
-    await this.expectNoContent(`/containers/${encodeURIComponent(containerId)}/start`);
+  async start(containerId: string, options: RuntimeCallOptions = {}): Promise<void> {
+    await this.expectNoContent(`/containers/${encodeURIComponent(containerId)}/start`, Math.min(containerActionTimeoutMs("start", null), options.timeoutMs ?? Infinity), options.signal);
   }
 
-  async stop(containerId: string): Promise<void> {
-    await this.expectNoContent(`/containers/${encodeURIComponent(containerId)}/stop`);
+  async stop(containerId: string, stopTimeout?: number | null, options: RuntimeCallOptions = {}): Promise<void> {
+    const timeout = stopTimeout === undefined ? (await this.inspect(containerId)).Config?.StopTimeout : stopTimeout;
+    await this.expectNoContent(`/containers/${encodeURIComponent(containerId)}/stop`, Math.min(containerActionTimeoutMs("stop", timeout), options.timeoutMs ?? Infinity), options.signal);
   }
 
-  async restart(containerId: string): Promise<void> {
-    await this.expectNoContent(`/containers/${encodeURIComponent(containerId)}/restart`);
+  async restart(containerId: string, stopTimeout?: number | null, options: RuntimeCallOptions = {}): Promise<void> {
+    const timeout = stopTimeout === undefined ? (await this.inspect(containerId)).Config?.StopTimeout : stopTimeout;
+    // Docker owns both phases; the HTTP deadline includes a full start reserve.
+    await this.expectNoContent(`/containers/${encodeURIComponent(containerId)}/restart`, Math.min(containerActionTimeoutMs("restart", timeout), options.timeoutMs ?? Infinity), options.signal);
   }
 
-  private async expectNoContent(path: string): Promise<void> {
-    const { status, body } = await this.request({ method: "POST", path });
+  private async expectNoContent(path: string, timeoutMs?: number, signal?: AbortSignal): Promise<void> {
+    const { status, body } = await this.request({ method: "POST", path, timeoutMs, signal });
     // 304 = already in the target state; that is not an error.
     if (status === 204 || status === 304) return;
     throw new EngineError(`engine responded ${status}: ${body.toString("utf8").slice(0, 500)}`, status);
@@ -381,7 +382,7 @@ export class DockerEngine {
   // label map. Labels are set freely by the image author and in practice carry
   // descriptions, Traefik rules and occasionally credentials. The same
   // discipline as in toContainerSummary.
-  async listWithComposeLabels(): Promise<
+  async listWithComposeLabels(options: RuntimeCallOptions = {}): Promise<
     Array<{
       id: string;
       name: string;
@@ -400,7 +401,8 @@ export class DockerEngine {
         State?: string;
         Labels?: Record<string, string>;
       }>
-    >({ method: "GET", path: "/containers/json?all=1" });
+    >({ method: "GET", path: "/containers/json?all=1", ...options,
+      timeoutMs: Math.min(options.timeoutMs ?? Infinity, this.options.timeoutMs ?? 15_000) });
 
     // The manager label feeds the registry's `externallyManaged` via host
     // discovery; without it every Unraid container would look hub-owned.
@@ -432,11 +434,12 @@ export class DockerEngine {
   // Resolved image id of a ref, or null if it does not exist locally.
   // This allows comparing before and after a pull whether anything actually
   // changed.
-  async imageId(reference: string): Promise<string | null> {
+  async imageId(reference: string, options: RuntimeCallOptions = {}): Promise<string | null> {
     try {
       const image = await this.json<{ Id?: string }>({
         method: "GET",
-        path: `/images/${encodeURIComponent(reference)}/json`
+        path: `/images/${encodeURIComponent(reference)}/json`,
+        ...options, timeoutMs: Math.min(options.timeoutMs ?? Infinity, this.options.timeoutMs ?? 15_000)
       });
       return image.Id ?? null;
     } catch (error) {
@@ -607,13 +610,12 @@ export class DockerEngine {
     return this.json<EngineInfo>({ method: "GET", path: "/info" });
   }
 
-  // Continuous stream for monitoring (S13). The agent does not pass on raw
-  // Docker events: only the four state changes and only the container id cross
-  // the agent boundary. Names, attributes and labels stay in the engine
-  // response and thus on the host.
+  // One lifecycle stream, shared by local intent tracking and hub monitoring.
+  // Container metadata stays inside the agent.
   async monitorEvents(
     onEvent: (event: DockerMonitorEvent) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options: { since?: number; onConnected?: () => void } = {}
   ): Promise<void> {
     let rest = "";
     const consume = (text: string) => {
@@ -633,7 +635,8 @@ export class DockerEngine {
     const { status, errorBody } = await this.stream(
       {
         method: "GET",
-        path: "/events",
+        path: options.since === undefined ? "/events" : `/events?since=${Math.floor(options.since)}`,
+        onConnected: options.onConnected,
         raw: true,
         timeoutMs: 24 * 60 * 60_000,
         signal

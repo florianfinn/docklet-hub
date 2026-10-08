@@ -7,6 +7,7 @@ import { toNodeHandler } from "better-auth/node";
 import express from "express";
 
 import {
+  createHostAccess,
   createObservedProbe,
   createPoolRepository,
   ensureLocalHost,
@@ -15,7 +16,10 @@ import {
   staleAfterMs,
   startHostCycleService
 } from "./domain/hosts/index.js";
+import { startLiveEvents } from "./domain/live-events/index.js";
 import { createApiRouter } from "./app/router.js";
+import { createRuntimeSettingsSync } from "./app/runtime-settings.js";
+import { writeRuntimeSettings } from "./features/settings/index.js";
 import { createAuth } from "./platform/auth/auth.js";
 import { ConfigError, loadConfig } from "./platform/config/config.js";
 import { runMigrations } from "./platform/db/migrate.js";
@@ -137,26 +141,43 @@ async function main(): Promise<void> {
     );
   }
 
-  // ⚠️ DER HINTERGRUNDLAUF. Ohne diese Zeile fragt der Hub seine Arme nie von
-  // sich aus: ein stiller Arm fällt erst auf, wenn jemand die Übersicht
-  // öffnet, und ein frisch aufgesetzter Arm bleibt ohne Allowlist — beim
-  // Agenten also ohne einen einzigen sichtbaren Container, und nichts daran
-  // meldet sich von selbst. Was ein Durchlauf tut, steht in
-  // `domain/hosts/host-cycle.ts`; hier steht nur der Start.
-  //
-  // Der Halter, den er füllt, geht weiter an den Router: `GET /overview` und
-  // `GET /hosts/:hostId/containers` nehmen die Erreichbarkeit von dort statt
-  // aus einer eigenen Sonde je Anfrage.
+  // Live connections and their health probes deliver the current configuration.
+  const selfHealingSync = createRuntimeSettingsSync({ pool, repository, agentSecret: config.agentSecret });
   const hostCycle = startHostCycleService({
     pool,
     repository,
     agentSecret: config.agentSecret,
     intervalSeconds: config.hostCycleIntervalSeconds,
+    onInventoryChanged: async (hostId) => {
+      await liveEvents.refresh(hostId, { host: true }, { resync: false }).catch(() => undefined);
+    },
     log: (message) => console.log(message),
     logError: (message, error) => console.error(message, error)
   });
 
-  const auth = createAuth({ pool, secret: config.authSecret, baseUrl: config.authBaseUrl });
+  const liveEvents = startLiveEvents({
+    hosts: createHostAccess({ pool, repository, agentSecret: config.agentSecret }),
+    resync: async (hostId) => {
+      const record = await repository.find(hostId);
+      if (!record) throw new Error("host-unknown");
+      const outcome = await hostCycle.syncHost(record, { kind: "system", name: "hub" });
+      if (outcome.status !== "synced" && outcome.status !== "unchanged") throw new Error("host-resync-failed");
+    },
+    onConnected: async (hostId) => {
+      const record = await repository.find(hostId);
+      if (record) await selfHealingSync.syncHost(record, true);
+    },
+    onHostReachable: async (record) => { await selfHealingSync.syncHost(record); },
+    onError: (error) => console.error("Live-Ereignisse:", error)
+  });
+  liveEvents.start();
+
+  const auth = createAuth({
+    pool,
+    secret: config.authSecret,
+    baseUrl: config.authBaseUrl,
+    writeSetupRuntime: (runtime) => writeRuntimeSettings(pool, runtime).then(() => undefined)
+  });
 
   const app = express();
 
@@ -208,19 +229,15 @@ async function main(): Promise<void> {
   app.use(
     "/api",
     createApiRouter({
+      selfHealingSync,
       auth,
       pool,
       repository,
       enrollment,
+      liveEvents,
       agentSecret: config.agentSecret,
       config,
-      // ⚠️ Die Erreichbarkeit aus dem Halter statt aus einer Sonde je Anfrage.
-      // Ohne diese Zeile ist der ganze Hintergrundlauf für die Oberfläche
-      // wirkungslos: `GET /overview` fragte weiter bei jeder Anfrage jeden Arm
-      // einzeln, und die Fläche nach der Anmeldung würde langsamer, je mehr
-      // Arme es gibt. Der Rückfall auf die eigene Sonde bleibt und ist
-      // richtig — er greift für einen unbekannten und für einen zu alten
-      // Stand (`domain/hosts/host-observation-store.ts`).
+      // Fresh observations avoid probing every host on each API request.
       probeHost: createObservedProbe({
         store: hostCycle.observations,
         staleAfterMs: staleAfterMs(hostCycle.intervalMs),
@@ -327,8 +344,9 @@ async function main(): Promise<void> {
       // Durchlauf mehr gegen einen bereits geschlossenen Verbindungspool
       // startet.
       hostCycle.stop();
+      const liveStopped = liveEvents.stop();
       server.close(() => {
-        void pool.end().then(() => process.exit(0));
+        void liveStopped.then(() => pool.end()).then(() => process.exit(0));
       });
     });
   }

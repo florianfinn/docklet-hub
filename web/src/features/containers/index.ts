@@ -17,8 +17,11 @@ export { SystemContainersPanel } from "./SystemContainersPanel";
 export { ContainerList } from "./ContainerList";
 export { ContainerStateDot } from "./container-state";
 export { isUnknownManager, managerName } from "./external-management";
-export { fetchOverview } from "./api";
+export { fetchOverview, runContainerAction, runStackAction, runtimeActionErrorOf } from "./api";
 export { useOverview, useOverviewUpdate } from "./overview-queries";
 export type { ContainerRowNotice, ContainerSlots } from "./slots";
 export { deContainers } from "./messages/de";
 export { enContainers } from "./messages/en";
+
+export { LifecycleControls } from "./LifecycleControls";
+export { LifecycleProvider } from "./LifecycleProvider";

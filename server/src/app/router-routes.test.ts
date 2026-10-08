@@ -63,12 +63,23 @@ const EXPECTED_LAYERS = [
   "POST /hosts/:hostId/containers/:containerId/exec/:session/input",
   "POST /hosts/:hostId/containers/:containerId/exec/:session/size",
   "POST /hosts/:hostId/containers/:containerId/exec/:session/close",
+  "GET /hosts/:hostId/stacks/:containerId/context",
+  "POST /hosts/:hostId/containers/:containerId/:action",
+  "POST /hosts/:hostId/stacks/:containerId/actions/:action",
+  "GET /hosts/:hostId/stop-intents",
+  "GET /hosts/:hostId/self-healing/status",
+  "PUT /hosts/:hostId/self-healing/maintenance",
+  "DELETE /hosts/:hostId/self-healing/maintenance",
+  "POST /hosts/:hostId/self-healing/incidents/acknowledge",
   "GET /overview",
+  "GET /hosts/:hostId/overview",
   // Moved up from behind `PUT /settings/network` with the feature `containers`
   // (#282). No other registered pattern can match `PUT /settings/containers`,
   // so the order changes no answer; the case below holds (`MOVED_BY_FEATURES`).
   "PUT /settings/containers",
   "GET /settings",
+  "PUT /settings/runtime",
+  "PUT /settings/self-healing",
   "PUT /settings/network",
   "PUT /settings/theme",
   "PUT /hosts/:hostId/display",
@@ -83,6 +94,7 @@ const EXPECTED_LAYERS = [
   "PUT /hosts/:hostId/stacks/:project/hidden",
   "PUT /hosts/:hostId/containers/:name/marks",
   "GET /hosts/:hostId/resources",
+  "GET /live-events",
   // The JSON 404 for everything under `/api` that matched nothing.
   "use <anonymous>"
 ];

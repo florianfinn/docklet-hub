@@ -1,5 +1,7 @@
-import { applySpecRequestSchema } from "contract";
-import { actionFailureOf } from "../action-failure.js";
+import { RuntimeBudget } from "../runtime-budget.js";
+import { runContainerAction } from "../container-action.js";
+import { actionConnection } from "../runtime/action-connection.js";
+import { applySpecRequestSchema, containerActionRequestSchema, type RuntimeAction } from "contract";
 import {
   EngineError
 } from "../engine.js";
@@ -361,85 +363,19 @@ export async function handleRemove(ctx: ContainerRouteContext): Promise<void> {
   return;
 }
 
-// --- Safe actions ----------------------------------------------------
 export async function handleSafeAction(ctx: ContainerRouteContext): Promise<void> {
-  const { response, actor, containerId, action } = ctx;
-  const result = await gate(containerId, { mutating: true, action, actor });
-  const containerName = result.ok ? (result.inspect.Name ?? "").replace(/^\//, "") : null;
-  if (!result.ok) {
-    audit.write({
-      action,
-      containerId,
-      containerName,
-      actor,
-      outcome: "denied",
-      reason: result.reason
-    });
-    send(response, result.status, { error: result.reason });
+  const budget = new RuntimeBudget();
+  const { request, response, actor, containerId, action } = ctx;
+  const parsed = parseRequest(containerActionRequestSchema, await readJsonBody(request));
+  if (!parsed.ok) {
+    rejectRequest(ctx, { action, containerId, containerName: null }, parsed.rejection);
     return;
   }
-
-  const executeSafeAction = async (): Promise<boolean> => {
-    if (!registry.isAllowed(containerId)) return false;
-    if (action === "start") await engine.start(containerId);
-    else if (action === "stop") await engine.stop(containerId);
-    else await engine.restart(containerId);
-    return true;
-  };
-  const safeContext = composeContextOf(
-    result.inspect.Config?.Labels ?? undefined,
-    composeBasePath
-  );
-  let executed: boolean;
+  const connection = actionConnection(request, response);
   try {
-    executed = safeContext
-      ? await stackLocks.runExclusive(safeContext.project, executeSafeAction)
-      : await executeSafeAction();
-  } catch (error) {
-    // ⚠️ Without this catch the engine error falls into the global handler
-    // and becomes `500 {"error":"internal-error"}` there. That is exactly
-    // how the outage of 2026-08-25 reached the operator: twice
-    // "internal-error" for `restart` and `start` on sonarr, while the engine
-    // was in truth saying that it can no longer resolve the netns of the
-    // replaced gluetun container. The only place this sentence appeared was
-    // this container's stderr.
-    //
-    // The mapping itself (which status, what goes into the audit) lives in
-    // `action-failure.ts`: it is tested there, while this file has no test, and
-    // the recreate path uses exactly the same one.
-    const failure = actionFailureOf(error);
-    if (!failure) throw error;
-    audit.write({
-      action,
-      containerId,
-      containerName,
-      actor,
-      outcome: "error",
-      reason: failure.auditReason
-    });
-    send(response, failure.status, failure.body);
-    return;
+    const result = await runContainerAction(containerId, action as RuntimeAction, parsed.value.expectedContainer, actor, connection.signal, undefined, budget);
+    if (!response.destroyed) send(response, result.status, result.body);
+  } finally {
+    connection.dispose();
   }
-  if (!executed) {
-    audit.write({
-      action,
-      containerId,
-      containerName,
-      actor,
-      outcome: "denied",
-      reason: "stack-anchor-stale"
-    });
-    send(response, 409, { error: "stack-anchor-stale" });
-    return;
-  }
-
-  audit.write({
-    action,
-    containerId,
-    containerName,
-    actor,
-    outcome: "allowed"
-  });
-  send(response, 200, { ok: true });
-  return;
 }

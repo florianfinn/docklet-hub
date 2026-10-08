@@ -1,6 +1,15 @@
+import { RuntimeBudget } from "../runtime-budget.js";
+import { actionAuditReason } from "../action-audit.js";
+import { actionFailureOf } from "../action-failure.js";
+import { stackRuntimeResponder } from "../runtime/action-stream.js";
+import { runStackRuntimeAction } from "../runtime/stack-action.js";
+import { actionConnection } from "../runtime/action-connection.js";
+import { sendLine } from "../ndjson-line.js";
 import {
   containerCreateRequestSchema,
   stackActionRequestSchema,
+  stackRuntimeActionRequestSchema,
+  type StackActionStreamLine,
   stackAdoptRequestSchema,
   stackRawPreviewRequestSchema,
   stackRawRequestSchema
@@ -17,12 +26,8 @@ import {
 import { discoverStacks, forcedManagement } from "../stacks.js";
 import {
   composeConfig,
-  composeDependencySafeRestart,
   composeDown,
   composePs,
-  composeRestart,
-  composeStart,
-  composeStop,
   composeUp
 } from "../compose-cli.js";
 import { applyCompose } from "../compose-apply.js";
@@ -41,10 +46,9 @@ import {
   expectedStackMatches,
   isStackAction,
   stackActionDeny,
-  stackNeedsDependencySafeRestart,
   type StackAction
 } from "../stack-control.js";
-import { config, engine, registry, audit, stackLocks } from "../runtime/state.js";
+import { config, engine, registry, audit, stackLocks, openStreams } from "../runtime/state.js";
 import { composeBasePath } from "../runtime/containers.js";
 import { applyOps, rawReason } from "../runtime/raw-ops.js";
 import { createProject, previewProject } from "../runtime/project-create.js";
@@ -484,24 +488,45 @@ export async function handleStackContext(ctx: RouteContext, stackContextMatch: R
 }
 
 export async function handleStackAction(ctx: RouteContext, stackActionMatch: RegExpMatchArray): Promise<void> {
+  const budget = new RuntimeBudget();
   const { request, response, actor } = ctx;
   const anchorContainerId = decodeURIComponent(stackActionMatch[1]);
-  const requestedAction = decodeURIComponent(stackActionMatch[2]);
-  if (!isStackAction(requestedAction)) {
+  const actionPath = decodeURIComponent(stackActionMatch[2]);
+  const streamSuffix = actionPath.endsWith("-stream");
+  const requestedAction = actionPath.replace(/-stream$/, "");
+  if (!isStackAction(requestedAction) || (streamSuffix && requestedAction !== "start" && requestedAction !== "stop" && requestedAction !== "restart")) {
     send(response, 400, { error: "invalid-stack-action" });
     return;
   }
   const action: StackAction = requestedAction;
   // Invalid JSON is answered centrally (`400 invalid-json`), as everywhere.
-  const parsedBody = parseRequest(stackActionRequestSchema, await readJsonBody(request));
+  const parsedBody = parseRequest(action === "start" || action === "restart" ? stackRuntimeActionRequestSchema : stackActionRequestSchema, await readJsonBody(request));
   if (!parsedBody.ok) {
     rejectRequest(ctx, { action: `stack-${action}`, containerId: anchorContainerId, containerName: null }, parsedBody.rejection);
     return;
   }
   const body = parsedBody.value;
 
+  const connection = actionConnection(request, response);
+  let releaseStream: (() => void) | null = null;
+  let mutationStarted = false;
+  const delegation = new Set<string>();
+  const auditReason = (reason: string, key = reason) => actionAuditReason(delegation, reason, key);
+  const streaming = streamSuffix || request.headers.accept?.includes("application/x-ndjson") === true;
   try {
     const project = stackProjectFromRegistry(anchorContainerId);
+    if (action === "start" || action === "stop" || action === "restart") {
+      if (streaming) {
+        releaseStream = openStreams.tryAcquire();
+        if (!releaseStream) throw new StackEndpointError(429, "too-many-streams");
+      }
+      const responder = stackRuntimeResponder(response, action, project.projectName, streaming);
+      const result = await runStackRuntimeAction(project, anchorContainerId, action, body, actor, connection.signal, { ...(streaming ? responder : {}), onMutation: () => { mutationStarted = true; }, onDelegation: (reason) => { delegation.add(reason); } }, budget);
+      audit.write({ action: `stack-${action}`, containerId: anchorContainerId, containerName: project.anchorEntry.containerName,
+        actor, outcome: result.body.ok ? "allowed" : result.mutationStarted ? "error" : "denied", reason: auditReason(result.body.error ?? result.body.outcome) });
+      responder.finish(result);
+      return;
+    }
     const outcome = await stackLocks.runExclusive(project.projectName, async () => {
       if (!registry.isAllowed(anchorContainerId)) {
         throw new StackEndpointError(409, "stack-anchor-stale");
@@ -525,7 +550,9 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
           services: prepared.context.services.map((service) => ({
             serviceName: service.serviceName,
             containerId:
-              service.containerId ?? prepared.entriesByService.get(service.serviceName)?.containerId ?? null
+              service.containerId ?? prepared.entriesByService.get(service.serviceName)?.containerId ?? null,
+            status: service.status,
+            startedAt: service.startedAt
           }))
         })
       ) {
@@ -534,56 +561,26 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
         // project lock, to the immediately following CLI call.
         throw new StackEndpointError(409, "stack-expectation-mismatch");
       }
-      const usedFallbackUp = action === "start" && prepared.context.missingServices.length > 0;
 
       const denied = stackActionDeny({
         action,
-        missingServices: prepared.context.missingServices,
         projectName: project.projectName,
-        confirmation: body.confirmation,
-        allowFallbackUp: body.allowFallbackUp
+        confirmation: body.confirmation
       });
       if (denied) throw new StackEndpointError(denied.status, denied.code);
-      if (action === "apply" || usedFallbackUp) {
+      if (action === "apply") {
         ensureCreateScopeAllowlisted(prepared);
         ensureCreateScopeNotExternallyManaged(prepared);
       }
 
       let composeFailed = false;
       try {
-        if (action === "start" && !usedFallbackUp) {
-          await composeStart(project);
-        } else if (action === "start" || action === "apply") {
-          // The only creating S11 path: no build, no pull, no removal of
-          // orphans. Missing images make the action fail visibly instead of
-          // fetching foreign code onto the host on the side.
-          //
-          // ⚠️ `forceRecreate` exists ONLY for `apply`, and only because
-          // `up -d` alone does not heal a broken case: Compose only replaces
-          // containers with a changed configuration or a changed image.
-          // Whoever hangs on a just-replaced X via `network_mode:
-          // container:<X>` is left behind — in a netns that no longer
-          // exists, and Docker keeps reporting it as `running`. That is
-          // exactly how `arr_stack` lost three containers on 2026-08-25; only
-          // a manual `down`+`up` brought them back.
-          //
-          // The reach does NOT grow because of this: `apply` touches the
-          // whole stack anyway and requires `compose.raw`. The
-          // flag only changes whether Compose leaves unchanged containers
-          // alone — and exactly that is the bug here, not the protection.
+        if (action === "apply") {
           await composeUp(project, {
             removeOrphans: false,
             pullNever: true,
-            forceRecreate: action === "apply" && body.forceRecreate
+            forceRecreate: body.forceRecreate
           });
-        } else if (action === "stop") {
-          await composeStop(project);
-        } else if (action === "restart") {
-          if (stackNeedsDependencySafeRestart(prepared.definition.couplings)) {
-            await composeDependencySafeRestart(project);
-          } else {
-            await composeRestart(project);
-          }
         } else {
           // composeDown() sets neither --volumes nor --remove-orphans.
           await composeDown(project);
@@ -612,7 +609,7 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
           context: after.context
         });
       }
-      return { usedFallbackUp, context: after.context, containerIds };
+      return { context: after.context, containerIds };
     });
 
     audit.write({
@@ -621,26 +618,32 @@ export async function handleStackAction(ctx: RouteContext, stackActionMatch: Reg
       containerName: project.anchorEntry.containerName,
       actor,
       outcome: "allowed",
-      reason: `${project.projectName}${outcome.usedFallbackUp ? " (start->up)" : ""}`
+      reason: project.projectName
     });
     send(response, 200, {
       ok: true,
       action,
-      usedFallbackUp: outcome.usedFallbackUp,
       containerIds: outcome.containerIds,
       context: outcome.context
     });
   } catch (error) {
-    if (!(error instanceof StackEndpointError)) throw error;
+    if (action !== "start" && action !== "stop" && action !== "restart" && !(error instanceof StackEndpointError)) throw error;
+    const failure = actionFailureOf(error, true);
     audit.write({
-      action: `stack-${action}`,
-      containerId: anchorContainerId,
-      containerName: null,
-      actor,
-      outcome: error.code === "compose-stack-action-failed" ? "error" : "denied",
-      reason: error.code
+      action: `stack-${action}`, containerId: anchorContainerId, containerName: null, actor,
+      outcome: mutationStarted || failure.body.error === "compose-stack-action-failed" ? "error" : "denied",
+      reason: auditReason(failure.auditReason, String(failure.body.error))
     });
-    send(response, error.status, { error: error.code, ...error.details });
+    if (!response.destroyed && !response.writableEnded) {
+      if (response.headersSent) {
+        sendLine(response, { kind: "error", reason: String(failure.body.error), status: failure.status,
+          body: failure.body } satisfies StackActionStreamLine);
+        response.end();
+      } else send(response, failure.status, failure.body);
+    }
+  } finally {
+    connection.dispose();
+    releaseStream?.();
   }
   return;
 }

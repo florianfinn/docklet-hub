@@ -393,6 +393,7 @@ test("GET_ROUTES_WITH_EFFECT trägt beide Sorten und keinen Pfad mit /api", () =
   assert.deepEqual(
     [...GET_ROUTES_WITH_EFFECT],
     [
+      "/live-events",
       "/hosts/:hostId/archive",
       "/hosts/:hostId/containers/:containerId/logs-stream",
       "/hosts/:hostId/containers/:containerId/stats",

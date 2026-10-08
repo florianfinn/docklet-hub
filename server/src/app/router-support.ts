@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import type { LiveEvents } from "../domain/live-events/index.js";
 
 import {
   type AgentHealth,
@@ -12,20 +13,12 @@ import type { Auth } from "../platform/auth/auth.js";
 import type { Config } from "../platform/config/config.js";
 import type { Enrollment } from "../features/hosts/index.js";
 
-// Das Gerüst, das JEDE Routendatei dieses Routers braucht — unabhängig davon,
-// ob sie Hosts, Marken, Einstellungen oder eine Sitzung anmeldet.
-//
-// Diese Datei entsteht mit der Aufteilung von `server/src/app/router.ts`
-// (Etappe B4a-A1, #5). `ApiOptions`, `failWith` und `guarded` standen bisher
-// außerhalb der Routen, in `router.ts` selbst — gebraucht von Handlern in
-// jedem Block, nicht nur einem. Bliebe das so, müsste jede neue Datei unter
-// `routes/` sie aus `router.ts` importieren, obwohl `router.ts` nach der
-// Aufteilung selbst nur noch Registrierfunktionen aufruft: die Abhängigkeit
-// stünde verkehrt herum. Hier liegen sie an einem Ort, den beide Hälften der
-// Aufteilung gleichermassen kennen, ohne dass eine der anderen unterstellt
-// ist.
+import type { SelfHealingSync } from "../features/settings/index.js";
 
+// Shared router dependencies for feature registration and request handlers.
 export type ApiOptions = {
+  liveEvents?: LiveEvents;
+  selfHealingSync?: SelfHealingSync;
   auth: Auth;
   pool: Pool;
   // Der Weg zum Bestand. Einspeisbar, weil der Integrationstest dieser Fläche

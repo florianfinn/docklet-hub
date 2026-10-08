@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import assert from "node:assert/strict";
 import http from "node:http";
 import os from "node:os";
@@ -428,4 +429,65 @@ test("without credentials no empty header is sent either", async (t) => {
 
   await new DockerEngine({ socketPath: pathname }).remoteManifestDigest("ghcr.io/wer/was:latest");
   assert.deepEqual(seen, [undefined]);
+});
+
+test("304 runtime actions remain successful and stop reads the configured deadline", async (t) => {
+  const seen: string[] = [];
+  const server = http.createServer((request, response) => {
+    seen.push(request.url ?? "");
+    if (request.url?.endsWith("/json")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ Id: "id", Name: "/app", Config: { StopTimeout: 90 } }));
+    } else {
+      response.writeHead(304);
+      response.end();
+    }
+  });
+  const pathname = socketPath("runtime-304");
+  await new Promise<void>((done) => server.listen(pathname, done));
+  t.after(() => new Promise<void>((done) => void server.close(() => done())));
+  const engine = new DockerEngine({ socketPath: pathname });
+  await engine.start("id");
+  await engine.stop("id");
+  await engine.restart("id");
+  assert.deepEqual(seen, ["/containers/id/start", "/containers/id/json", "/containers/id/stop", "/containers/id/json", "/containers/id/restart"]);
+});
+
+test("runtime requests pass the calculated stop deadline to HTTP instead of the default", async (t) => {
+  const deadlines: number[] = [];
+  t.mock.method(http, "request", (options: http.RequestOptions, callback: (response: http.IncomingMessage) => void) => {
+    deadlines.push(Number(options.timeout));
+    const request = new EventEmitter() as http.ClientRequest;
+    request.end = (() => {
+      const response = Object.assign(new EventEmitter(), { statusCode: 304 }) as http.IncomingMessage;
+      callback(response);
+      response.emit("end");
+      return request;
+    }) as typeof request.end;
+    return request;
+  });
+  const engine = new DockerEngine({ socketPath: "/unused.sock", timeoutMs: 1 });
+  t.mock.method(engine, "inspect", async () => ({ Id: "id", Name: "/app", Config: { StopTimeout: 90 } }));
+  await engine.stop("id");
+  await engine.restart("id");
+  await engine.stop("id", null);
+  await engine.start("id");
+  assert.deepEqual(deadlines, [100_000, 130_000, 20_000, 30_000]);
+});
+
+test("kill evidence keeps Docker time and Compose metadata only inside the agent", () => {
+  const atMs = Date.parse("2026-10-01T10:00:00.000Z");
+  assert.deepEqual(monitorEventOf({ Type: "container", Action: "kill", time: atMs / 1_000,
+    timeNano: atMs * 1_000_000, Actor: { ID: "a".repeat(64), Attributes: {
+      name: "/demo-web", "com.docker.compose.project": "demo", "com.docker.compose.service": "web", signal: "15"
+    } } }), { action: "kill", containerId: "a".repeat(64), containerName: "demo-web", atMs,
+    composeProject: "demo", composeService: "web", signal: "15" });
+});
+
+test("die event exit code remains local evidence even after a newer inspect resets it", () => {
+  const event = monitorEventOf({ Type: "container", Action: "die", Actor: { ID: "a".repeat(64), Attributes: { exitCode: "137" } } });
+  assert.equal(event?.exitCode, 137);
+  for (const exitCode of ["", "unknown", "1.5", "Infinity"]) {
+    assert.equal(monitorEventOf({ Type: "container", Action: "die", Actor: { ID: "a".repeat(64), Attributes: { exitCode } } })?.exitCode, undefined);
+  }
 });

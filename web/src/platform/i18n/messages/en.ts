@@ -35,7 +35,11 @@ export const en = {
 
   appTitle: "docklet hub",
 
-  // Gemeinsames
+  // Live status shared by host and container views.
+  liveStateStale: "Live state disconnected or stale",
+  liveMeasurementStale: "Measurements stale",
+
+  // Shared actions
   loading: "Loading …",
   retry: "Try again",
   signOut: "Sign out",

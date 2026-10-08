@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { DEFAULT_GLOBAL_THEME } from "contract";
+import { DEFAULT_GLOBAL_THEME, DEFAULT_SELF_HEALING_CONFIG } from "contract";
 import { describeNetwork, readSettings, type SettingsReaders } from "./service.js";
 
 // The answer of `GET /settings` without Express and without Postgres (#269):
@@ -15,6 +15,8 @@ function readers(calls: string[], externalEndpoint: string | null = null): Setti
     readNetwork: async () => (calls.push("network"), { externalEndpoint }),
     readTheme: async () => (calls.push("theme"), DEFAULT_GLOBAL_THEME),
     readLogSettings: async () => (calls.push("logs"), { tailLines: 200 }),
+    readRuntime: async () => (calls.push("runtime"), { applyComposeDefinition: true }),
+    readSelfHealing: async () => (calls.push("selfHealing"), { config: DEFAULT_SELF_HEALING_CONFIG, revision: 1, hosts: [] }),
     readContainerView: async () => (calls.push("containers"), { showSystem: true })
   };
 }
@@ -22,7 +24,7 @@ function readers(calls: string[], externalEndpoint: string | null = null): Setti
 test("readSettings setzt alle vier Teile zusammen und liest in der alten Reihenfolge", async () => {
   const calls: string[] = [];
   const settings = await readSettings(readers(calls), CONFIG);
-  assert.deepEqual(calls, ["network", "theme", "logs", "containers"]);
+  assert.deepEqual(calls, ["network", "theme", "logs", "containers", "runtime", "selfHealing"]);
   assert.deepEqual(settings.theme, DEFAULT_GLOBAL_THEME);
   assert.deepEqual(settings.logs, { tailLines: 200 });
   assert.deepEqual(settings.containers, { showSystem: true });

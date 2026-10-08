@@ -1,3 +1,4 @@
+import { DEFAULT_SELF_HEALING_CONFIG } from "contract";
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -157,6 +158,13 @@ function fakePool(
     network,
     logs,
     query(text: string, values: unknown[] = []) {
+      if (/^SELECT apply_compose_definition FROM runtime_settings/.test(text))
+        return Promise.resolve({ rows: [{ apply_compose_definition: true }], rowCount: 1 });
+      if (/^SELECT self_healing_config, self_healing_revision FROM runtime_settings/.test(text))
+        return Promise.resolve({ rows: [{ self_healing_config: DEFAULT_SELF_HEALING_CONFIG, self_healing_revision: 1 }], rowCount: 1 });
+      if (/FROM docker_host h LEFT JOIN self_healing_delivery/.test(text))
+        return Promise.resolve({ rows: [], rowCount: 0 });
+
       if (/SELECT .* FROM hub_theme/s.test(text)) {
         return Promise.resolve({ rows: [postgresRow(text, theme)], rowCount: 1 });
       }
@@ -313,6 +321,8 @@ test("GET /settings gibt die Darstellung des Hubs unter „theme“ heraus", asy
     // /settings soll hier auffallen und nicht durchrutschen. Sie geht an jeden
     // Angemeldeten heraus, und was das ist, gehört benannt.
     assert.deepEqual(body, {
+      runtime: { applyComposeDefinition: true },
+      selfHealing: { config: DEFAULT_SELF_HEALING_CONFIG, revision: 1, hosts: [] },
       theme: DEFAULT_GLOBAL_THEME,
       logs: DEFAULT_LOG_SETTINGS,
       // Ob die Container des Leitstands selbst sichtbar sind — kein

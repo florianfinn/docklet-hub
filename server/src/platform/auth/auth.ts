@@ -1,3 +1,4 @@
+import { runtimeSettingsSchema, type RuntimeSettings } from "contract";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import type { Pool } from "pg";
@@ -41,6 +42,7 @@ export const SIGN_UP_PATH = "/sign-up/email";
 const MIN_PASSWORD_LENGTH = 12;
 
 export type AuthOptions = {
+  writeSetupRuntime?: (runtime: RuntimeSettings) => Promise<void>;
   pool: Pool;
   secret: string;
   baseUrl: string;
@@ -56,7 +58,7 @@ export type AuthOptions = {
  * hier zu halten ist, stünde dann ungeprüft da: dass es keinen zweiten Weg
  * gibt, auf dem ein Konto entsteht.
  */
-export function authOptions({ pool, secret, baseUrl }: AuthOptions) {
+export function authOptions({ pool, secret, baseUrl, writeSetupRuntime }: AuthOptions) {
   return {
     // ⚠️ Alles, was Tabellen oder Felder erzeugt, kommt aus schema-source.ts —
     // dieselbe Beschreibung, gegen die db/auth-schema.test.ts die Migration
@@ -82,6 +84,12 @@ export function authOptions({ pool, secret, baseUrl }: AuthOptions) {
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
         if (ctx.path !== SIGN_UP_PATH) return;
+
+        const runtime = runtimeSettingsSchema.safeParse({
+          applyComposeDefinition: ctx.body?.applyComposeDefinition === undefined ? true : ctx.body.applyComposeDefinition
+        });
+        if (!runtime.success) throw new APIError("BAD_REQUEST", { code: "INVALID_RUNTIME_SETTINGS",
+          message: "Die Wahl zum Anwenden der Compose-Definition muss ein Boolean sein." });
 
         // Belegen statt fragen: die Prüfung „gibt es schon ein Konto?" und das
         // Anlegen wären sonst zwei Schritte mit einem Fenster dazwischen
@@ -109,12 +117,11 @@ export function authOptions({ pool, secret, baseUrl }: AuthOptions) {
     databaseHooks: {
       user: {
         create: {
-          before: async (user) => {
-            // Jedes Konto, das durch better-auth entsteht, ist die
-            // Erstanmeldung — der Riegel oben lässt keinen zweiten Weg zu.
-            // Deshalb steht hier keine Bedingung: eine Bedingung wäre eine
-            // zweite Antwort auf dieselbe Frage, und zwei Antworten laufen
-            // auseinander.
+          before: async (user, ctx) => {
+            await writeSetupRuntime?.(runtimeSettingsSchema.parse({
+              applyComposeDefinition: ctx?.body?.applyComposeDefinition === undefined ? true : ctx.body.applyComposeDefinition
+            }));
+            // The setup gate permits exactly one account, always an administrator.
             return { data: { ...user, role: "admin" } };
           }
         }

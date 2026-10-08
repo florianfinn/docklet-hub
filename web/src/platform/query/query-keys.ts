@@ -51,8 +51,8 @@
 //   `settings.containerView()` the same way, and every mount of the overview
 //   asks the arms again;
 //
-// - the stats of a container (`metrics`) are never invalidated: the surface
-//   polls them on the agent's clock (`features/metrics/metrics-queries.ts`);
+// - live events invalidate affected host/container measurements; the detail
+//   also polls on the agent's clock (`features/metrics/metrics-queries.ts`);
 //
 // Areas still loading in a `useEffect` (stacks, the rest of the settings) get
 // their key here when they move to a query.
@@ -63,6 +63,8 @@ export const queryKeys = {
     all: ["hosts"] as const,
     /** `GET /api/hosts`. */
     list: () => ["hosts", "list"] as const,
+    /** Session-local live transport and monitor status. */
+    live: () => ["live", "hosts"] as const,
     /** `GET /api/hosts/:id/containers`; contacts the arm under the caller. */
     containers: (hostId: string) => ["hosts", hostId, "containers"] as const,
     /** `GET /api/hosts/:id/agent-update`, the state of the watcher on one arm (#267). */
@@ -76,9 +78,12 @@ export const queryKeys = {
   },
   containers: {
     /** `GET /api/overview`, every arm with its stacks; contacts the arms under the caller (#282). */
-    overview: () => ["containers", "overview"] as const
+    overview: () => ["containers", "overview"] as const,
+    runtimeContext: (hostId: string, containerId: string) => ["containers", hostId, containerId, "runtime-context"] as const
   },
   metrics: {
+    /** Measurements of one host, refreshed after a monitor reconnect. */
+    host: (hostId: string) => ["metrics", hostId] as const,
     /** `GET …/containers/:id/stats`, the measurements of one container with their history; polled every ten seconds (#283). */
     containerStats: (hostId: string, containerId: string) => ["metrics", hostId, containerId, "stats"] as const
   },

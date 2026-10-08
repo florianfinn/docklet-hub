@@ -58,7 +58,7 @@ function container(name: string, compose: { project: string; service: string } |
 
 function deps(overrides: Partial<OverviewDeps> = {}): OverviewDeps {
   return {
-    probeHost: () => Promise.resolve({ reachable: true, version: MIN_AGENT_VERSION, contractVersion: 11, readOnly: true, entries: null }),
+    probeHost: () => Promise.resolve({ reachable: true, version: MIN_AGENT_VERSION, contractVersion: 12, readOnly: true, entries: null }),
     fetchContainersFor: () => Promise.resolve([]),
     // Ein Arm, dem der Betreiber nichts vergeben hat — der Normalfall.
     decorationFor: () => Promise.resolve(EMPTY_DECORATION),
@@ -327,4 +327,17 @@ test("ein antwortender Arm trägt die Marken bis in die Übersicht", async () =>
 
   assert.deepEqual(entries[0].stacks[0].marks, [production]);
   assert.equal(entries[0].stacks[0].indent, "flat");
+});
+
+for (const [name, discovery, expected] of [
+  ["full", { stacks: [{ projectName: "demo", projectDir: "/srv/example/demo", composeFileName: "compose.yml", filePresent: true, management: "full", services: [] }], findings: [] }, true],
+  ["missing", { stacks: [], findings: [] }, false],
+  ["unavailable", null, null]
+] as const) test(`overview ownership preserves discovery result: ${name}`, async () => {
+  const [entry] = await buildOverview([record({ name: "demo" })], deps({
+    fetchContainersFor: async () => [container("web", { project: "demo", service: "web" })],
+    lifecycleFor: async () => ({ discovery: discovery as never, lifecycle: { stopIntents: null, selfHealing: null,
+      applyDefinition: true, maintenanceDurationSeconds: 3600 } })
+  }));
+  assert.equal(entry.stacks[0].hubOwned, expected);
 });

@@ -1,4 +1,7 @@
+import { handleStopIntents } from "./routes/stop-intent-routes.js";
 import type http from "node:http";
+import { handleSelfHealingStatus, handleSelfHealingMaintenance, handleSelfHealingAcknowledge } from "./routes/self-healing-control-routes.js";
+import { handleSelfHealingConfig } from "./routes/self-healing-routes.js";
 import { CONTRACT_HEADERS, CONTRACT_VERSION } from "./contract.js";
 import { containerIdFromPath, checkRoute } from "./route-policy.js";
 import { EnvRedactionUnavailableError } from "./env-file.js";
@@ -222,6 +225,23 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/self-healing/status") {
+      await handleSelfHealingStatus(ctx);
+      return;
+    }
+    if ((request.method === "PUT" || request.method === "DELETE") && url.pathname === "/self-healing/maintenance") {
+      await handleSelfHealingMaintenance(ctx);
+      return;
+    }
+    if (request.method === "POST" && url.pathname === "/self-healing/incidents/acknowledge") {
+      await handleSelfHealingAcknowledge(ctx);
+      return;
+    }
+    if (request.method === "PUT" && url.pathname === "/self-healing/config") {
+      await handleSelfHealingConfig(ctx);
+      return;
+    }
+
     if (request.method === "PUT" && url.pathname === "/registry") {
       await handleRegistrySync(ctx);
       return;
@@ -284,6 +304,11 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
 
     if (request.method === "GET" && url.pathname === "/monitor-events") {
       await handleMonitorEvents(ctx);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/stop-intents") {
+      await handleStopIntents(ctx);
       return;
     }
 

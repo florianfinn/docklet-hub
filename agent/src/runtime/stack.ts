@@ -1,3 +1,4 @@
+import { runtimeCall, type RuntimeBudget } from "../runtime-budget.js";
 import {
   type RawInspect
 } from "../engine.js";
@@ -12,6 +13,8 @@ import {
   isValidProjectName,
   locationFor
 } from "../compose.js";
+import { foreignManagementOf } from "../external-management.js";
+import { runtimeStateOf, stopTimeoutSeconds } from "../runtime-actions.js";
 import { forcedManagement } from "../stacks.js";
 import {
   composeConfig,
@@ -19,6 +22,7 @@ import {
 } from "../compose-cli.js";
 import { type RegistryEntry } from "../registry.js";
 import {
+  StackEndpointError,
   stackDefinitionFromConfig,
   stackMutationBaseDeny,
   type StackCoupling,
@@ -40,6 +44,10 @@ export type StackServiceSnapshot = {
   containerName: string | null;
   imageRef: string | null;
   status: string;
+  startedAt: string | null;
+  exitCode: number | null;
+  health: string | null;
+  stopTimeoutSeconds: number;
   running: boolean;
   missing: boolean;
   allowed: boolean;
@@ -60,26 +68,18 @@ export type StackContextResponse = {
   couplings: Array<StackCoupling & { fingerprint: string }>;
   missingServices: string[];
   runningServices: string[];
-  capabilities: { startRequiresApply: boolean };
 };
 
 export type PreparedStack = {
   project: StackResolvedProject;
   definition: StackDefinition;
+  normalized: unknown;
+  externallyManaged: boolean;
   context: StackContextResponse;
   entriesByService: Map<string, RegistryEntry>;
 };
 
-export class StackEndpointError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    readonly details: Record<string, unknown> = {}
-  ) {
-    super(code);
-    this.name = "StackEndpointError";
-  }
-}
+export { StackEndpointError } from "../stack-control.js";
 
 export function stackProjectFromRegistry(anchorContainerId: string): StackResolvedProject {
   const anchorEntry = registry.get(anchorContainerId);
@@ -132,6 +132,7 @@ export type CurrentStackContainer = {
   containerName: string;
   imageRef: string;
   status: string;
+  externallyManaged: boolean;
 };
 
 // Determines the containers ACTUALLY affected by the Compose project name via
@@ -140,9 +141,9 @@ export type CurrentStackContainer = {
 // action: with `--project-name` it could not be proven that Compose leaves it
 // untouched.
 export async function currentStackContainers(
-  project: StackResolvedProject
+  project: StackResolvedProject, budget?: RuntimeBudget
 ): Promise<Map<string, CurrentStackContainer>> {
-  const all = await engine.listWithComposeLabels();
+  const all = await runtimeCall(budget, (options) => engine.listWithComposeLabels(options));
   const sameProjectName = all.filter(
     (entry) => entry.labels["com.docker.compose.project"] === project.projectName
   );
@@ -171,7 +172,8 @@ export async function currentStackContainers(
       containerId: entry.id,
       containerName: entry.name,
       imageRef: entry.image,
-      status: entry.status
+      status: entry.status,
+      externallyManaged: registry.isExternallyManaged(entry.id) || foreignManagementOf(entry.labels, undefined) !== null
     });
   }
   return current;
@@ -209,7 +211,8 @@ export function stackState(services: readonly StackServiceSnapshot[]): StackCont
 
 export async function prepareStack(
   project: StackResolvedProject,
-  options: { mutating: boolean; action: string; actor: string | null }
+  options: { mutating: boolean; action: string; actor: string | null; runtimeAction?: boolean; onDelegation?: (reason: string) => void; budget?: RuntimeBudget; onInspect?: (serviceName: string, inspect: RawInspect) => void },
+  readConfig: typeof composeConfig = composeConfig
 ): Promise<PreparedStack> {
   if (options.mutating) {
     const denied = stackMutationBaseDeny({
@@ -219,22 +222,26 @@ export async function prepareStack(
     if (denied) throw new StackEndpointError(denied.status, denied.code);
   }
 
+  const current = await currentStackContainers(project, options.budget);
+  const entriesByService = registryEntriesByService(project);
+  const externallyManaged = registry.isExternallyManaged(project.anchorEntry.containerId) ||
+    [...entriesByService.values()].some((entry) => registry.isExternallyManaged(entry.containerId)) ||
+    [...current.values()].some((entry) => entry.externallyManaged);
   let normalized: unknown;
+  let definition: StackDefinition;
   try {
-    normalized = await composeConfig(project);
+    normalized = await runtimeCall(options.budget, (call) => readConfig(project, call));
+    const parsed = stackDefinitionFromConfig(normalized);
+    if (!parsed) throw new StackEndpointError(409, "compose-services-missing");
+    definition = parsed;
   } catch (error) {
-    console.error(`[agent] compose config for stack ${project.projectName} failed:`, error);
+    if (options.runtimeAction) throw error;
+    if (error instanceof StackEndpointError) throw error;
     throw new StackEndpointError(409, "compose-config-failed");
   }
-  const definition = stackDefinitionFromConfig(normalized);
-  if (!definition) throw new StackEndpointError(409, "compose-services-missing");
 
-  const current = await currentStackContainers(project);
-  const entriesByService = registryEntriesByService(project);
-
-  // Gate JEDEN derzeit vom projektweiten CLI-Aufruf erreichbaren Container,
-  // einschliesslich Orphans. Ein nicht allowlisteter Nachbar blockiert die
-  // ganze Aktion; der Agent kann Rechte nicht durch Weglassen herstellen.
+  // Gate every container reachable by the project command, including orphans.
+  // Omitting an unauthorized neighbour cannot widen the caller’s permissions.
   const inspectByService = new Map<string, RawInspect>();
   const delegationByService = new Map<string, boolean>();
   const deniedServices: Array<{ serviceName: string; reason: string; status: number }> = [];
@@ -242,7 +249,10 @@ export async function prepareStack(
     const result = await gate(container.containerId, {
       mutating: options.mutating,
       action: options.action,
-      actor: options.actor
+      actor: options.actor,
+      onDelegation: options.onDelegation,
+      budget: options.budget,
+      onInspect: (inspect) => options.onInspect?.(serviceName, inspect)
     });
     if (!result.ok) {
       deniedServices.push({ serviceName, reason: result.reason, status: result.status });
@@ -270,18 +280,21 @@ export async function prepareStack(
     const inspect = inspectByService.get(serviceName);
     const registryEntry = entriesByService.get(serviceName);
     const missing = !container;
-    const status = missing ? "missing" : (inspect?.State?.Status ?? container.status ?? "unknown");
+    const status = missing ? "missing" : (inspect ? runtimeStateOf(inspect).status : container.status ?? "unknown");
     return {
       serviceName,
       containerId: container?.containerId ?? null,
       containerName: container?.containerName ?? null,
       imageRef: inspect?.Config?.Image ?? container?.imageRef ?? registryEntry?.imageRef ?? null,
       status,
+      startedAt: runtimeStateOf(inspect ?? null).startedAt,
+      exitCode: inspect?.State?.ExitCode ?? null,
+      health: inspect?.State?.Health?.Status ?? null,
+      stopTimeoutSeconds: stopTimeoutSeconds(inspect?.Config?.StopTimeout),
       running: inspect?.State?.Running === true || status === "running",
       missing,
-      // Bei einem fehlenden Container ist der alte Registry-Eintrag genau der
-      // Reanchor, der ein sicheres `up` erlaubt. Bei einem vorhandenen muss die
-      // aktuelle Id selbst allowlistet sein.
+      // Missing services retain their last registry anchor; existing ones
+      // must be allowed under their current container id.
       allowed: container
         ? registry.isAllowed(container.containerId)
         : registryEntry ? registry.isAllowed(registryEntry.containerId) : false,
@@ -305,10 +318,9 @@ export async function prepareStack(
     services,
     couplings,
     missingServices,
-    runningServices,
-    capabilities: { startRequiresApply: missingServices.length > 0 }
+    runningServices
   };
-  return { project, definition, context, entriesByService };
+  return { project, definition, normalized, externallyManaged, context, entriesByService };
 }
 
 export function ensureCreateScopeAllowlisted(prepared: PreparedStack): void {
@@ -323,10 +335,10 @@ export function ensureCreateScopeAllowlisted(prepared: PreparedStack): void {
   }
 }
 
-// `up` may recreate any container of the project, so an externally managed
-// anchor, existing container or missing service's last container locks it
-// (#5, #122). `start`/`stop`/`restart` do not come through here.
+// Every creating path checks the whole project, including registry anchors
+// of missing services. Foreign ownership forbids both creation and recreation.
 export function ensureCreateScopeNotExternallyManaged(prepared: PreparedStack): void {
+  if (prepared.externallyManaged) throw new StackEndpointError(403, "externally-managed");
   const containers = createScopeContainerIds(
     prepared.context.services,
     (serviceName) => prepared.entriesByService.get(serviceName)?.containerId
@@ -337,8 +349,8 @@ export function ensureCreateScopeNotExternallyManaged(prepared: PreparedStack): 
   if (managed !== null) throw new StackEndpointError(403, "externally-managed", { services: managed });
 }
 
-export async function reanchorStackRegistry(prepared: PreparedStack): Promise<void> {
-  const current = await currentStackContainers(prepared.project);
+export async function reanchorStackRegistry(prepared: PreparedStack, budget?: RuntimeBudget): Promise<void> {
+  const current = await currentStackContainers(prepared.project, budget);
   const replacements = new Map<string, string>();
   for (const [serviceName, container] of current) {
     const old = prepared.entriesByService.get(serviceName);

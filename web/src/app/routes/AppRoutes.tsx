@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router";
 
+import { LifecycleProvider } from "../../features/containers";
 import type { SessionUser } from "../../platform/session/session-user";
 import { useLanguage, type LanguageContextValue } from "../../platform/i18n";
 import { AccountScreen } from "../screens/AccountScreen";
@@ -290,7 +291,7 @@ export function AppRoutes({ user }: { user: SessionUser }) {
   const standaloneRoutes = standaloneRoutesFor(user, language);
 
   return (
-    <Routes>
+    <LifecycleProvider key={user.id} role={user.role}><Routes>
       {navigationItems.map((item) => (
         <Route key={item.id} path={item.path} element={screens[item.id]} />
       ))}
@@ -298,6 +299,6 @@ export function AppRoutes({ user }: { user: SessionUser }) {
         <Route key={route.path} path={route.path} element={route.element} />
       ))}
       <Route path="*" element={<Navigate to={defaultNavigationPath} replace />} />
-    </Routes>
+    </Routes></LifecycleProvider>
   );
 }

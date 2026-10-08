@@ -23,6 +23,7 @@ import {
 } from "./host-cycle.js";
 import { createCycleRunner, startCycleTimer } from "./host-cycle-timer.js";
 import { createHostObservationStore, type HostObservationStore } from "./host-observation-store.js";
+import { createHostSync } from "./host-sync.js";
 
 // Die Verdrahtung des Hintergrundlaufs: hier treffen der Durchlauf
 // (`host-cycle.ts`), der Halter (`host-observation-store.ts`) und der
@@ -51,6 +52,7 @@ export type HostCycleServiceOptions = {
   agentSecret: string;
   intervalSeconds: number;
   log: (message: string) => void;
+  onInventoryChanged?: (hostId: string) => Promise<void>;
   logError: (message: string, error: unknown) => void;
 };
 
@@ -62,17 +64,8 @@ export type HostCycleService = {
   intervalMs: number;
   started: boolean;
   stop: () => void;
-  /**
-   * Ein Abgleich für EINEN Arm, außerhalb des Takts.
-   *
-   * ⚠️ DER AUFRUFER IST HIER EIN MENSCH, und das widerspricht der Regel über
-   * `REGISTRY_SYNC_ACTOR` nicht, sondern folgt ihr. Ihre Begründung lautet:
-   * ein `user:<id>` behauptete im Audit-Log des Agenten, ein Mensch habe den
-   * Abgleich ausgelöst — „hier sieht niemand zu". Bei diesem Aufruf sieht
-   * jemand zu: er hat gerade eine Compose-Datei angewandt. Ein `system:hub`
-   * an dieser Stelle löschte die Spur, die von der Änderung auf die Person
-   * zeigt.
-   */
+  // A fresh reconciliation, serialized with background and live work.
+  // The supplied actor retains audit attribution when another actor is waiting.
   syncHost: (record: HostRecord, actor: Actor) => Promise<HostCycleOutcome>;
 };
 
@@ -148,17 +141,22 @@ function cycleDepsFor(
 export function startHostCycleService(options: HostCycleServiceOptions): HostCycleService {
   const observations = createHostObservationStore();
   const intervalMs = options.intervalSeconds * 1_000;
+  const syncHost = createHostSync((record, actor) => cycleHost(record, cycleDepsFor(options, observations, actor)));
 
   const runner = createCycleRunner({
     run: async () => {
       const result = await runHostCycle({
         listHosts: () => createHostAccess(options).list(),
-        ...cycleDepsFor(options, observations, REGISTRY_SYNC_ACTOR)
+        ...cycleDepsFor(options, observations, REGISTRY_SYNC_ACTOR),
+        syncHost: (record) => syncHost(record, REGISTRY_SYNC_ACTOR)
       });
       // ⚠️ Nur melden, wenn sich etwas getan hat. Eine Zeile je Minute und Arm
       // machte das Log unlesbar — und die eine Meldung, auf die es ankommt,
       // ginge darin unter (dieselbe Überlegung wie beim Warten auf die
       // Datenbank in `index.ts`).
+      for (const host of result.hosts) {
+        if (host.status === "synced") await options.onInventoryChanged?.(host.hostId);
+      }
       const summary = summarize(result);
       if (summary !== null) options.log(summary);
     },
@@ -190,11 +188,7 @@ export function startHostCycleService(options: HostCycleServiceOptions): HostCyc
     intervalMs,
     started: timer.started,
     stop: timer.stop,
-    // ⚠️ ER LÄUFT AUCH BEI ABGESCHALTETEM TAKT (`intervalSeconds = 0`). Der
-    // Schalter stellt den Hintergrundlauf ab, nicht den Abgleich als solchen —
-    // und ein Arm, dessen Allowlist nach einem angewandten Entwurf veraltet
-    // ist, bliebe sonst dauerhaft veraltet statt bis zum nächsten Takt.
-    syncHost: (record: HostRecord, actor: Actor): Promise<HostCycleOutcome> =>
-      cycleHost(record, cycleDepsFor(options, observations, actor))
+    // Explicit reconciliations remain available when the periodic cycle is disabled.
+    syncHost
   };
 }

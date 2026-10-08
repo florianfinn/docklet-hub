@@ -347,3 +347,20 @@ Der Preis ist benannt und angenommen: zwei Leute bekommen denselben Bildschirm
 verschieden beschrieben. Das ist vertretbar, weil der Grund Zierde ist und
 nichts trägt. Karte, Marke und Fußzeile sind der Bildschirm; sie stehen ohne
 ihn genauso.
+
+## 11. Compose-Definition bewusst wählen
+
+Die Ersteinrichtung fragt „Compose-Definition bei Start und Neustart anwenden“
+mit Vorauswahl „An“ und nennt die Wirkung: Bei Hub-eigenen Stacks übernimmt Start
+die Definition und Neustart erstellt Container neu. Die Einstellung lässt sich
+später in den Einstellungen ändern; die Grenzen für fremdverwaltete Stacks
+stehen in [container-lifecycle.md](container-lifecycle.md).
+
+Die Wahl reist mit derselben geschützten Anfrage wie das erste Konto. Der
+Anlegeweg validiert sie vor dem Belegen des Einrichtungsplatzes und speichert sie
+vor dem Konto; scheitert die Speicherung, entsteht kein Konto mit einer anderen
+Wahl. Scheitert anschließend das Anlegen des Kontos, kann die nächste
+Ersteinrichtung die Wahl neu setzen. Ein zweiter Schreibaufruf nach erfolgreicher
+Anmeldung könnte bei einem Verbindungsabbruch die Vorauswahl stehen lassen,
+obwohl der Betreiber „Aus“ gewählt hat. Bestehende Installationen werden nicht
+erneut befragt.

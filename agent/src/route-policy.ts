@@ -1,8 +1,9 @@
+import { SELF_HEALING_ACTOR } from "contract";
+
 // The agent's route table: one row per method and path, readable and countable
 // in a test instead of spread over the handlers.
 //
-// Pure and without imports, so the policy can be checked without Docker,
-// without a socket and without a running server.
+// Pure policy with shared actor names; no Docker, socket or running server.
 
 export type Method = "GET" | "PUT" | "POST" | "DELETE";
 
@@ -24,17 +25,25 @@ export type Route = {
   audit: string;
   // Additionally bound to exactly one caller.
   onlyActor?: string;
+  // Configuration controls accept the hub system actor or an attributed human.
+  hubActor?: true;
   // The name under which gate() sees the same route.
   gate?: string;
 };
 
 export const ROUTES: readonly Route[] = [
+  { methods: ["GET"], pattern: "/self-healing/status", mutating: false, audit: "self-healing-status" },
+  { methods: ["PUT"], pattern: "/self-healing/maintenance", mutating: true, audit: "self-healing-maintenance", hubActor: true },
+  { methods: ["DELETE"], pattern: "/self-healing/maintenance", mutating: true, audit: "self-healing-maintenance", hubActor: true },
+  { methods: ["POST"], pattern: "/self-healing/incidents/acknowledge", mutating: true, audit: "self-healing-acknowledge", hubActor: true },
   // --- Before the secret check ------------------------------------------
   { methods: ["GET"], pattern: "/health", public: true, mutating: false, audit: "health" },
 
   // The response contains the whole route surface, so it stays behind the
   // secret.
   { methods: ["GET"], pattern: "/contract", mutating: false, audit: "contract" },
+
+  { methods: ["PUT"], pattern: "/self-healing/config", mutating: true, audit: "self-healing-config", onlyActor: SELF_HEALING_ACTOR },
 
   // --- Information and control on the individual container --------------
   { methods: ["GET"], pattern: "/containers", mutating: false, audit: "list" },
@@ -132,6 +141,7 @@ export const ROUTES: readonly Route[] = [
   // everything else. It is thus more powerful than any single action it
   // authorizes.
   { methods: ["PUT"], pattern: "/registry", mutating: true, audit: "registry-sync" },
+  { methods: ["GET"], pattern: "/stop-intents", mutating: false, audit: "stop-intents" },
   { methods: ["GET"], pattern: "/monitors", mutating: false, audit: "monitor-list" },
   { methods: ["PUT"], pattern: "/monitors", mutating: true, audit: "monitor-sync" },
   { methods: ["GET"], pattern: "/host-containers", mutating: false, audit: "host-discovery" },
@@ -140,9 +150,7 @@ export const ROUTES: readonly Route[] = [
   // Like `/host-containers` it names containers outside the allowlist. Read
   // only.
   { methods: ["GET"], pattern: "/resources", mutating: false, audit: "resources" },
-  // The monitor's continuous stream. Additionally bound to the one caller that
-  // runs it — a second reader would siphon off events without anyone
-  // noticing, because ndjson lines are not delivered twice.
+  // Hub monitor readers share the local watcher; this system actor owns them.
   { methods: ["GET"], pattern: "/monitor-events", mutating: false, audit: "monitor-events", onlyActor: "system:monitor" },
 
   // --- Audit archive (#30) ------------------------------------------------
@@ -254,7 +262,8 @@ export type RouteDecision =
 // A route that is not in the table passes and ends in the dispatcher's 404.
 export function checkRoute(method: string, pathname: string, actor: string | null): RouteDecision {
   const route = findRoute(method, pathname);
-  if (route?.onlyActor !== undefined && actor !== route.onlyActor) {
+  if ((route?.onlyActor !== undefined && actor !== route.onlyActor)
+    || (route?.hubActor && (!actor?.trim() || (actor.trim().startsWith("system:") && actor !== SELF_HEALING_ACTOR)))) {
     return { ok: false, status: 403, reason: "actor-not-allowed", audit: route.audit };
   }
   return { ok: true };

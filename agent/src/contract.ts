@@ -1,5 +1,11 @@
 import {
+  SELF_HEALING_LIMITS,
+  selfHealingConfigSchema,
+  selfHealingMaintenanceRequestSchema, selfHealingIncidentSchema, selfHealingBudgetSchema,
+  selfHealingStatusResponseSchema, SELF_HEALING_SYSTEM_ACTOR, SELF_HEALING_RECOMMENDATION,
   ACTOR_HEADER,
+  stackActionStreamLineSchema,
+  RUNTIME_ACTION_ERRORS,
   COMPOSE_RAW_FAILURE_REASONS,
   composeApplyStreamLineSchema,
   CONTRACT_VERSION,
@@ -54,7 +60,8 @@ const NDJSON_KINDS = {
   logFile: kindsOf(logFileStreamLineSchema),
   pullStream: kindsOf(pullStreamLineSchema),
   composeRawStream: kindsOf(composeApplyStreamLineSchema),
-  exec: kindsOf(execStreamLineSchema)
+  exec: kindsOf(execStreamLineSchema),
+  stackActions: kindsOf(stackActionStreamLineSchema)
 };
 
 export const AGENT_CONTRACT = {
@@ -66,9 +73,17 @@ export const AGENT_CONTRACT = {
     composeFields: fieldPresence(registryComposeSchema.shape),
     composeOrigins: registryOriginSchema.options
   },
+  selfHealing: {
+    fields: fieldPresence(selfHealingConfigSchema.shape), limits: SELF_HEALING_LIMITS, unlimitedMaintenanceDuration: null,
+    actor: SELF_HEALING_SYSTEM_ACTOR, recommendation: SELF_HEALING_RECOMMENDATION,
+    maintenanceFields: fieldPresence(selfHealingMaintenanceRequestSchema.shape),
+    statusFields: fieldPresence(selfHealingStatusResponseSchema.shape),
+    budgetFields: fieldPresence(selfHealingBudgetSchema.shape), incidentFields: fieldPresence(selfHealingIncidentSchema.shape)
+  },
   ndjsonKinds: NDJSON_KINDS,
   errors: {
     sharedHttp: SHARED_HTTP_ERRORS,
+    runtimeActions: RUNTIME_ACTION_ERRORS,
     logsStream: LOGS_STREAM_FAILURE_REASONS,
     logFile: LOG_FILE_FAILURE_REASONS,
     pullStream: PULL_STREAM_FAILURE_REASONS,

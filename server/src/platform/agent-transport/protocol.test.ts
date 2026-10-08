@@ -613,3 +613,20 @@ test("the operator's tail choices stay within the agent's limit", () => {
     `choices reach ${Math.max(...LOG_TAIL_LINE_OPTIONS)}, the agent takes ${MAX_TAIL}`
   );
 });
+
+test("JSON posts preserve caller cancellation and release its abort listener after completion", async (t) => {
+  const caller = new AbortController();
+  const remove = t.mock.method(caller.signal, "removeEventListener");
+  let received: AbortSignal | undefined;
+  const pending = agentPost(TARGET, "/containers/demo/stop", {}, { actor: ACTOR, signal: caller.signal,
+    fetchImpl: (async (_input: unknown, init?: RequestInit) => {
+      received = init?.signal ?? undefined;
+      return await new Promise<Response>((_resolve, reject) => received?.addEventListener("abort", () => {
+        reject(Object.assign(new Error("caller aborted"), { name: "AbortError" }));
+      }, { once: true }));
+    }) as typeof fetch });
+  caller.abort();
+  await assert.rejects(pending, (error: unknown) => error instanceof Error && error.name === "AbortError" && !(error instanceof AgentError));
+  assert.equal(received?.aborted, true);
+  assert.equal(remove.mock.calls.some((call) => call.arguments[0] === "abort"), true);
+});

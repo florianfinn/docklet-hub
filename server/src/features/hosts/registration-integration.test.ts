@@ -135,11 +135,11 @@ async function listen(server: http.Server, port = 0): Promise<Listener> {
   };
 }
 
-// Der kleine Fake-Agent: genau der eine Endpunkt, den die Gegenprobe befragt.
-// Er liegt beim echten Agenten VOR der Secret-Prüfung und nennt die Version.
-function createFakeAgent(): { server: http.Server; paths: string[] } {
+// The probe uses the public health endpoint before secret authentication.
+function createFakeAgent(available = () => true): { server: http.Server; paths: string[] } {
   const paths: string[] = [];
   const server = http.createServer((request, response) => {
+    if (!available()) { request.socket.destroy(); return; }
     paths.push(`${request.method} ${request.url}`);
     if (request.method === "GET" && request.url === "/health") {
       response.writeHead(200, { "content-type": "application/json" });
@@ -257,38 +257,32 @@ test("ein zweiter Versuch mit dem alten Token nach einer Rotation wird abgelehnt
 test("ein Arm, dessen Agent noch nicht erreichbar ist, behält sein Token und kommt später durch", async () => {
   const store = createStore(TOKEN);
   const log: string[] = [];
-  // Ein Port, auf dem gerade nichts lauscht: der Tunnel steht, der Agent
-  // antwortet noch nicht.
-  const idle = createFakeAgent();
-  const idleListener = await listen(idle.server);
-  const agentPort = idleListener.port;
-  await idleListener.close();
+  // Keep the port bound while the unavailable agent drops health probes.
+  let ready = false;
+  const agent = createFakeAgent(() => ready);
+  const agentListener = await listen(agent.server);
+  const agentPort = agentListener.port;
   const hub = await listen(http.createServer(createRegistrationApp(createDeps(store, log))));
   try {
     const config = simulatorConfig(hub.port, TOKEN, agentPort);
     const early = await runAgentSimulator(config, { firstWaitMs: 5, maxAttempts: 3 });
-    // 503 ist wiederholbar — der Agent gibt nicht auf, er wartet.
+    // A failed probe must not consume the registration token.
     assert.deepEqual(early, { outcome: "exhausted", attempts: 3, lastStatus: 503 });
-    // ⚠️ Der Kern: nichts ist verbraucht. Läge die Gegenprobe hinter dem
-    // Verbrauch, hätte dieser Arm sein Einmal-Token verloren, ohne angemeldet
-    // zu sein — und der Weg zurück wäre ein neues Archiv.
     assert.equal(store.host.state, "pending");
     assert.equal(store.host.tokenHash, hashRegistrationToken(TOKEN));
     assert.equal(store.host.failedAttempts, 0);
     assert.equal(store.consumeRuns, 0);
+    assert.equal(agent.server.listening, true);
+    assert.equal((agent.server.address() as AddressInfo).port, agentPort);
 
-    // Jetzt steht der Agent — derselbe Versuch mit demselben Token trägt.
-    const agent = createFakeAgent();
-    const agentListener = await listen(agent.server, agentPort);
-    try {
-      const late = await runAgentSimulator(config, { firstWaitMs: 5, maxAttempts: 3 });
-      assert.deepEqual(late, { outcome: "registered", attempts: 1 });
-      assert.equal(store.host.state, "registered");
-      assert.equal(store.host.agentUrl, `http://${TUNNEL_ADDRESS}:${agentPort}`);
-    } finally {
-      await agentListener.close();
-    }
+    ready = true;
+    const late = await runAgentSimulator(config, { firstWaitMs: 5, maxAttempts: 3 });
+    assert.deepEqual(late, { outcome: "registered", attempts: 1 });
+    assert.equal(store.host.state, "registered");
+    assert.equal(store.host.agentUrl, `http://${TUNNEL_ADDRESS}:${agentPort}`);
+    assert.deepEqual(agent.paths, ["GET /health"]);
   } finally {
     await hub.close();
+    if (agent.server.listening) await agentListener.close();
   }
 });

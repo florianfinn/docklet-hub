@@ -1,3 +1,4 @@
+import { DEFAULT_SELF_HEALING_CONFIG } from "contract";
 // ⚠️ Die Reihenfolge der Importe ist BEDEUTUNG: der DOM muss stehen, bevor
 // React geladen wird (siehe `dom-harness.tsx`).
 import { renderInDom, settle } from "./dom-harness.js";
@@ -46,6 +47,8 @@ type Call = { method: string; url: string; body: unknown };
 // contract since #248, and a fixture without a key fails there.
 const SETTINGS: Settings = {
   theme: DEFAULT_GLOBAL_THEME,
+        runtime: { applyComposeDefinition: true },
+        selfHealing: { config: DEFAULT_SELF_HEALING_CONFIG, revision: 1, hosts: [] },
   logs: { tailLines: 500 },
   containers: { showSystem: false },
   network: {

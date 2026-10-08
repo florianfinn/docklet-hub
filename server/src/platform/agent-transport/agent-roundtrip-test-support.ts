@@ -31,6 +31,10 @@ import type { AgentTarget } from "./protocol.js";
 
 const AGENT_SRC = new URL("../../../../agent/src/", import.meta.url);
 
+export async function loadAgentModule<T>(file: string): Promise<T> {
+  return (await import(new URL(file, AGENT_SRC).href)) as T;
+}
+
 /** A container id the agent accepts: 64 hex characters. */
 export const CONTAINER_ID = "c0ffee".padEnd(64, "0");
 export const CONTAINER_NAME = "demo-web";
@@ -114,6 +118,11 @@ function installFakeDocker(modules: AgentModules, projectDir: string): void {
     async inspect(id: string) {
       if (!known(id)) throw gone();
       return inspectOf(projectDir);
+    },
+    async listWithComposeLabels() {
+      const inspect = inspectOf(projectDir) as { Config: { Labels: Record<string, string> } };
+      return [{ id: CONTAINER_ID, name: CONTAINER_NAME, image: "nginx:1.27",
+        imageId: "sha256:" + "1".repeat(64), status: "running", labels: inspect.Config.Labels }];
     },
     async listContainerIds() {
       return [CONTAINER_ID];
@@ -222,7 +231,7 @@ export async function startAgent(): Promise<AgentUnderTest> {
     DOCKER_AGENT_SELF_UPDATE_DIR: path.join(state, "self-update")
   });
 
-  const load = async <T>(file: string): Promise<T> => (await import(new URL(file, AGENT_SRC).href)) as T;
+  const load = loadAgentModule;
   const { handleRequest } = await load<Pick<AgentModules, "handleRequest">>("dispatch.ts");
   const { engine } = await load<Pick<AgentModules, "engine">>("runtime/state.ts");
   const { rawOps } = await load<Pick<AgentModules, "rawOps">>("runtime/raw-ops.ts");

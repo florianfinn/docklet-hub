@@ -172,8 +172,8 @@ die Vertragsnummer (`version.ts`). Die Regeln oben gelten, mit drei Zusätzen:
   Grenze:** `since(z.optional(…), 3)` (`version.ts`) trägt es in
   `contractSince` ein und lässt das Schema unverändert. Optional ist es, weil
   ein Agent unter dieser Nummer es weder sendet noch liest. Ändert sich, was
-  ein Aufrufer bemerkt, steigt `CONTRACT_VERSION`; die Geschichte steht in
-  `version.ts`.
+  ein Aufrufer bemerkt, steigt `CONTRACT_VERSION`; die Geschichte steht
+  im Abschnitt „Vertragsversionen“.
 
 Jeder Wert ist englisch, seit Vertrag 6 (#278); ein Wächter
 (`web/tests/agent-contract-language.test.mjs`) geht die Schemas durch. Der
@@ -181,3 +181,20 @@ Vertragstest
 (`server/src/features/*/agent-roundtrip.test.ts`,
 `server/src/domain/hosts/self-update-roundtrip.test.ts`) lässt den Agent-Client des Hubs
 im selben Prozess gegen die echten Handler sprechen.
+
+## Vertragsversionen
+
+| Version | Änderung |
+| --- | --- |
+| 1 | v0.28.0: erster nummerierter Vertrag (#79). |
+| 2 | v0.29.0: Registry-Feld `observeOnly` (#78). |
+| 3 | v0.31.0: Registry-Feld `externallyManaged` (#78). |
+| 4 | Games-Laufzeitrouten entfallen aus der Routentabelle (#276). |
+| 5 | Jede Anfrage wird gegen ihr Schema geprüft; ungültige Anfragen erhalten `400 invalid-request` oder einen bestehenden Schlüssel mit `field` (#272). |
+| 6 | Alle ausgetauschten Werte sind englisch: Fehler, Stream-Arten, Schritte, Enums, Audit-Namen und die Route `/containers/:id/configuration` (#278). |
+| 7 | Der rohe Compose-Editor lehnt fremdverwaltete Stacks mit `403 externally-managed` ab (#56). |
+| 8 | Host-Erkennung meldet `externalManagement` mit `unraid`, `unraid-compose` und `unknown` (#5). |
+| 9 | Neue Stacks erhalten `POST /stacks/raw-preview`, Mount-Quellen und Einzelbestätigungen externer Bind-Quellen (#3). |
+| 10 | `GET /resources` liest Images, Volumes und Netzwerke (#10). |
+| 11 | Die Netzstufen-Kopfzeile entfällt; `GET /contract` meldet keine Netzstufen, fremde Aufrufer von `GET /monitor-events` erhalten `403 actor-not-allowed` (#152). |
+| 12 | Laufzeitaktionen für Container und Stacks mit erwartetem Status und Startzeit, Pflichtfeld `applyDefinition` bei Stack-Start und -Neustart, begrenzter Warteschlange, durchgängigem Fristbudget mit `runtime-deadline-exceeded`, nachgelesenen Service-Ergebnissen und NDJSON-Fortschritt einschließlich `queued` beim Warten auf einen laufenden Projektvorgang; `allowFallbackUp` und `capabilities.startRequiresApply` entfallen. `PUT /self-healing/config` verlangt `system:hub` und fünf Pflichtfelder, quittiert die atomar gespeicherte Konfiguration und erlaubt `null` als unbegrenzte Wartungsdauer-Vorgabe (#98). `GET /stop-intents` liefert dauerhaft gespeicherte manuelle Stopp-Absichten mit Akteur, die letzten 256 Ausfallklassifikationen und den Beobachtungsstatus; bei fehlender Beobachtung antwortet die Route mit `503`, ebenso `/monitor-events`. Erkannte Neustarts setzen keine manuelle Stopp-Absicht (#19). `GET /self-healing/status` liefert Budget, Wartung und Vorfälle mit derselben `503`-Semantik. `PUT`/`DELETE /self-healing/maintenance` und `POST /self-healing/incidents/acknowledge` ändern den Agent-Zustand als `system:hub` oder menschlicher Akteur; Vorfälle tragen stabile ID, bereinigte Ursache, Versuche, Handlungsschlüssel und Log-Auszug beziehungsweise Auslassungsgrund (#20). |

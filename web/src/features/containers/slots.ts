@@ -37,5 +37,5 @@ export type ContainerSlots = {
   /** Beside the name of a container row: its own marks, and the grip where the app offers it. */
   containerMarks?: (container: OverviewContainer, hostId: string, notice: ContainerRowNotice) => ReactNode;
   /** In front of the status text of a container row: the last measured usage. */
-  containerUsage?: (container: OverviewContainer) => ReactNode;
+  containerUsage?: (container: OverviewContainer, hostId: string) => ReactNode;
 };

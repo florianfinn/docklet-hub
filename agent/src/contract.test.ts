@@ -30,9 +30,8 @@ test("jede im Handler gesendete NDJSON-Art steht in der Vertragsauskunft", () =>
 });
 
 test("a changed contract needs a new contract number", () => {
-  // A different hash under the same number is drift. For an intentional
-  // change, increase the number and enter the new hash under it; the old
-  // entries stay as a readable version history.
+  // Published contract changes need a new number. Coordinated changes share
+  // the current unreleased version and its complete fingerprint.
   const hashes: Record<number, string> = {
     1: "fecdb3b4d12dbd31d6de36de743409b1dfde5a1b3dc9f11ecf5672b94557a873",
     2: "7aa61d5e42bb8ceb10c070eeb3299da7d1f92090de5e7dacd0fd7d5b534da3b4",
@@ -44,7 +43,8 @@ test("a changed contract needs a new contract number", () => {
     8: "acc30e178edd0b6862f3e59188e630184fefbe1bf9eab67bb6bfc9b18e2e64e1",
     9: "316edce52066f64f7ad6d774ca40a68bc16d8321f3400741ada74c5aeb2b69b6",
     10: "14858fa82db200035630dc67291bc686be0d6c3961cded9ec4d6fab926deafe2",
-    11: "131c3b084c20c29860f2b9647732c2e4d90756f7c2725a4b7465fb5940ac605b"
+    11: "131c3b084c20c29860f2b9647732c2e4d90756f7c2725a4b7465fb5940ac605b",
+    12: "885de46da8d7fa553c8608d95124fd154fba1e2773935c03dbfa64599b798505"
   };
   const actual = createHash("sha256").update(JSON.stringify(AGENT_CONTRACT)).digest("hex");
   assert.equal(actual, hashes[CONTRACT_VERSION]);
