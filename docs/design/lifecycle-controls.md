@@ -15,6 +15,20 @@ Ein Ziel ist ein einzelner Container, auch ein Service eines Stacks, oder ein ga
 
 Im Übergang ist ein Ziel nur, solange ein Vorgang des Hubs darauf läuft. Meldet Docker `restarting`, zählt der Container als laufend und zeigt, dass er wiederholt neu startet; gerade bei einem Absturz-Loop braucht der Nutzer Stopp und Neustart. `paused` zählt ebenfalls als laufend, `created` und `exited` als gestoppt. `dead`, `removing` und unbekannte Zustände sperren die Aktionen mit Grund. Ein Stack mit laufenden und gestoppten Services bietet alle drei Aktionen an, weil jede davon eine sinnvolle Absicht ausdrückt. Nur ein ausdrücklich mit dem Compose-Label `com.docker.compose.oneoff=True` gekennzeichneter Container gilt nach Exit-Code 0 als erledigter Einmalauftrag und hält das Startangebot des Stacks nicht offen. Exit-Code 0 oder Restart-Policy `no` allein beweisen keinen Einmalauftrag. Eine Stopp-Absicht hat immer Vorrang, auch bei einem gekennzeichneten Einmalauftrag. Ist die Absichtsbeobachtung unbekannt, bleibt Start verfügbar. Regulär oder manuell gestoppte Services halten Start auch nach Exit-Code 0 offen.
 
+Die Einmalauftragserkennung der Laufzeitaktionen ist von der Update-Abnahme
+getrennt. Das Update erkennt Abschlussaufträge aus der aufgelösten
+Compose-Definition: keine Restart-Policy oder `restart: "no"` und mindestens
+ein abhängiger Service desselben Projekts mit
+`condition: service_completed_successfully`. Nur dann zählt Exit 0 innerhalb
+der Startfrist als erfolgreiche Update-Abnahme. Alle anderen Services und
+Einzelcontainer sind im Update Dienste; jeder Exit scheitert. Container mit
+`com.docker.compose.oneoff=True` sind keine Update-Ziele.
+Prüfkriterium: Die Laufzeitansicht erkennt einen erledigten Einmalauftrag nur
+am oneoff-Label mit Exit 0 und erhält bei fehlendem Label das Startangebot;
+die Update-Vorschau und -Abnahme wenden ausschließlich die beiden
+Compose-Bedingungen an. Die vollständigen Update-Kriterien stehen in
+[update-and-rollback.md](update-and-rollback.md).
+
 Die Aktionen stehen direkt in der Zeile jedes Containers und Stacks und in der Detailansicht, nicht nur im Kontextmenü. Auf schmalen Ansichten bleiben sie als Schaltflächen mit ausreichender Trefferfläche erreichbar; nichts hängt allein an Hover oder Rechtsklick. Jede Schaltfläche ist per Tastatur erreichbar und trägt ihren Namen auch für Screenreader.
 
 ## Beschriftung nach wirksamem Modus
@@ -55,4 +69,4 @@ Ein gestoppter Container mit Stopp-Absicht zeigt „manuell gestoppt“ mit Zeit
 
 ## Update, Recreate und Entfernen
 
-Diese Aktionen folgen denselben Zuständen, Sperrgründen und Fortschrittsregeln, verändern aber Container oder Definitionen und fragen deshalb immer. Die Rückfrage nennt das Ziel, die betroffenen Services, was mit Daten geschieht und den Rückweg: Ein Update fällt beim Fehlschlag auf das vorherige Image mit der vorherigen Definition zurück ([update-and-rollback.md](update-and-rollback.md)), und Entfernen erhält Daten im Standardweg. Bei fremdverwalteten Containern sind sie gesperrt und nennen den zuständigen Verwalter. Vorschau, Ablauf und Rückweg im Einzelnen beschreibt [update-and-rollback.md](update-and-rollback.md); die Erfolgskriterien eines Updates entscheidet #13.
+Diese Aktionen folgen denselben Zuständen, Sperrgründen und Fortschrittsregeln, verändern aber Container oder Definitionen und fragen deshalb immer. Die Rückfrage nennt das Ziel, die betroffenen Services, was mit Daten geschieht und den Rückweg: Ein Update fällt beim Fehlschlag auf das vorherige Image mit der vorherigen Definition zurück ([update-and-rollback.md](update-and-rollback.md)), und Entfernen erhält Daten im Standardweg. Bei fremdverwalteten Containern sind sie gesperrt und nennen den zuständigen Verwalter. Vorschau, Ablauf, Erfolgskriterien und Rückweg eines Updates beschreibt [update-and-rollback.md](update-and-rollback.md).

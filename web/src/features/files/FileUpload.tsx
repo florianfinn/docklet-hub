@@ -1,3 +1,4 @@
+import { useFileSource } from "./source-context";
 import { Upload, X } from "lucide-react";
 import type { Messages } from "use-intl";
 import { useId, useRef, useState } from "react";
@@ -13,23 +14,8 @@ import { byteSize, useLanguage } from "../../platform/i18n";
 import { Button } from "../../platform/ui/shadcn/button";
 import { fileErrorKey } from "./file-errors";
 
-// Eine Datei in das GERADE GEZEIGTE Verzeichnis hochladen — Paket B5,
-// Etappe E5b (#5).
-//
-// ⚠️ `diagnostics.uploadable` SAGT ES VORHER, UND ES HÄNGT NICHT AN DEN RECHTEN
-// DES AGENTEN. `readable` und `deletable` sind die Rechte des Agenten am Host;
-// hochgeladen wird dagegen über den Docker-Daemon, und dafür zählt allein, ob
-// der Container dieses Verzeichnis SCHREIBBAR GEMOUNTET hat. Wer aus
-// `deletable` auf „darf hochladen" schließt, liegt in beide Richtungen falsch:
-// ein Verzeichnis, in dem der Agent löschen darf, kann im Container `ro`
-// gemountet sein, und eines, an dem er kein Recht hat, kann im Container
-// schreibbar sein.
-//
-// ⚠️ `diagnostics: null` HEISST „KEINE AUSKUNFT" UND NICHT „NEIN". Der Agent
-// konnte das Verzeichnis nicht beurteilen. Daraus eine Sperre zu machen wäre
-// eine Behauptung über eine Prüfung, die nie stattgefunden hat — der Versuch
-// geht deshalb hinaus, und der Arm entscheidet. Was der Betreiber stattdessen
-// bekommt, ist ein Satz, der die Lage benennt.
+// Upload capability includes source policy and mount mode; the agent rechecks it.
+// Unknown diagnostics defer to the agent.
 //
 // ⚠️ DIE GRÖSSE WIRD SEIT #136 VOR DEM SENDEN GEPRÜFT — mit der Zahl aus dem
 // Umschlag von `GET …/files` und NICHT mit einer Konstante dieser Fläche.
@@ -104,6 +90,7 @@ export function FileUpload({
   onUploaded: () => void;
 }) {
   const t = useTranslations();
+  const sourceId = useFileSource();
   const { language } = useLanguage();
   const verdict = uploadVerdict(listing);
 
@@ -151,6 +138,7 @@ export function FileUpload({
     setProgress({ sent: 0, total: chosen.size });
 
     void uploadContainerFile(hostId, containerId, listing.path, chosen, {
+      sourceId,
       signal: controller.signal,
       onProgress: setProgress
     })

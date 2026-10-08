@@ -1,4 +1,4 @@
-import type { ContainerShare } from "contract";
+import type { ContainerShare, FileSource } from "contract";
 
 import { normalizeSharePath } from "../../domain/containers/index.js";
 import type {
@@ -45,7 +45,7 @@ import {
 // code they become is one table for every surface
 // (`platform/http/agent-error-translation.ts`), written by the route.
 
-export type FilesAgent = Pick<
+export type FilesAgent = { listFileSources?: typeof agentClient.listFileSources } & Pick<
   typeof agentClient,
   | "listShareCandidates"
   | "listFiles"
@@ -95,17 +95,18 @@ export type BodyPlan<Result> =
 export type TextConflict = { reason: string; hash: string };
 
 export type FilesService = {
+  listSources: (ref: ContainerRef) => Promise<Failed | { ok: true; sources: FileSource[] }>;
   listCandidates: (ref: ContainerRef) => Promise<Failed | { ok: true; candidates: ShareCandidate[] }>;
   readShare: (ref: ContainerRef) => Promise<Failed | { ok: true; share: ContainerShare | null }>;
   chooseShare: (ref: ContainerRef, body: unknown) => Promise<Failed | { ok: true; share: ContainerShare }>;
   removeShare: (ref: ContainerRef) => Promise<Failed | { ok: true }>;
   list: (
     ref: ContainerRef,
-    query: { path: unknown }
+    query: { sourceId?: unknown; path: unknown }
   ) => Promise<Failed | { ok: true; listing: FileListing; maxUploadBytes: number }>;
   planDownload: (
     ref: ContainerRef,
-    query: { path: unknown }
+    query: { sourceId?: unknown; path: unknown }
   ) => Promise<
     | Failed
     | {
@@ -116,14 +117,14 @@ export type FilesService = {
         start: (signal: AbortSignal) => Promise<FileDownload>;
       }
   >;
-  readText: (ref: ContainerRef, query: { path: unknown }) => Promise<Failed | { ok: true; text: FileText }>;
+  readText: (ref: ContainerRef, query: { sourceId?: unknown; path: unknown }) => Promise<Failed | { ok: true; text: FileText }>;
   planUpload: (
     ref: ContainerRef,
-    query: { path: unknown; name: unknown; jsonBody: boolean }
+    query: { sourceId?: unknown; path: unknown; name: unknown; jsonBody: boolean }
   ) => Promise<BodyPlan<Failed | { ok: true; uploaded: FileUploaded }>>;
   planTextSave: (
     ref: ContainerRef,
-    query: { path: unknown; expectedHash: unknown; jsonBody: boolean }
+    query: { sourceId?: unknown; path: unknown; expectedHash: unknown; jsonBody: boolean }
   ) => Promise<BodyPlan<Failed | { ok: true; hash: string } | { ok: false; conflict: TextConflict }>>;
   applyAction: (ref: ContainerRef, body: unknown) => Promise<Failed | { ok: true; done: FileActionDone }>;
 };
@@ -189,7 +190,8 @@ export function createFilesService(deps: FilesServiceDeps): FilesService {
   async function locate(
     ref: ContainerRef,
     rawPath: unknown,
-    writing: RouteWriting
+    writing: RouteWriting,
+    sourceId?: unknown
   ): Promise<{ ok: true; access: ContainerAccess; at: SharePath } | Failed> {
     const path = queryText(rawPath);
     if (path === null) {
@@ -199,14 +201,23 @@ export function createFilesService(deps: FilesServiceDeps): FilesService {
         "„path“ ist ein Text — der Pfad innerhalb der Freigabe; leer heißt ihre Wurzel."
       );
     }
+    if (sourceId !== undefined && (typeof sourceId !== "string" || !sourceId)) return problem(400, "invalid-input", "Ungültige Quelle.");
     const opened = await deps.openContainer(ref, writing);
     if (!opened.ok) return opened;
+    if (typeof sourceId === "string") return { ok: true, access: opened.access, at: { share: "", sourceId, path } };
     const share = await requireShare(opened.access);
     if (!share.ok) return share;
     return { ok: true, access: opened.access, at: { share: share.share, path } };
   }
 
   return {
+    listSources: async (ref) => {
+      const opened = await deps.openContainer(ref, "reads");
+      if (!opened.ok) return opened;
+      const { target, container, options } = opened.access;
+      const sources = await asked(() => (agent.listFileSources ?? agentClient.listFileSources)(target, container.id, options));
+      return sources.ok ? { ok: true, sources: sources.value } : sources;
+    },
     listCandidates: async (ref) => {
       const opened = await deps.openContainer(ref, "reads");
       if (!opened.ok) return opened;
@@ -283,7 +294,7 @@ export function createFilesService(deps: FilesServiceDeps): FilesService {
     },
 
     list: async (ref, query) => {
-      const place = await locate(ref, query.path, "reads");
+      const place = await locate(ref, query.path, "reads", query.sourceId);
       if (!place.ok) return place;
       const { target, container, options } = place.access;
       const listing = await asked(() => agent.listFiles(target, container.id, place.at, options));
@@ -297,7 +308,7 @@ export function createFilesService(deps: FilesServiceDeps): FilesService {
     },
 
     planDownload: async (ref, query) => {
-      const place = await locate(ref, query.path, "reads");
+      const place = await locate(ref, query.path, "reads", query.sourceId);
       if (!place.ok) return place;
       if (place.at.path === "") {
         // The agent answered this with `path-traversal` — it downloads no
@@ -313,7 +324,7 @@ export function createFilesService(deps: FilesServiceDeps): FilesService {
     },
 
     readText: async (ref, query) => {
-      const place = await locate(ref, query.path, "reads");
+      const place = await locate(ref, query.path, "reads", query.sourceId);
       if (!place.ok) return place;
       const { target, container, options } = place.access;
       const text = await asked(() => agent.readFileText(target, container.id, place.at, options));
@@ -341,7 +352,7 @@ export function createFilesService(deps: FilesServiceDeps): FilesService {
           "Der Rumpf eines Uploads sind Bytes („application/octet-stream“) und kein JSON."
         );
       }
-      const place = await locate(ref, query.path, "writes");
+      const place = await locate(ref, query.path, "writes", query.sourceId);
       if (!place.ok) return place;
       const { target, container, options } = place.access;
       return {
@@ -402,7 +413,7 @@ export function createFilesService(deps: FilesServiceDeps): FilesService {
           "Der Rumpf ist der Text selbst („text/plain; charset=utf-8“) und kein JSON."
         );
       }
-      const place = await locate(ref, query.path, "writes");
+      const place = await locate(ref, query.path, "writes", query.sourceId);
       if (!place.ok) return place;
       const { target, container, options } = place.access;
       return {
@@ -453,7 +464,7 @@ export function createFilesService(deps: FilesServiceDeps): FilesService {
     // The one route of this surface that carries an INSTRUCTION instead of a
     // content, hence `POST` and not `PUT`.
     applyAction: async (ref, body) => {
-      const { action, path, name } = (body ?? {}) as { action?: unknown; path?: unknown; name?: unknown };
+      const { action, path, name, sourceId } = (body ?? {}) as { action?: unknown; path?: unknown; name?: unknown; sourceId?: unknown };
       const agentAction = typeof action === "string" ? AGENT_ACTIONS.get(action) : undefined;
       if (!agentAction) {
         return problem(400, "invalid-input", `„action“ ist einer von: ${[...AGENT_ACTIONS.keys()].join(", ")}.`);
@@ -472,7 +483,8 @@ export function createFilesService(deps: FilesServiceDeps): FilesService {
 
       const opened = await deps.openContainer(ref, "writes");
       if (!opened.ok) return opened;
-      const share = await requireShare(opened.access);
+      if (sourceId !== undefined && (typeof sourceId !== "string" || !sourceId)) return problem(400, "invalid-input", "Ungültige Quelle.");
+      const share = sourceId ? { ok: true as const, share: "" } : await requireShare(opened.access);
       if (!share.ok) return share;
       const { target, container, options } = opened.access;
 
@@ -485,7 +497,8 @@ export function createFilesService(deps: FilesServiceDeps): FilesService {
           container.id,
           share.share,
           { action: agentAction, path, ...(name === undefined ? {} : { name }) },
-          options
+          options,
+          typeof sourceId === "string" ? sourceId : undefined
         )
       );
       return done.ok ? { ok: true, done: done.value } : done;

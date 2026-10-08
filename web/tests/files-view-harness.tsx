@@ -360,6 +360,7 @@ export function stubHub(options: {
     const query = url.includes("?") ? new URLSearchParams(url.slice(url.indexOf("?") + 1)) : new URLSearchParams();
     const at = query.get("path") ?? "";
 
+    if (url.includes("/file-sources")) return Promise.resolve(json({ sources: [] }));
     if (url.includes("/share-candidates")) {
       return Promise.resolve(json({ candidates: options.candidates ?? [] }));
     }

@@ -188,6 +188,7 @@ export type UpOptions = {
   // mistakenly considers the current state identical.
   forceRecreate?: boolean;
   noRecreate?: boolean;
+  noStart?: boolean;
   wait?: boolean;
   timeoutMs?: number;
   signal?: AbortSignal;
@@ -207,6 +208,7 @@ export function buildUpArgs(project: ComposeProject, options: UpOptions): string
     "--no-build"
   ];
   if (options.wait !== false) args.push("--wait");
+  if (options.noStart) args.push("--no-start");
   if (options.noRecreate) args.push("--no-recreate");
   if (options.removeOrphans) args.push("--remove-orphans");
   if (options.pullNever) args.push("--pull", "never");

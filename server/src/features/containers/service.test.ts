@@ -53,7 +53,7 @@ function entry(name: string, project: string | null): ContainerOverviewEntry {
 const ONLINE: AgentHealth = {
   reachable: true,
   version: MIN_AGENT_VERSION,
-  contractVersion: 12,
+  contractVersion: 13,
   readOnly: true,
   entries: null
 };

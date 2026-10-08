@@ -8,7 +8,7 @@ import { stripCssComments } from "./strip-comments.mjs";
 // Die Syntaxfarben stehen unabhängig von der Host-Palette. Dieser Wächter
 // liest die tatsächlich gesetzten Werte und prüft ihre Lesbarkeit auf der
 // Karte des dunklen und des hellen Schemas.
-const syntax = stripCssComments(readFileSync(new URL("../src/features/compose/compose-syntax.css", import.meta.url), "utf8"));
+const syntax = stripCssComments(readFileSync(new URL("../src/platform/editor/syntax.css", import.meta.url), "utf8"));
 const tokens = stripCssComments(readFileSync(new URL("../src/platform/theme/tokens.css", import.meta.url), "utf8"));
 
 function block(source, selector) {
@@ -19,7 +19,7 @@ function block(source, selector) {
 }
 
 function colors(source) {
-  return new Map([...source.matchAll(/--compose-syntax-([a-z-]+):\s*(#[0-9a-f]{6})\s*;/g)].map((match) => [match[1], match[2]]));
+  return new Map([...source.matchAll(/--editor-syntax-([a-z-]+):\s*(#[0-9a-f]{6})\s*;/g)].map((match) => [match[1], match[2]]));
 }
 
 for (const [scheme, selector] of [["dunkel", ":root"], ["hell", '[data-scheme="light"]']]) {

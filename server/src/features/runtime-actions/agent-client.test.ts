@@ -97,7 +97,7 @@ for (const scope of ["container", "stream", "fallback"] as const) {
 }
 
 test("runtime requests default to streamFetch without an implicit header deadline", () => {
-  const source = readFileSync(new URL("./transport.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../../platform/agent-transport/runtime-transport.ts", import.meta.url), "utf8");
   assert.match(source, /fetchImpl: typeof fetch = streamFetch/);
   assert.doesNotMatch(source, /\?\? fetch\b/);
 });

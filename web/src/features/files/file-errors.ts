@@ -1,3 +1,5 @@
+import { sourceBlockerKeys } from "./source-blockers";
+import type { FileAccessError } from "contract";
 import type { Messages } from "use-intl";
 
 import { ApiError, errorCode, isOriginRefused } from "../../platform/http/transport";
@@ -77,6 +79,11 @@ const MESSAGE_BY_CONFLICT: Record<string, keyof Messages> = {
 
 export function fileErrorKey(error: unknown): keyof Messages {
   if (!(error instanceof ApiError)) return "fileErrorUnknown";
+  try {
+    const detail = JSON.parse(error.message) as { reason?: string; error?: string };
+    const reason = detail.reason ?? detail.error;
+    if (reason && Object.hasOwn(sourceBlockerKeys, reason)) return sourceBlockerKeys[reason as FileAccessError];
+  } catch { /* Non-JSON responses use the status fallback. */ }
   // ⚠️ EINE `403` HAT ZWEI ABSENDER (#188). `forbidden-origin` kommt von der
   // Herkunftsprüfung des Hubs, und der Arm hat die Anfrage nie gesehen — der
   // Satz über seine Allowlist aus `MESSAGE_BY_STATUS` wäre falsch.

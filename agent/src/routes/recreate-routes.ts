@@ -1,3 +1,4 @@
+import { projectLockKey } from "../project-lock.js";
 import { recreateRequestSchema } from "contract";
 import { actionFailureOf } from "../action-failure.js";
 import { parseImageRef } from "../image-ref.js";
@@ -226,7 +227,7 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
   };
 
   if (composeDir && composeProject && composeContext) {
-    await stackLocks.runExclusive(composeContext.project, async () => {
+    await stackLocks.runExclusive(projectLockKey({ registryProject: registry.get(containerId)?.compose?.projectName, projectName: composeContext.project }), async () => {
     if (!registry.isAllowed(containerId)) {
       audit.write({
         action: "recreate",
@@ -488,13 +489,8 @@ export async function handleRecreate(ctx: ContainerRouteContext): Promise<void> 
     });
     send(response, 200, { ok: true, ...recreated });
   };
-  // The engine fallback of a compose container must not run into the
-  // middle of a project-wide action either. Containers with no compose
-  // context at all have no shared stack and do not need the lock.
-  if (composeContext) {
-    await stackLocks.runExclusive(composeContext.project, engineRecreate).catch(recreateFailed);
-  } else {
-    await engineRecreate().catch(recreateFailed);
-  }
+  // Stable names keep standalone recreates inside the update mutation boundary.
+  const lockKey = projectLockKey({ registryProject: registry.get(containerId)?.compose?.projectName, projectName: composeContext?.project, containerName });
+  await stackLocks.runExclusive(lockKey, engineRecreate).catch(recreateFailed);
   return;
 }

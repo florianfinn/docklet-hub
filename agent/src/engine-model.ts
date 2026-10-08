@@ -1,3 +1,8 @@
+export type EngineOptions = {
+  socketPath: string;
+  timeoutMs?: number;
+};
+
 import type { InspectedContainer } from "./hardening.js";
 import type { ParsedImageRef } from "./image-ref.js";
 
@@ -105,6 +110,7 @@ export type RawStats = {
 };
 
 export type EngineInfo = {
+  DockerRootDir?: string;
   NCPU?: number;
   MemTotal?: number;
 };
@@ -196,6 +202,7 @@ export type RawInspect = {
     // loop — the state changes constantly. Without this field a restart loop
     // looks like a successful start.
     Restarting?: boolean;
+    Paused?: boolean;
     ExitCode?: number;
     Error?: string;
     StartedAt?: string;

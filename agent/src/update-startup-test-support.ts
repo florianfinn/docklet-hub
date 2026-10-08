@@ -1,0 +1,14 @@
+import { once } from "node:events";
+import { engine, dockerEvents, registry } from "./runtime/state.js";
+const mode = process.env.UPDATE_RECOVERY_TEST_CASE;
+engine.listWithComposeLabels = async () => { if (mode !== "base") throw new Error("synthetic engine unavailable"); return []; };
+engine.inspect = async () => { throw new Error("synthetic engine unavailable"); };
+engine.listContainerIds = async () => [];
+registry.allowedIds = () => [];
+dockerEvents.start = () => {};
+dockerEvents.stop = async () => {};
+const { server } = await import("./index.js");
+if (!server.listening) await once(server, "listening");
+const address = server.address();
+if (!address || typeof address === "string") throw new Error("Missing test listener");
+process.send?.({ port: address.port });

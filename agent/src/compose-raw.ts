@@ -65,6 +65,7 @@ export function validateRawContent(content: unknown): string[] {
   }
   // A NUL byte cannot occur in YAML, but it can in an attempt to cut off a
   // path or name check somewhere behind it.
+  if (Buffer.from(content, "utf8").toString("utf8") !== content) errors.push("content: invalid UTF-8");
   if (content.includes("\0")) {
     errors.push("content: contains a NUL byte");
   }

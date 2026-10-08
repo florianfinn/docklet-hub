@@ -397,6 +397,7 @@ test("GET_ROUTES_WITH_EFFECT trägt beide Sorten und keinen Pfad mit /api", () =
       "/hosts/:hostId/archive",
       "/hosts/:hostId/containers/:containerId/logs-stream",
       "/hosts/:hostId/containers/:containerId/stats",
+      "/hosts/:hostId/containers/:containerId/file-sources",
       "/hosts/:hostId/containers/:containerId/share-candidates",
       "/hosts/:hostId/containers/:containerId/files",
       "/hosts/:hostId/containers/:containerId/file",

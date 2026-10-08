@@ -1,4 +1,8 @@
-import fs from "node:fs";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { fileSourcePolicy } from "../runtime/file-sources.js";
+import { protectionOf, definitionBlocked } from "../file-sources.js";
+import { projectLockKey } from "../project-lock.js";
 import {
   fileActionRequestSchema,
   fileTextWriteRequestSchema,
@@ -22,24 +26,18 @@ import {
   EnvRedactionUnavailableError
 } from "../env-file.js";
 import {
-  renameEntry,
-  containerPathFor,
-  shareDiagnostics,
-  readTextFile,
-  listDirectory,
-  deleteEntry,
-  openBelow,
   checkEntryPath,
   checkName
 } from "../webftp.js";
 import {
   requiredComposeContextForFileLogs
 } from "../log-compose-context.js";
-import { registry, audit } from "../runtime/state.js";
+import { KeyedMutexBusyError } from "../concurrency.js";
+import { stackLocks, registry, audit, engine } from "../runtime/state.js";
 import { composeBasePath } from "../runtime/containers.js";
 import { checkWebftpAccess, writeIntoShare } from "../runtime/access.js";
 import {
-  send,
+  send as sendHttp,
   readJsonBody,
   parseRequest,
   rejectRequest,
@@ -48,27 +46,19 @@ import {
   ContainerRouteContext
 } from "../runtime/http.js";
 import { gate } from "../runtime/gate.js";
-
-// --- Share candidates: the mounts of this container (S20) ---------------
-//
-// The UI offers a container's bind mounts as shares that can be switched on
-// individually, instead of making the operator type a path that is already in
-// their Compose file anyway.
-//
-// ⚠️ This is an OFFER, not a share. This route only returns what would be
-// eligible; enabling happens exclusively via the registry (and thus via a
-// deliberate click, §5.3).
-//
-// Three filters, and each has a reason:
-//   * ONLY bind mounts. A named volume cannot be listed (the engine has no
-//     `ls`), so it would be an offer that leads nowhere.
-//   * ONLY inside the project directory of THIS container. A mount can point
-//     anywhere — `/var/run/docker.sock`, `/etc/localtime`, a neighbour's
-//     directory. The root stays the same as for every other file route.
-//   * ONLY directories. A file mount (nginx.conf) is not a directory one
-//     could browse.
-//
-// The response reveals the structure of the project directory.
+function send(response: ContainerRouteContext["response"], status: number, body: Record<string, unknown>): void {
+  const aliases: Record<string, string> = { replaced: "file-replaced", "no-write-permission": "not-writable", missing: "not-readable", "not-empty": "already-exists" };
+  const error = typeof body.error === "string" ? body.error.split(":")[0] : undefined;
+  sendHttp(response, status, error === undefined ? body : { ...body, error: aliases[error] ?? error });
+}
+function validPath(ctx: ContainerRouteContext, value: string, action: string, name?: string): boolean {
+  const entry = checkEntryPath(value, "/selected-source");
+  const checked = entry.ok && name !== undefined ? checkName(name) : entry;
+  if (checked.ok) return true;
+  audit.write({ action, containerId: ctx.containerId, containerName: null, actor: ctx.actor, outcome: "denied", reason: checked.reason });
+  send(ctx.response, 400, { error: checked.reason });
+  return false;
+}
 export async function handleShareCandidates(ctx: ContainerRouteContext): Promise<void> {
   const { response, actor, containerId } = ctx;
   const result = await gate(containerId, {
@@ -101,24 +91,26 @@ export async function handleShareCandidates(ctx: ContainerRouteContext): Promise
   }
 
   const root = normalizePath(composeContext.projectDir);
+  const policy = await fileSourcePolicy();
   const candidates: Array<{ relative: string; destination: string; writable: boolean }> = [];
   for (const mount of result.inspect.Mounts ?? []) {
     if (mount.Type !== "bind" || !mount.Source || !mount.Destination) continue;
     const source = normalizePath(mount.Source);
     if (!isInsideBase(source, root)) continue;
+    const protection = await protectionOf(source, policy);
+    if (["backup", "agent", "unknown"].includes(protection) || await definitionBlocked(source, policy)) continue;
     let isDirectory: boolean;
     try {
-      isDirectory = (await fs.promises.stat(source)).isDirectory();
+      const stat = await engine.statArchive(containerId, mount.Destination);
+      isDirectory = !!stat && (stat.mode & 0x80000000) !== 0 && !stat.linkTarget;
     } catch {
       continue;
     }
     if (!isDirectory) continue;
     candidates.push({
-      // Only the RELATIVE path goes out — the absolute one reveals the
-      // structure of the host (§16.3).
       relative: source.slice(root.length + 1),
       destination: normalizePath(mount.Destination),
-      writable: mount.RW !== false
+      writable: mount.RW !== false && protection === "none"
     });
   }
   candidates.sort((a, b) => a.relative.localeCompare(b.relative, "de"));
@@ -126,48 +118,20 @@ export async function handleShareCandidates(ctx: ContainerRouteContext): Promise
   send(response, 200, { candidates });
   return;
 }
-
-// --- Web-FTP in the share directory (S19 — K6, §5.3) --------------------
-//
-// Four routes, one pre-check (checkWebftpAccess) and two different paths into
-// the file system. The second point is the one that needs explaining, so here
-// it is once in full:
-//
-//   * READING goes via the HOST file system. That is the same path as for the
-//     file logs (S8) with the same guarantees (O_NOFOLLOW, realpath against
-//     the share, device/inode against TOCTOU) — and it also works for a
-//     STOPPED container, which for a game server is half the point.
-//
-//   * WRITING goes via the DAEMON (put-archive) as soon as something is
-//     CREATED — an uploaded file, a new folder. The reason is ownership: the
-//     agent runs as `node` without CAP_CHOWN and could not hand a file over to
-//     the service that is supposed to read it. The daemon runs as root and
-//     sets uid/gid from the tar header — read off the TARGET DIRECTORY. In
-//     detail in tar.ts.
-//
-//   * REMOVING and RENAMING go via the host file system again, because the
-//     engine simply has no operation for them. That needs write permission on
-//     the directory; where it is missing, the diagnostics in the listing say so
-//     BEFOREHAND, instead of a delete failing afterwards.
-//
-// Listing the share (or a subdirectory in it).
 export async function handleFileList(ctx: ContainerRouteContext): Promise<void> {
   const { response, url, actor, containerId } = ctx;
-  // TRANSITION (#418, reasoning in request-keys.ts): the dashboard sends
-  // `share` and `path`; queryObject still accepts the legacy names. Without
-  // them the access check would find no share, and every path would be the
-  // root of the share. Goes away once a dashboard of this version or later
-  // runs everywhere.
   const query = parseRequest(shareQuerySchema, queryObject(url));
   if (!query.ok) {
     rejectRequest(ctx, { action: "webftp-list", containerId, containerName: null }, query.rejection);
     return;
   }
+  if (!validPath(ctx, query.value.path, "webftp-list")) return;
   const before = await checkWebftpAccess(containerId, {
     mutating: false,
     action: "webftp-read",
     actor,
-    share: query.value.share
+    share: query.value.share,
+    sourceId: query.value.sourceId
   });
   if (!before.ok) {
     audit.write({
@@ -199,7 +163,7 @@ export async function handleFileList(ctx: ContainerRouteContext): Promise<void> 
     return;
   }
 
-  const listing = await listDirectory(checked.absolute, before.shareAbsolute);
+  const listing = await before.files.list(checked.absolute);
   if (!listing.ok) {
     audit.write({
       action: "webftp-list",
@@ -209,15 +173,10 @@ export async function handleFileList(ctx: ContainerRouteContext): Promise<void> 
       outcome: "denied",
       reason: listing.reason
     });
-    send(response, listing.reason === "missing" ? 404 : 400, { error: listing.reason });
+    send(response, listing.reason === "not-readable" ? 404 : 400, { error: listing.reason });
     return;
   }
 
-  const diagnostics = await shareDiagnostics(checked.absolute, before.shareAbsolute);
-  // Can this directory be written to at all? The answer depends not on
-  // permissions but on whether the container sees it — put-archive writes
-  // into ITS file system, not the host's.
-  const target = containerPathFor(checked.absolute, before.inspect.Mounts ?? []);
 
   audit.write({
     action: "webftp-list",
@@ -227,51 +186,31 @@ export async function handleFileList(ctx: ContainerRouteContext): Promise<void> 
     outcome: "allowed",
     reason: checked.relative || "."
   });
-
-  // ⚠️ Only the RELATIVE path goes out. The absolute one reveals the
-  // structure of the host, and this route is also open via a grant —
-  // the same line as for the log sources (§16.3).
   send(response, 200, {
     share: before.shareRelative,
     path: checked.relative,
     entries: listing.list.entries,
     truncated: listing.list.truncated,
-    diagnostics: diagnostics.ok
-      ? {
-          readable: diagnostics.diagnostics.readable,
-          deletable: diagnostics.diagnostics.deletable,
-          uid: diagnostics.diagnostics.uid,
-          gid: diagnostics.diagnostics.gid,
-          // Uploading goes via the daemon and therefore does NOT depend on
-          // the agent's permissions, only on whether the container has
-          // mounted this directory writable.
-          uploadable: target.ok && target.writable
-        }
-      : null
+    diagnostics: { ...listing.diagnostics, deletable: await before.entryActions.available(checked.relative), uploadable: before.uploadable }
   });
   return;
 }
-
-// Download (GET) or upload (PUT) a file.
-export async function handleFile(ctx: ContainerRouteContext): Promise<void> {
+async function handleFileUnlocked(ctx: ContainerRouteContext): Promise<void> {
   const { request, response, url, actor, containerId } = ctx;
   const writing = request.method === "PUT";
   const auditAction = writing ? "webftp-upload" : "webftp-download";
-  // TRANSITION (#418, reasoning in request-keys.ts): the dashboard sends
-  // `share` and `path`; queryObject still accepts the legacy names. Without
-  // them the access check would find no share, and every path would be the
-  // root of the share. Goes away once a dashboard of this version or later
-  // runs everywhere.
   const query = parseRequest(fileUploadQuerySchema, queryObject(url));
   if (!query.ok) {
     rejectRequest(ctx, { action: auditAction, containerId, containerName: null }, query.rejection);
     return;
   }
+  if (!validPath(ctx, query.value.path, auditAction, writing ? query.value.name : undefined)) return;
   const before = await checkWebftpAccess(containerId, {
     mutating: writing,
     action: writing ? "webftp-write" : "webftp-read",
     actor,
-    share: query.value.share
+    share: query.value.share,
+    sourceId: query.value.sourceId
   });
   if (!before.ok) {
     audit.write({
@@ -304,53 +243,17 @@ export async function handleFile(ctx: ContainerRouteContext): Promise<void> {
       before.shareAbsolute
     );
     if (!checked.ok) return void reject(400, checked.reason);
-    if (!checked.relative) return void reject(400, "path-traversal");
 
-    const opened = await openBelow(checked.absolute, before.shareAbsolute, "file");
-    if (!opened.ok) {
-      return void reject(opened.reason === "missing" ? 404 : 400, opened.reason);
-    }
-
-    audit.write({
-      action: auditAction,
-      containerId,
-      containerName: before.containerName,
-      actor,
-      outcome: "allowed",
-      reason: `${checked.relative} (${opened.entry.size} B)`
-    });
-
-    // ⚠️ NO redaction. Unlike the log this is right here: a file is delivered
-    // byte for byte, and a `••••` in the middle of a save game breaks it
-    // instead of making it safe. The boundary is not the content but the
-    // LOCATION — the share the operator chose, plus the block list for `.env`
-    // and Compose files.
-    const size = opened.entry.size;
-    response.writeHead(200, {
-      "content-type": "application/octet-stream",
-      "content-length": String(size),
-      "cache-control": "no-store"
-    });
-    if (size === 0) {
-      await opened.entry.handle.close().catch(() => {});
-      response.end();
-      return;
-    }
-    // ⚠️ Hard-limited to the measured size. A log file that keeps growing
-    // during the download would otherwise deliver more bytes than
-    // `content-length` announces — and that is not a cosmetic flaw but a broken
-    // HTTP frame on which the next request on the same connection gets stuck.
-    const stream = opened.entry.handle.createReadStream({
-      autoClose: true,
-      start: 0,
-      end: size - 1
-    });
-    stream.on("error", () => response.destroy());
-    stream.pipe(response);
+    const loaded = await before.files.download(checked.absolute);
+    if (!loaded.ok) return void reject("missing" in loaded && loaded.missing ? 404 : 400, loaded.reason);
+    audit.write({ action: auditAction, containerId, containerName: before.containerName, actor, outcome: "allowed", reason: checked.relative });
+    response.writeHead(200, { "content-type": "application/octet-stream", "content-length": String(loaded.size), "cache-control": "no-store" });
+    try { await pipeline(Readable.from(loaded.stream), response); }
+    catch { response.destroy(); }
+    finally { await loaded.cancel(); }
     return;
   }
 
-  // --- Upload ----------------------------------------------------------
   const validatedDestination = checkEntryPath(
     query.value.path,
     before.shareAbsolute
@@ -368,10 +271,8 @@ export async function handleFile(ctx: ContainerRouteContext): Promise<void> {
   }
 
   const result = await writeIntoShare({
-    containerId,
-    inspect: before.inspect,
+    files: before.files,
     targetDirectory: validatedDestination.absolute,
-    shareAbsolute: before.shareAbsolute,
     name: validatedName.name,
     content: content
   });
@@ -388,33 +289,22 @@ export async function handleFile(ctx: ContainerRouteContext): Promise<void> {
   send(response, 200, { ok: true, name: validatedName.name, size: content.length });
   return;
 }
-
-// Read (GET) and save (PUT) a text file in the editor.
-//
-// Separate from `file` although it is the same file: the editor delivers
-// text plus hash and accepts text plus expected hash. That is the same
-// mechanism as for the Compose and `.env` editor (§13.4) and for the same
-// reason — the dashboard and the service in the container share the file, and
-// overwriting blindly is the one error you no longer see afterwards.
-export async function handleFileText(ctx: ContainerRouteContext): Promise<void> {
+async function handleFileTextUnlocked(ctx: ContainerRouteContext): Promise<void> {
   const { request, response, url, actor, containerId } = ctx;
   const writing = request.method === "PUT";
   const auditAction = writing ? "webftp-text-write" : "webftp-text-read";
-  // TRANSITION (#418, reasoning in request-keys.ts): the dashboard sends
-  // `share` and `path`; queryObject still accepts the legacy names. Without
-  // them the access check would find no share, and every path would be the
-  // root of the share. Goes away once a dashboard of this version or later
-  // runs everywhere.
   const query = parseRequest(shareQuerySchema, queryObject(url));
   if (!query.ok) {
     rejectRequest(ctx, { action: auditAction, containerId, containerName: null }, query.rejection);
     return;
   }
+  if (!validPath(ctx, query.value.path, auditAction)) return;
   const before = await checkWebftpAccess(containerId, {
     mutating: writing,
     action: writing ? "webftp-write" : "webftp-read",
     actor,
-    share: query.value.share
+    share: query.value.share,
+    sourceId: query.value.sourceId
   });
   if (!before.ok) {
     audit.write({
@@ -446,12 +336,11 @@ export async function handleFileText(ctx: ContainerRouteContext): Promise<void> 
     before.shareAbsolute
   );
   if (!checked.ok) return void reject(400, checked.reason);
-  if (!checked.relative) return void reject(400, "path-traversal");
 
-  const loaded = await readTextFile(checked.absolute, before.shareAbsolute);
+  const loaded = await before.files.text(checked.absolute);
 
   if (!writing) {
-    if (!loaded.ok) return void reject(loaded.reason === "missing" ? 404 : 400, loaded.reason);
+    if (!loaded.ok) return void reject(loaded.reason === "not-readable" ? 404 : 400, loaded.reason);
     audit.write({
       action: auditAction,
       containerId,
@@ -463,13 +352,6 @@ export async function handleFileText(ctx: ContainerRouteContext): Promise<void> 
     send(response, 200, { path: checked.relative, content: loaded.content, hash: loaded.hash });
     return;
   }
-
-  // ⚠️ The expected hash is mandatory and has no "don't care" value —
-  // the same rule as in compose-store.ts. An editor that may save without a
-  // hash is an editor that silently discards other people's changes. The
-  // schema refuses a missing one (`expected-hash-missing`), as it refuses a
-  // missing content (`content-missing`) and one above MAX_TEXT_BYTES
-  // (`413 too-large`).
   const write = parseRequest(fileTextWriteRequestSchema, await readJsonBody(request));
   if (!write.ok) {
     rejectRequest(
@@ -481,7 +363,8 @@ export async function handleFileText(ctx: ContainerRouteContext): Promise<void> 
     return;
   }
   const { content: newContent, expectedHash: expected } = write.value;
-  if (!loaded.ok) return void reject(loaded.reason === "missing" ? 404 : 400, loaded.reason);
+  if (newContent.includes("\0") || Buffer.from(newContent).toString("utf8") !== newContent) return void reject(400, "not-a-text-file");
+  if (!loaded.ok) return void reject(loaded.reason === "not-readable" ? 404 : 400, loaded.reason);
   if (loaded.hash !== expected) {
     audit.write({
       action: auditAction,
@@ -494,32 +377,22 @@ export async function handleFileText(ctx: ContainerRouteContext): Promise<void> 
     send(response, 409, { error: "file-changed-externally", hash: loaded.hash });
     return;
   }
-
-  // Writing goes the same way as an upload: put-archive with inherited
-  // ownership. Because the file exists, it inherits from itself — owner and
-  // permissions stay as they were.
-  const parts = checked.relative.split("/");
-  // ⚠️ The derived name goes through THE SAME gate as an upload's. It does
-  // come from an already checked path, but `checkEntryPath` splits on literal
-  // slashes and thus judges something different from `checkName`, which
-  // checks the name byte by byte (S19 security review). Two write entry points
-  // with two different gates are the place where the next refactor slips.
+  const parts = (checked.relative || before.shareAbsolute.split("/").pop() || "").split("/");
   const validatedName = checkName(parts.pop() ?? "");
   if (!validatedName.ok) return void reject(400, validatedName.reason);
-  // The target directory is derived from the same, already checked path and
-  // sent through the same check once more — not built from a second value
-  // supplied by the caller.
-  const parentPath = checkEntryPath(parts.join("/"), before.shareAbsolute);
+  const parentPath = checked.relative ? checkEntryPath(parts.join("/"), before.shareAbsolute) : { ok: true as const, absolute: before.shareAbsolute.slice(0, before.shareAbsolute.lastIndexOf("/")) };
   if (!parentPath.ok) return void reject(400, parentPath.reason);
   const result = await writeIntoShare({
-    containerId,
-    inspect: before.inspect,
+    files: before.files,
     targetDirectory: parentPath.absolute,
-    shareAbsolute: before.shareAbsolute,
     name: validatedName.name,
-    content: Buffer.from(newContent, "utf8")
+    content: Buffer.from(newContent, "utf8"),
+    expectedHash: expected
   });
-  if (!result.ok) return void reject(result.status, result.reason);
+  if (!result.ok) {
+    if (result.hash) { send(response, 409, { error: result.reason, hash: result.hash }); return; }
+    return void reject(result.status, result.reason);
+  }
 
   audit.write({
     action: auditAction,
@@ -527,35 +400,18 @@ export async function handleFileText(ctx: ContainerRouteContext): Promise<void> 
     containerName: before.containerName,
     actor,
     outcome: "allowed",
-    // ⚠️ Only path and size — never the content. The audit log is
-    // append-only; whatever is in it once stays (§16.4.4).
     reason: `${checked.relative} (${Buffer.byteLength(newContent, "utf8")} B)`
   });
   send(response, 200, { ok: true, hash: hashOf(newContent) });
   return;
 }
-
-// Create, rename, delete folders.
-export async function handleFileAction(ctx: ContainerRouteContext): Promise<void> {
+async function handleFileActionUnlocked(ctx: ContainerRouteContext): Promise<void> {
   const { request, response, url, actor, containerId } = ctx;
-  // TRANSITION (#418, reasoning in request-keys.ts): the dashboard sends
-  // `share` and `path`; queryObject still accepts the legacy names. Without
-  // them the access check would find no share, and every path would be the
-  // root of the share. Goes away once a dashboard of this version or later
-  // runs everywhere.
   const query = parseRequest(shareQuerySchema, queryObject(url));
   if (!query.ok) {
     rejectRequest(ctx, { action: "webftp-unknown", containerId, containerName: null }, query.rejection);
     return;
   }
-  const before = await checkWebftpAccess(containerId, {
-    mutating: true,
-    action: "webftp-write",
-    actor,
-    share: query.value.share
-  });
-  // An unknown or missing action is refused here (`unknown-action`),
-  // before the access check: there is nothing to check access for.
   const parsedBody = parseRequest(fileActionRequestSchema, await readJsonBody(request));
   if (!parsedBody.ok) {
     rejectRequest(ctx, { action: "webftp-unknown", containerId, containerName: null }, parsedBody.rejection);
@@ -564,6 +420,14 @@ export async function handleFileAction(ctx: ContainerRouteContext): Promise<void
   const body = parsedBody.value;
   const fileAction = body.action;
   const auditAction = `webftp-${fileAction}`;
+  if (!validPath(ctx, body.path, auditAction, body.action === "delete" ? undefined : body.name)) return;
+  const before = await checkWebftpAccess(containerId, {
+    mutating: true,
+    action: "webftp-write",
+    actor,
+    share: query.value.share,
+    sourceId: query.value.sourceId
+  });
   if (!before.ok) {
     audit.write({
       action: auditAction,
@@ -598,12 +462,6 @@ export async function handleFileAction(ctx: ContainerRouteContext): Promise<void
       reason: reason
     });
   };
-
-  // TRANSITION (#418, reasoning in request-keys.ts): the dashboard
-  // sends `{ action, path, name? }`. Without the legacy name every folder
-  // operation would run on the empty path, i.e. on the SHARE ITSELF —
-  // renaming and deleting would hit the root instead of the intended entry.
-  // Goes away once a dashboard of this version or later runs everywhere.
   const checked = checkEntryPath(body.path, before.shareAbsolute);
   if (!checked.ok) return void reject(400, checked.reason);
 
@@ -611,10 +469,8 @@ export async function handleFileAction(ctx: ContainerRouteContext): Promise<void
     const validatedName = checkName(body.name);
     if (!validatedName.ok) return void reject(400, validatedName.reason);
     const result = await writeIntoShare({
-      containerId,
-      inspect: before.inspect,
+      files: before.files,
       targetDirectory: checked.absolute,
-      shareAbsolute: before.shareAbsolute,
       name: validatedName.name
     });
     if (!result.ok) return void reject(result.status, result.reason);
@@ -624,24 +480,43 @@ export async function handleFileAction(ctx: ContainerRouteContext): Promise<void
   }
 
   if (body.action === "rename") {
-    if (!checked.relative) return void reject(400, "path-blocked");
-    const validatedName = checkName(body.name);
-    if (!validatedName.ok) return void reject(400, validatedName.reason);
-    const result = await renameEntry(checked.absolute, validatedName.name, before.shareAbsolute);
-    if (!result.ok) {
-      return void reject(result.reason === "no-write-permission" ? 409 : 400, result.reason);
-    }
-    confirm(`${checked.relative} -> ${validatedName.name}`);
-    send(response, 200, { ok: true, name: validatedName.name });
-    return;
+    const name = checkName(body.name);
+    if (!name.ok) return void reject(400, name.reason);
   }
+  const boundary = await before.files.boundary(checked.absolute, true);
+  if (!boundary.ok) return void reject(403, boundary.reason);
+  if (body.action === "rename") {
+    const target = checkEntryPath([checked.relative.split("/").slice(0, -1).join("/"), body.name].filter(Boolean).join("/"), before.shareAbsolute);
+    if (!target.ok) return void reject(400, target.reason);
+    const destination = await before.files.boundary(target.absolute, true);
+    if (!destination.ok) return void reject(403, destination.reason);
+  }
+  const result = body.action === "rename" ? await before.entryActions.rename(checked.relative, body.name)
+    : await before.entryActions.delete(checked.relative);
+  if (!result.ok) return void reject(result.reason === "already-exists" || result.reason === "file-replaced" ? 409 : 403, result.reason);
+  confirm(checked.relative);
+  send(response, 200, result);
+}
 
-  // "delete": the schema allows exactly the three actions.
-  if (!checked.relative) return void reject(400, "path-blocked");
-  const result = await deleteEntry(checked.absolute, before.shareAbsolute);
-  if (!result.ok) {
-    return void reject(result.reason === "no-write-permission" ? 409 : 400, result.reason);
+async function withFileLock(ctx: ContainerRouteContext, operation: () => Promise<void>): Promise<void> {
+  if (ctx.request.method === "GET") return operation();
+  const anchor = registry.get(ctx.containerId)?.compose;
+  const inspect = anchor?.projectName ? null : await engine.inspect(ctx.containerId);
+  const labelProject = inspect?.Config?.Labels?.["com.docker.compose.project"];
+  const containerName = inspect?.Name?.replace(/^\//, "") ?? registry.get(ctx.containerId)?.containerName;
+  const key = projectLockKey({ registryProject: anchor?.projectName, labelProject, containerName, containerId: ctx.containerId });
+  try { await stackLocks.runExclusive(key, operation); }
+  catch (error) {
+    if (!(error instanceof KeyedMutexBusyError)) throw error;
+    send(ctx.response, 409, { error: "busy" });
   }
-  confirm(`${checked.relative} (${result.kind})`);
-  send(response, 200, { ok: true, kind: result.kind });
+}
+export async function handleFile(ctx: ContainerRouteContext): Promise<void> {
+  return withFileLock(ctx, () => handleFileUnlocked(ctx));
+}
+export async function handleFileText(ctx: ContainerRouteContext): Promise<void> {
+  return withFileLock(ctx, () => handleFileTextUnlocked(ctx));
+}
+export async function handleFileAction(ctx: ContainerRouteContext): Promise<void> {
+  return withFileLock(ctx, () => handleFileActionUnlocked(ctx));
 }

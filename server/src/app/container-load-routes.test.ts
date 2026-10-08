@@ -118,7 +118,7 @@ async function start(
       agentSecret: "s".repeat(32),
       config: { wireguardEndpoint: "hub.test", wireguardPort: 51821 },
       probeHost: () =>
-        Promise.resolve(options.health ?? { reachable: true, version: "0.32.0", contractVersion: 12, readOnly: false, entries: null }),
+        Promise.resolve(options.health ?? { reachable: true, version: "0.32.0", contractVersion: 13, readOnly: false, entries: null }),
       readHostInfo: (hostId) => (hostId === host.id ? hostInfo : null)
     })
   );

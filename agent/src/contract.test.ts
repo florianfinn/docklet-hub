@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import { AGENT_CONTRACT, CONTRACT_VERSION } from "./contract.js";
 import { REGISTRY_COMPOSE_ORIGINS } from "./registry.js";
 import { ROUTES } from "./route-policy.js";
-import { handlerSource } from "./handler-source-test-support.js";
+import { emittedNdjsonKinds } from "./ndjson-kind-test-support.js";
+import { handlerSources } from "./handler-source-test-support.js";
 
 test("die Vertragsauskunft liest die aktive Routen- und Registry-Politik", () => {
   assert.deepEqual(AGENT_CONTRACT.routes, ROUTES);
@@ -23,8 +24,7 @@ test("die Vertragsauskunft liest die aktive Routen- und Registry-Politik", () =>
 });
 
 test("jede im Handler gesendete NDJSON-Art steht in der Vertragsauskunft", () => {
-  const source = handlerSource();
-  const actual = [...new Set([...source.matchAll(/kind: "([a-z-]+)"/g)].map((match) => match[1]))].sort();
+  const actual = [...new Set(handlerSources().flatMap(({ text }) => emittedNdjsonKinds(text)))].sort();
   const listed = [...new Set(Object.values(AGENT_CONTRACT.ndjsonKinds).flat())].sort();
   assert.deepEqual(listed, actual);
 });
@@ -44,8 +44,19 @@ test("a changed contract needs a new contract number", () => {
     9: "316edce52066f64f7ad6d774ca40a68bc16d8321f3400741ada74c5aeb2b69b6",
     10: "14858fa82db200035630dc67291bc686be0d6c3961cded9ec4d6fab926deafe2",
     11: "131c3b084c20c29860f2b9647732c2e4d90756f7c2725a4b7465fb5940ac605b",
-    12: "885de46da8d7fa553c8608d95124fd154fba1e2773935c03dbfa64599b798505"
+    12: "885de46da8d7fa553c8608d95124fd154fba1e2773935c03dbfa64599b798505",
+    13: "8dc39161db34646280f75dcc102a9a2602a0c5f1675b314fb5622770bcb712e6"
   };
   const actual = createHash("sha256").update(JSON.stringify(AGENT_CONTRACT)).digest("hex");
   assert.equal(actual, hashes[CONTRACT_VERSION]);
+});
+
+test("NDJSON guard distinguishes target kinds and rejects unknown or unresolved emitted kinds", () => {
+  const source = 'const target = { kind: "container" }; const stack = { kind: "compose" }; sendLine(response, { kind: "start" } satisfies StreamLine);';
+  assert.deepEqual(emittedNdjsonKinds(source), ["start"]);
+  const listed = [...new Set(Object.values(AGENT_CONTRACT.ndjsonKinds).flat())];
+  assert.equal(emittedNdjsonKinds('sendLine(response, { kind: "unknown-stream-kind" })').every((kind) => listed.includes(kind)), false);
+  assert.deepEqual(emittedNdjsonKinds('import { sendLine as emit } from "./http.js"; emit(response, { kind: "unknown-stream-kind" })'), ["unknown-stream-kind"]);
+  assert.deepEqual(emittedNdjsonKinds('http["sendLine"](response, { kind: "unknown-stream-kind" })'), ["unknown-stream-kind"]);
+  for (const expression of ['{ kind: value }', 'payload', '{ ...payload }']) assert.throws(() => emittedNdjsonKinds(`sendLine(response, ${expression})`), /Unresolved/);
 });

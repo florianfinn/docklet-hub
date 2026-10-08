@@ -59,6 +59,17 @@ export const ROUTES: readonly Route[] = [
   { methods: ["POST"], pattern: "/containers/:id/stop", mutating: true, audit: "stop", gate: "stop" },
   { methods: ["POST"], pattern: "/containers/:id/restart", mutating: true, audit: "restart", gate: "restart" },
 
+  // --- Updates, restore and persistent jobs -------------------------------
+  { methods: ["GET"], pattern: "/containers/:id/file-sources", mutating: false, audit: "file-sources", gate: "file-sources" },
+  { methods: ["POST"], pattern: "/update-previews", mutating: false, audit: "update-preview", gate: "update" },
+  { methods: ["POST"], pattern: "/updates", mutating: true, audit: "update", gate: "update" },
+  { methods: ["GET"], pattern: "/containers/:id/backups", mutating: false, audit: "backups", gate: "backups" },
+  { methods: ["POST"], pattern: "/restore-previews", mutating: false, audit: "restore-preview", gate: "restore" },
+  { methods: ["POST"], pattern: "/restores", mutating: true, audit: "restore", gate: "restore" },
+  { methods: ["GET"], pattern: "/jobs", mutating: false, audit: "jobs" },
+  { methods: ["GET"], pattern: "/jobs/:jobId", mutating: false, audit: "job-progress" },
+  { methods: ["POST"], pattern: "/jobs/:jobId/cancel", mutating: true, audit: "job-cancel", gate: "job-cancel" },
+
   // --- Web-FTP -----------------------------------------------------------
   //
   // Without a configured share there is no target here at all, and the
@@ -177,22 +188,15 @@ export const ROUTES: readonly Route[] = [
   { methods: ["GET"], pattern: "/self-update/available", mutating: false, audit: "self-update-available" },
 ];
 
-// Gate actions that change or replace the DEFINITION of a container. On an
-// externally managed entry (`externallyManaged`) exactly these are locked: the
-// manager would roll them back from its template on the next "Apply Update"
-// (#78). "recreate" also covers the read-only preview — a preview of something
-// that may not be executed would show a route that does not exist. "pull-stream"
-// replaces the image just like "pull" and is therefore locked alongside it.
-// "stack-apply" recreates and "stack-down" removes every container of a stack;
-// one externally managed service locks the whole stack action (#56). The raw
-// editor does not run through gate() and checks the same flag itself.
-//
-// Lives here and not in runtime/http.ts so that a test can reach it: the
-// runtime modules load the agent configuration on import.
+// Definition and replacement actions are blocked on externally managed entries.
+// Previews share the execution gate so they cannot offer an unavailable action.
+// Project handlers apply this policy to every registry-bound member.
 export const DEFINITION_ACTIONS: ReadonlySet<string> = new Set([
   "pull",
   "pull-stream",
   "recreate",
+  "update",
+  "restore",
   "apply-spec",
   "remove",
   "stack-apply",

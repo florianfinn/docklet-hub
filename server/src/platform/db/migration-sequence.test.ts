@@ -147,7 +147,8 @@ test("die Neuinstallationsgrundlage bleibt Byte für Byte erhalten", () => {
     "014-container-view-settings.sql": "83c6cd51939b21d10aca68acf12c4d4552a1ececc2d91d1ac17e91003ea4e1b9",
     "015-stack-hidden.sql": "dd44aca17722d23fd81f89080a5da29b5155f7396e1681da0c99f9419b10d224",
     "016-account-issuer.sql": "09c5333914b90d3602ced0d566905106e3ae8a34d4d3743c0ae3849f0472b34d",
-    "017-runtime-settings.sql": "c17d3d7fa68c24b9977cfb5251357c3c2dbed3c96270a2dae577f1253c23f5e1"
+    "017-runtime-settings.sql": "c17d3d7fa68c24b9977cfb5251357c3c2dbed3c96270a2dae577f1253c23f5e1",
+    "018-container-updates.sql": "02740ed82361314aef243bf6848cde72366a68b2d133954958bb7df56dadeb5e"
   };
   const files = new Map(available().map((entry) => [entry.filename, entry.checksum]));
   for (const [filename, expected] of Object.entries(shipped)) {
@@ -155,4 +156,11 @@ test("die Neuinstallationsgrundlage bleibt Byte für Byte erhalten", () => {
   }
   const unpinned = [...files.keys()].filter((filename) => !(filename in shipped));
   assert.deepEqual(unpinned, [], "Eine neue Migration trägt ihre Prüfsumme hier ein");
+});
+
+test("update migration contains only durable deadline settings", () => {
+  const source = readFileSync(new URL("./migrations/018-container-updates.sql", import.meta.url), "utf8");
+  assert.match(source, /CREATE TABLE container_update_setting/);
+  assert.doesNotMatch(source, /container_update_job/);
+  assert.equal((source.match(/CREATE TABLE/g) ?? []).length, 1);
 });

@@ -12,7 +12,7 @@
  *   gerechneten Werte deklariert und dabei auf die Stellschrauben von oben
  *   zugreift.
  * - `features/compose/compose-layout.css` begrenzt Datei und Editor nach
- *   dem Seitenverhältnis; `compose-syntax.css` setzt feste YAML-Syntaxfarben.
+ *   dem Seitenverhältnis; `editor-syntax.css` setzt feste YAML-Syntaxfarben.
  *
  * Eingebunden wird diese Datei in main.tsx; @tailwindcss/vite übersetzt sie
  * beim Bauen. Eine tailwind.config.js gibt es in Tailwind 4 nicht mehr.
@@ -22,4 +22,4 @@
 @import "./platform/theme/tokens.css";
 @import "./platform/theme/palette.css";
 @import "./features/compose/compose-layout.css";
-@import "./features/compose/compose-syntax.css";
+@import "./platform/editor/syntax.css";

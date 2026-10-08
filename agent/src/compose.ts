@@ -185,6 +185,10 @@ export function composeContextOf(
 //     Better not to touch it at all than halfway.
 //   * A path outside the project directory would be a way to point the agent
 //     at a foreign file — the same traversal guard as for the directory.
+export function isUpdateSnapshotOverrideFileName(name: string): boolean {
+  return /^\.docklet-update-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.json$/.test(name);
+}
+
 function composeFileNameOf(
   labels: Record<string, string>,
   projectDir: string
@@ -193,14 +197,13 @@ function composeFileNameOf(
   if (!raw) return null;
 
   const files = raw.split(",").map((entry) => entry.trim()).filter(Boolean);
-  // A successful S12 rollback was created with exactly this second file.
-  // Compose writes both paths permanently into the container label, even after
-  // the agent has removed the override. This one fixed exception stays
-  // unambiguous; arbitrary or further overrides are still conservatively
-  // refused.
+  // Agent overrides retain the original file as the first anchor.
+  // Compose keeps the temporary second path after the override is removed.
   if (files.length === 2) {
     const override = normalizePath(files[1]);
-    if (override !== `${projectDir}/${UPDATE_ROLLBACK_OVERRIDE_FILE_NAME}`) return null;
+    const name = override.slice(projectDir.length + 1);
+    if (override !== `${projectDir}/${UPDATE_ROLLBACK_OVERRIDE_FILE_NAME}`
+      && !(override === `${projectDir}/${name}` && isUpdateSnapshotOverrideFileName(name))) return null;
   } else if (files.length !== 1) {
     return null;
   }

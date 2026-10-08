@@ -1,3 +1,4 @@
+import { RestoreControls } from "./RestoreControls";
 import { useId, useCallback } from "react";
 import { useTranslations } from "use-intl";
 import { Button } from "../../platform/ui/shadcn/button";
@@ -7,6 +8,7 @@ import { ACTION_MESSAGES, BLOCKER_MESSAGES } from "./lifecycle-messages";
 import { useLifecycleAction, useLifecycleState } from "./use-lifecycle";
 import { LifecycleNotice } from "./LifecycleNotice";
 import { LifecycleStatus } from "./LifecycleStatus";
+import { UpdateControls } from "./UpdateControls";
 import { MaintenanceControls } from "./MaintenanceControls";
 
 export function LifecycleControls({ target, detail = false }: { target: LifecycleTarget; detail?: boolean }) {
@@ -47,6 +49,8 @@ export function LifecycleControls({ target, detail = false }: { target: Lifecycl
         {t(BLOCKER_MESSAGES[reason])}
       </p>)}
     </div>
+    <UpdateControls target={target} detail={detail} />
+    {target.kind === "container" ? <RestoreControls target={target} /> : null}
     <LifecycleStatus target={target} reload={action.reload} />
     <LifecycleNotice operation={operation} dismiss={dismiss} reload={() => { void action.reload().catch(() => undefined); }} />
     <Dialog open={question !== null} onOpenChange={(open) => { if (!open) action.cancel(); }}>

@@ -24,7 +24,7 @@ type Calls = {
   urls: string[];
 };
 
-const CURRENT: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 12, readOnly: false, entries: null };
+const CURRENT: AgentHealth = { reachable: true, version: "0.32.0", contractVersion: 13, readOnly: false, entries: null };
 
 // A service over fake dependencies that records every call. `stored` is the
 // setting in the table, `health` what the probe of the arm answers.

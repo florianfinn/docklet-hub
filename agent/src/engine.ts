@@ -1,3 +1,4 @@
+import { openArchiveStream, putArchiveStream } from "./archive-request.js";
 import { containerActionTimeoutMs } from "./runtime-actions.js";
 import http from "node:http";
 import type { RuntimeCallOptions } from "./runtime-budget.js";
@@ -17,6 +18,7 @@ import {
   parsePullProgress,
   type RawStats,
   type EngineInfo,
+  type EngineOptions,
   type DockerMonitorEvent,
   monitorEventOf,
   type RawInspect,
@@ -31,10 +33,6 @@ import {
 // child_process — string concatenation into a shell is a non-starter on this
 // attack surface (stage plan 3.2).
 
-export type EngineOptions = {
-  socketPath: string;
-  timeoutMs?: number;
-};
 
 // The socket's idle window has expired. Not a type of its own, but a `code` in
 // the same form node attaches to its own socket failures (ECONNREFUSED,
@@ -52,7 +50,7 @@ function engineTimeoutError(): NodeJS.ErrnoException {
 }
 
 type RequestOptions = {
-  method: "GET" | "POST" | "DELETE" | "PUT";
+  method: "GET" | "HEAD" | "POST" | "DELETE" | "PUT";
   path: string;
   // The response is not JSON (e.g. log stream).
   raw?: boolean;
@@ -86,7 +84,7 @@ export const MAX_LOG_SNAPSHOT_BYTES = 4 * 1024 * 1024;
 export class DockerEngine {
   constructor(private readonly options: EngineOptions) {}
 
-  private request(options: RequestOptions): Promise<{ status: number; body: Buffer }> {
+  private request(options: RequestOptions): Promise<{ status: number; body: Buffer; headers: http.IncomingHttpHeaders }> {
     const payload =
       options.rawBody !== undefined
         ? options.rawBody
@@ -126,7 +124,7 @@ export class DockerEngine {
             chunks.push(chunk);
           });
           response.on("end", () =>
-            resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks) })
+            resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks), headers: response.headers })
           );
           response.on("error", reject);
         }
@@ -242,20 +240,33 @@ export class DockerEngine {
     }
   }
 
-  // Unpack a tar archive into a directory OF THE CONTAINER (S19 — K6).
-  //
-  // The write path of Web-FTP runs over this route and not over
-  // `fs.writeFile`, because the daemon unpacks as root and sets the uid/gid
-  // from the tar header while doing so — the agent itself has no CAP_CHOWN and
-  // could not hand an uploaded file over to the service that is meant to read
-  // it (in detail in tar.ts).
-  //
-  // `noOverwriteDirNonDir=1`: a file may never replace an existing directory
-  // (and vice versa). Without it, an upload named `Saved` would be the way to
-  // make a whole directory disappear.
-  // `copyUIDGID` is deliberately NOT set — it would force the uid/gid of the
-  // target directory and thereby overwrite exactly the value the caller set
-  // here on purpose.
+  // Numeric tar owners are preserved; copyUIDGID must remain unset.
+  async statArchive(containerId: string, target: string): Promise<import("./file-archive.js").ArchiveStat | null> {
+    const query = new URLSearchParams({ path: target });
+    const result = await this.request({ method: "HEAD", path: `/containers/${encodeURIComponent(containerId)}/archive?${query}` });
+    if (result.status === 404) return null;
+    if (result.status !== 200) throw new EngineError("archive-stat-failed", result.status);
+    const header = result.headers["x-docker-container-path-stat"];
+    if (typeof header !== "string") throw new EngineError("archive-stat-invalid", 502);
+    let stat: import("./file-archive.js").ArchiveStat;
+    try { stat = JSON.parse(Buffer.from(header, "base64").toString("utf8")) as typeof stat; }
+    catch { throw new EngineError("archive-stat-invalid", 502); }
+    if (!stat || !Number.isSafeInteger(stat.mode) || stat.mode < 0 || stat.mode > 0xffffffff || !Number.isSafeInteger(stat.size) || stat.size < 0 || typeof stat.linkTarget !== "string") throw new EngineError("archive-stat-invalid", 502);
+    return stat;
+  }
+  openArchiveStream(containerId: string, target: string, signal?: AbortSignal) {
+    return openArchiveStream(this.options, containerId, target, signal);
+  }
+  putArchiveStream(containerId: string, target: string, input: AsyncIterable<Buffer>, signal?: AbortSignal) {
+    return putArchiveStream(this.options, containerId, target, input, signal);
+  }
+  async getArchive(containerId: string, target: string, maxResponseBytes: number): Promise<Buffer> {
+    const query = new URLSearchParams({ path: target });
+    const result = await this.request({ method: "GET", path: `/containers/${encodeURIComponent(containerId)}/archive?${query}`, maxResponseBytes });
+    if (result.status !== 200) throw new EngineError("archive-read-failed", result.status);
+    return result.body;
+  }
+
   async putArchive(containerId: string, directory: string, archive: Buffer): Promise<void> {
     const query = new URLSearchParams({ path: directory, noOverwriteDirNonDir: "1" });
     const { status, body } = await this.request({
@@ -296,10 +307,22 @@ export class DockerEngine {
 
   // --- Building blocks for recreate/remove (stage 5a) -----------------------
 
-  async rename(containerId: string, name: string): Promise<void> {
+  async pause(containerId: string, paused: boolean, options: RuntimeCallOptions = {}): Promise<void> {
+    const { status } = await this.request({ method: "POST",
+      path: `/containers/${encodeURIComponent(containerId)}/${paused ? "pause" : "unpause"}`, ...options });
+    if (status !== 204) throw new EngineError("pause state change failed", status);
+  }
+
+  async tagImage(imageId: string, repo: string, tag: string, options: RuntimeCallOptions = {}): Promise<void> {
+    const query = new URLSearchParams({ repo, tag });
+    const { status } = await this.request({ method: "POST", path: `/images/${encodeURIComponent(imageId)}/tag?${query}`, ...options });
+    if (status !== 201) throw new EngineError("image tag failed", status);
+  }
+
+  async rename(containerId: string, name: string, options: RuntimeCallOptions = {}): Promise<void> {
     const { status, body } = await this.request({
       method: "POST",
-      path: `/containers/${encodeURIComponent(containerId)}/rename?name=${encodeURIComponent(name)}`
+      path: `/containers/${encodeURIComponent(containerId)}/rename?name=${encodeURIComponent(name)}`, ...options
     });
     if (status === 204) return;
     throw new EngineError(`rename failed (${status}): ${body.toString("utf8").slice(0, 300)}`, status);
@@ -307,12 +330,12 @@ export class DockerEngine {
 
   // `v` removes anonymous volumes as well. Named volumes are ALWAYS kept —
   // they are the data, and a recreate must not touch them.
-  async remove(containerId: string, options: { force?: boolean } = {}): Promise<void> {
+  async remove(containerId: string, options: { force?: boolean } & RuntimeCallOptions = {}): Promise<void> {
     const query = new URLSearchParams({ v: "0" });
     if (options.force) query.set("force", "1");
     const { status, body } = await this.request({
       method: "DELETE",
-      path: `/containers/${encodeURIComponent(containerId)}?${query.toString()}`
+      path: `/containers/${encodeURIComponent(containerId)}?${query.toString()}`, timeoutMs: options.timeoutMs, signal: options.signal
     });
     if (status === 204 || status === 404) return;
     throw new EngineError(`remove failed (${status}): ${body.toString("utf8").slice(0, 300)}`, status);
@@ -320,11 +343,11 @@ export class DockerEngine {
 
   // On create the engine reliably connects only ONE network; all further ones
   // are attached afterwards.
-  async connectNetwork(network: string, containerId: string, endpoint: unknown): Promise<void> {
+  async connectNetwork(network: string, containerId: string, endpoint: unknown, options: RuntimeCallOptions = {}): Promise<void> {
     const { status, body } = await this.request({
       method: "POST",
       path: `/networks/${encodeURIComponent(network)}/connect`,
-      body: { Container: containerId, EndpointConfig: endpoint }
+      body: { Container: containerId, EndpointConfig: endpoint }, ...options
     });
     if (status === 200 || status === 204) return;
     throw new EngineError(
@@ -346,12 +369,12 @@ export class DockerEngine {
     );
   }
 
-  async create(name: string, payload: unknown): Promise<string> {
+  async create(name: string, payload: unknown, options: RuntimeCallOptions = {}): Promise<string> {
     const created = await this.json<{ Id?: string; Warnings?: string[] }>({
       method: "POST",
       path: `/containers/create?name=${encodeURIComponent(name)}`,
       body: payload,
-      timeoutMs: 60_000
+      timeoutMs: 60_000, ...options
     });
     if (!created.Id) throw new EngineError("engine returned no container id", 502);
     return created.Id;
@@ -438,7 +461,7 @@ export class DockerEngine {
     try {
       const image = await this.json<{ Id?: string }>({
         method: "GET",
-        path: `/images/${encodeURIComponent(reference)}/json`,
+        path: `/images/${encodeURIComponent(reference)}/json`, ...options,
         ...options, timeoutMs: Math.min(options.timeoutMs ?? Infinity, this.options.timeoutMs ?? 15_000)
       });
       return image.Id ?? null;
@@ -459,7 +482,7 @@ export class DockerEngine {
   // against. It deliberately lives on the IMAGE and not in the host's
   // configuration, because the signature confirms exactly this label.
   async inspectImage(
-    reference: string
+    reference: string, options: RuntimeCallOptions = {}
   ): Promise<{
     Id?: string;
     RepoDigests?: string[];
@@ -472,7 +495,7 @@ export class DockerEngine {
         Config?: { Env?: string[] | null; Labels?: Record<string, string> | null };
       }>({
         method: "GET",
-        path: `/images/${encodeURIComponent(reference)}/json`
+        path: `/images/${encodeURIComponent(reference)}/json`, ...options
       });
     } catch (error) {
       if (error instanceof EngineError && error.status === 404) return null;
@@ -498,12 +521,12 @@ export class DockerEngine {
   // monitoring.
   async remoteManifestDigest(
     reference: string,
-    auth?: EngineRegistryAuth
+    auth?: EngineRegistryAuth, options: RuntimeCallOptions = {}
   ): Promise<string | null> {
     try {
       const dist = await this.json<{ Descriptor?: { digest?: string } }>({
         method: "GET",
-        path: `/distribution/${encodeURIComponent(reference)}/json`,
+        path: `/distribution/${encodeURIComponent(reference)}/json`, ...options,
         ...(auth ? { headers: { "X-Registry-Auth": registryAuthHeader(auth) } } : {})
       });
       return dist.Descriptor?.digest ?? null;
@@ -915,6 +938,7 @@ export {
   parsePullProgress,
   type RawStats,
   type EngineInfo,
+  type EngineOptions,
   type DockerMonitorEvent,
   monitorEventOf,
   type RawInspect,

@@ -39,6 +39,7 @@ const EXPECTED_LAYERS = [
   // `PUT /settings/logs`, so the order changes no answer; the case below holds
   // (`MOVED_BY_FEATURES`).
   "PUT /settings/logs",
+  "GET /hosts/:hostId/containers/:containerId/file-sources",
   "GET /hosts/:hostId/containers/:containerId/share-candidates",
   "GET /hosts/:hostId/containers/:containerId/share",
   "PUT /hosts/:hostId/containers/:containerId/share",
@@ -54,6 +55,7 @@ const EXPECTED_LAYERS = [
   "GET /hosts/:hostId/containers/:containerId/compose/candidates",
   "PUT /hosts/:hostId/containers/:containerId/compose/selection",
   "DELETE /hosts/:hostId/containers/:containerId/compose/selection",
+  "PUT /hosts/:hostId/containers/:containerId/compose/env",
   "GET /hosts/:hostId/containers/:containerId/compose/env",
   "POST /hosts/:hostId/containers/:containerId/compose/preview",
   "POST /hosts/:hostId/containers/:containerId/compose",
@@ -71,6 +73,16 @@ const EXPECTED_LAYERS = [
   "PUT /hosts/:hostId/self-healing/maintenance",
   "DELETE /hosts/:hostId/self-healing/maintenance",
   "POST /hosts/:hostId/self-healing/incidents/acknowledge",
+  "GET /hosts/:hostId/containers/:containerId/backups",
+  "POST /hosts/:hostId/restore-previews",
+  "POST /hosts/:hostId/restores",
+  "POST /hosts/:hostId/update-previews",
+  "POST /hosts/:hostId/updates",
+  "GET /hosts/:hostId/jobs",
+  "GET /hosts/:hostId/jobs/:jobId",
+  "POST /hosts/:hostId/jobs/:jobId/cancel",
+  "GET /hosts/:hostId/containers/:containerId/update-settings",
+  "PUT /hosts/:hostId/containers/:containerId/update-settings",
   "GET /overview",
   "GET /hosts/:hostId/overview",
   // Moved up from behind `PUT /settings/network` with the feature `containers`

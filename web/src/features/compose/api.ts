@@ -436,6 +436,7 @@ export async function clearComposeSelection(hostId: string, containerId: string)
 // Die Antwort enthält nur Einträge aus der Projekt-`.env`.
 // Klartext wird ausschließlich nach einer eigenen Aktion angefordert.
 export type ProjectEnv = {
+  envHash?: string | null;
   projectDir: string;
   composeFileName: string;
   filePresent: boolean;
@@ -524,4 +525,9 @@ export function projectDirRemovedOf(error: unknown): boolean | null {
   } catch {
     return null;
   }
+}
+
+export async function saveProjectEnv(hostId: string, containerId: string, change: { expectedEnvHash: string | null; set: Record<string, string>; remove: string[] }): Promise<{ hash: string }> {
+  const url = `/api/hosts/${encodeURIComponent(hostId)}/containers/${encodeURIComponent(containerId)}/compose/env`;
+  return putJson(url, change);
 }

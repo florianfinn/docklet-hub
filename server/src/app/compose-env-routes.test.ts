@@ -38,7 +38,7 @@ async function startAgent(): Promise<Agent> {
   const server = http.createServer((request, response) => {
     const url = request.url ?? "";
     seen.push({ url, actor: request.headers["x-docker-agent-actor"] as string | undefined });
-    const body = url === "/containers"
+    const body = request.method === "PUT" ? { envHash: "updated-hash" } : url === "/containers"
       ? { containers: [{ id: CONTAINER_ID, name: "sonarr", image: "sonarr:1", status: "running", running: true }] }
       : {
           projectDir: "/opt/stacks/medien",
@@ -73,6 +73,7 @@ async function startHub(agent: Agent): Promise<{ port: number; close: () => Prom
     display: DEFAULT_HOST_THEME
   } as HostRecord;
   const app = express();
+  app.use(express.json({ limit: "512kb" }));
   app.use("/api", createApiRouter({
     auth: fakeAuth(),
     pool: {
@@ -85,7 +86,7 @@ async function startHub(agent: Agent): Promise<{ port: number; close: () => Prom
     enrollment: {} as Enrollment,
     agentSecret: "test-secret",
     config: { wireguardEndpoint: "hub.test", wireguardPort: 51821 },
-    probeHost: () => Promise.resolve({ reachable: true, version: "0.32.0", contractVersion: 12, readOnly: false, entries: null })
+    probeHost: () => Promise.resolve({ reachable: true, version: "0.32.0", contractVersion: 13, readOnly: false, entries: null })
   }));
   const server = http.createServer(app);
   await listenOnFetchablePort(server);
@@ -145,23 +146,38 @@ test("Benutzer und fremde Herkunft erreichen den .env-Endpunkt des Arms nicht", 
   }
 });
 
-test("der Hub schreibt keine .env: ein direkter PUT erreicht den Arm nicht", async () => {
+test("ungültige .env-Schreibanfragen erreichen den Agenten nicht", async () => {
   const agent = await startAgent();
   const hub = await startHub(agent);
   try {
-    // The agent refuses the write for externally managed stacks (#121); the
-    // hub offers no write route at all, so no direct call can forward one.
     for (const method of ["PUT", "POST", "PATCH"]) {
       const response = await fetch(`http://127.0.0.1:${hub.port}${BASE}`, {
         method,
         headers: { "x-test-role": "admin", origin: `http://127.0.0.1:${hub.port}`, "content-type": "application/json" },
-        body: JSON.stringify({ expectedEnvHash: null, set: { DB_PASSWORD: "neu" }, remove: [] })
+        body: JSON.stringify({ set: { DB_PASSWORD: "neu" }, remove: [] })
       });
-      assert.equal(response.status, 404, method);
+      assert.equal(response.status, method === "PUT" ? 400 : 404, method);
     }
     assert.deepEqual(agent.seen, []);
   } finally {
     await hub.close();
     await agent.close();
   }
+});
+
+test("protected env writes require admin and origin and forward the expected hash", async () => {
+  const agent = await startAgent();
+  const hub = await startHub(agent);
+  try {
+    const body = JSON.stringify({ expectedEnvHash: "original-hash", set: { PUBLIC: "updated" }, remove: [] });
+    for (const headers of ([{ "x-test-role": "user", origin: `http://127.0.0.1:${hub.port}` }, { "x-test-role": "admin", "sec-fetch-site": "cross-site" }] as Record<string, string>[])) {
+      const response = await fetch(`http://127.0.0.1:${hub.port}${BASE}`, { method: "PUT", headers: { ...headers, "content-type": "application/json" }, body });
+      assert.equal(response.status, 403);
+      assert.equal(agent.seen.length, 0);
+    }
+    const saved = await fetch(`http://127.0.0.1:${hub.port}${BASE}`, { method: "PUT", headers: { "x-test-role": "admin", origin: `http://127.0.0.1:${hub.port}`, "content-type": "application/json" }, body });
+    assert.equal(saved.status, 200);
+    assert.deepEqual(await saved.json(), { hash: "updated-hash" });
+    assert.equal(agent.seen.some((entry) => entry.url.endsWith("/env") && entry.actor === "user:admin-1"), true);
+  } finally { await hub.close(); await agent.close(); }
 });

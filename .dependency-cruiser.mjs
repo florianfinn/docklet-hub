@@ -150,7 +150,7 @@ export default {
       // main.tsx in web/tests/import-boundaries.test.mjs. The DOM tests and
       // guards in web/tests/ are not bundled and test these parts directly,
       // as for `feature-only-through-door`.
-      from: { pathNot: ["^web/src/features/compose/", "^web/tests/"] },
+      from: { pathNot: ["^web/src/features/compose/", "^web/src/platform/editor/", "^web/tests/"] },
       to: {
         path: [
           "(^|node_modules/)prismjs/",

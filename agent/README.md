@@ -76,3 +76,54 @@ The runtime uses zod and operating-system Docker/WireGuard tools. Image
 scan and dependency-update PRs complement explicit release builds. The
 runtime image removes package-management tooling that the service does not
 need. Apache-2.0 covers this workspace; adopted notices remain intact.
+
+## Data backups and restore
+
+Updates can optionally back up selected eligible mounts in stop or live mode.
+Live copies can be inconsistent; stopping the selected container does not stop
+other writers of shared data. File copies do not guarantee database consistency.
+Image rollback never restores data.
+
+Complete runs are stored below `backups` in the agent data directory, or at
+`DOCKER_AGENT_BACKUP_DIR` when set. Directories use mode `0700`, archives `0600`.
+The latest three complete runs are retained per Compose project/service or
+standalone container name, including after container replacement. Each copy
+requires its estimated size plus the contract's fixed 1 GiB free-space reserve.
+Unknown size or a failed copy prevents that container's exchange.
+
+Restore is a separate previewed and confirmed job. It stops the container,
+extracts selected archives and restores its prior runtime state. Cancellation
+is possible only before extraction. Shared, ambiguous and protected sources
+cannot be restored. Compose files, `.env` and protected subpaths are excluded.
+Backups preserve regular files, directories and relative in-mount symlinks
+without following them. Unsafe links and special files are skipped and recorded
+with source, path and reason in private backup metadata. Visible restores create
+safe symlinks last and copy internal hardlink data through pinned descriptors.
+Archives using links as parent directories fail validation. Docker PUT restores
+omit links and record them in private restore metadata because target descriptors
+cannot be pinned. Contract 13 has no skip-count field. Visible sources use pinned descriptors,
+other sources use the Docker archive API. Directory metadata, including the mount root, is restored after its children.
+Mount roots use only their own descriptors and keep their inode; insufficient
+permissions fail without a parent-path PUT. Invisible directory roots must
+already match archived ownership and mode. Their PUT targets the mount itself
+and excludes its root header. Metadata PUT for child entries is blocked whenever
+a protected writable mount exists. Immediately before and after PUT, visible
+parent paths are reopened without following links and compared to the pinned
+component inodes. Existing directories must keep their expected inode; existing
+regular files cannot use the PUT fallback because Docker replaces them.
+Numeric owners and modes are verified; mismatches fail with
+`restore-extract-failed` and a path in private `restore-failure.json`. A changed
+path binding also records an incident. Docker resolves PUT paths independently;
+a race remains after the last check, as with archive writes, and an incident
+cannot undo an already completed write.
+Unselected mounts never request archive streams during image previews or updates.
+Image checks have a 60-second preview budget, followed by at most five seconds
+for selected estimates (65 seconds total); the actual backup
+still estimates selected archives and checks its free-space reserve.
+Open data journals keep blocking updates, restores and healing after startup.
+Failed resumes trigger recovery; another operation cannot replace pending state.
+
+An interrupted data operation is recorded privately before stopping. On restart,
+recovery restores the prior runtime state and reports an incident; it never
+repeats extraction automatically. Failures keep the journal and block affected
+operations until recovery succeeds.

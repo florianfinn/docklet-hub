@@ -306,3 +306,26 @@ test("an unreadable or unparsable .env stops log redaction fail-closed", () => {
     );
   }
 });
+
+test("env reading and writing enforce UTF-8 byte limits and reject non-text entries", (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "env-boundary-"));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const file = path.join(directory, ".env");
+  const limit = 262144;
+  fs.writeFileSync(file, "x".repeat(limit));
+  assert.equal(readEnvFile(directory).content?.length, limit);
+  fs.writeFileSync(file, "x".repeat(limit + 1));
+  assert.throws(() => readEnvFile(directory), /too-large/);
+  for (const bytes of [Buffer.from([0]), Buffer.from([255])]) {
+    fs.writeFileSync(file, bytes);
+    assert.throws(() => readEnvFile(directory), /not-a-text-file/);
+  }
+  fs.unlinkSync(file);
+  fs.symlinkSync(path.join(directory, "missing"), file);
+  assert.throws(() => readEnvFile(directory));
+  fs.unlinkSync(file);
+  fs.writeFileSync(file, "PUBLIC=value\n");
+  const current = readEnvFile(directory);
+  assert.throws(() => writeEnvFile(directory, { set: { PUBLIC: "ä".repeat(limit / 2) }, remove: [] }, { expectedHash: current.hash, basePath: path.dirname(directory) }), /too-large/);
+  assert.equal(readEnvFile(directory).content, current.content);
+});

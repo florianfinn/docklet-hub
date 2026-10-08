@@ -25,7 +25,7 @@ for (const status of ["running", "paused", "restarting", "created", "exited", "d
 }
 for (const [reason, change] of [
   ["Host offline", (h: ReturnType<typeof host>) => { h.host.status = "offline"; }],
-  ["Nur-Lese-Modus", (h: ReturnType<typeof host>) => { h.agent = { reachable: true, readOnly: true, version: "0.32.0", contractVersion: 12, entries: 1 }; }],
+  ["Nur-Lese-Modus", (h: ReturnType<typeof host>) => { h.agent = { reachable: true, readOnly: true, version: "0.32.0", contractVersion: 13, entries: 1 }; }],
   ["zur Beobachtung", (h: ReturnType<typeof host>) => { h.stacks[0].containers[0].runtimeAccess = { blocker: "observe-only" }; }],
   ["nicht in der Allowlist", (h: ReturnType<typeof host>) => { h.stacks[0].containers[0].runtimeAccess = { blocker: "not-allowlisted" }; }],
   ["Selbstverwaltungssperre", (h: ReturnType<typeof host>) => { h.stacks[0].containers[0].system = true; }],

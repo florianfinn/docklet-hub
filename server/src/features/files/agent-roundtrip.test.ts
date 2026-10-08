@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 
@@ -14,11 +16,11 @@ import {
   startAgent
 } from "../../platform/agent-transport/agent-roundtrip-test-support.js";
 import { REGISTRY_SYNC_ACTOR, syncRegistry } from "../../domain/containers/index.js";
-import { AgentError } from "../../platform/agent-transport/protocol.js";
 import {
   applyFileAction,
   downloadFile,
   listFiles,
+  listFileSources,
   readFileText,
   uploadFile,
   writeFileText
@@ -54,12 +56,20 @@ test("Dateien: Liste, Text, Speichern, Upload, Download und die drei Aktionen tr
     { actor: REGISTRY_SYNC_ACTOR, fetchImpl: agent.fetchImpl }
   );
   const options = { actor: { kind: "user" as const, id: "u-1" }, fetchImpl: agent.fetchImpl };
-  const root = { share: SHARE, path: "" };
+  const sources = await listFileSources(agent.target, CONTAINER_ID, options);
+  assert.equal(sources.length, 1);
+  assert.equal(sources[0].kind, "project");
+  assert.equal(sources[0].writable, true);
+  const root = { sourceId: sources[0].sourceId, path: "" };
 
   const listing = await listFiles(agent.target, CONTAINER_ID, root, options);
   assert.deepEqual(listing.entries.map((entry) => entry.name), ["index.html"]);
 
-  const file = { share: SHARE, path: "index.html" };
+  const file = { sourceId: sources[0].sourceId, path: "index.html" };
+  const inodePath = path.join(agent.projectDir, SHARE, "index.html");
+  const hardlinkPath = path.join(agent.projectDir, SHARE, "index-link.html");
+  await fs.link(inodePath, hardlinkPath);
+  const before = await fs.stat(inodePath);
   const text = await readFileText(agent.target, CONTAINER_ID, file, options);
   const written = await writeFileText(
     agent.target,
@@ -69,27 +79,30 @@ test("Dateien: Liste, Text, Speichern, Upload, Download und die drei Aktionen tr
     options
   );
   assert.equal(written.ok, true);
+  const afterWrite = await fs.stat(inodePath);
+  assert.deepEqual([afterWrite.dev, afterWrite.ino, afterWrite.uid, afterWrite.gid], [before.dev, before.ino, before.uid, before.gid]);
+  assert.equal(await fs.readFile(hardlinkPath, "utf8"), "<h1>hallo</h1>\n");
+  await fs.unlink(hardlinkPath);
 
-  // The fake Docker takes the upload's archive and writes nothing, so the
-  // download reads the file that is there.
+  // Descriptor saves and daemon-based creation share the fake container filesystem.
   await uploadFile(agent.target, CONTAINER_ID, { ...root, name: "robots.txt" }, new TextEncoder().encode("x"), options);
   const download = await downloadFile(agent.target, CONTAINER_ID, file, options);
-  assert.equal(await new Response(download.stream).text(), "<h1>hi</h1>\n");
+  assert.equal(await new Response(download.stream).text(), "<h1>hallo</h1>\n");
 
-  // The three actions, each with the fields it takes. Whether the agent can
-  // carry them out against the fake is not the question here; that it reads
-  // them is (`schemaRefusals` below).
-  // Taken from the contract by position (create a folder, rename, delete).
   const [createFolder, rename, remove] = FILE_ACTIONS;
-  for (const command of [
-    { action: createFolder, path: "", name: "assets" },
-    { action: rename, path: "index.html", name: "start.html" },
-    { action: remove, path: "start.html" }
-  ]) {
-    await applyFileAction(agent.target, CONTAINER_ID, SHARE, command, options).catch((error: unknown) => {
-      if (!(error instanceof AgentError) || error.status === null) throw error;
-    });
-  }
+  await applyFileAction(agent.target, CONTAINER_ID, SHARE, { action: createFolder, path: "", name: "assets" }, options);
+  await applyFileAction(agent.target, CONTAINER_ID, SHARE, { action: rename, path: "index.html", name: "start.html" }, options);
+  const renamed = await downloadFile(agent.target, CONTAINER_ID, { ...root, path: "start.html" }, options);
+  assert.equal(await new Response(renamed.stream).text(), "<h1>hallo</h1>\n");
+  await applyFileAction(agent.target, CONTAINER_ID, SHARE, { action: remove, path: "start.html" }, options);
+  await applyFileAction(agent.target, CONTAINER_ID, SHARE, { action: rename, path: "assets", name: "resources" }, options);
+  await applyFileAction(agent.target, CONTAINER_ID, SHARE, { action: remove, path: "resources" }, options);
+  const after = await listFiles(agent.target, CONTAINER_ID, root, options);
+  assert.equal(after.diagnostics?.deletable, true);
+  assert.deepEqual(after.entries.map((entry) => entry.name), ["robots.txt"]);
 
+  await assert.rejects(downloadFile(agent.target, CONTAINER_ID, { ...root, path: "missing" }, options), (error: unknown) => {
+    assert.equal((error as { status: number }).status, 404); return true;
+  });
   assert.deepEqual(schemaRefusals(agent), []);
 });

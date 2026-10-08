@@ -1,3 +1,4 @@
+import { useFileSource } from "./source-context";
 import { FolderPlus, Pencil, Trash2 } from "lucide-react";
 import type { Messages } from "use-intl";
 import { useState } from "react";
@@ -19,33 +20,7 @@ import { Input } from "../../platform/ui/shadcn/input";
 import { fileErrorKey } from "./file-errors";
 import { childPath } from "./file-paths";
 
-// Anlegen, umbenennen, löschen — Paket B5, Etappe E5b (#5).
-//
-// ⚠️ `diagnostics.deletable` IST DAS SCHREIBRECHT AM VERZEICHNIS UND NICHT AN
-// DER DATEI. Löschen und Umbenennen fassen den VERZEICHNISEINTRAG an; wer an
-// der Datei schreiben darf, aber nicht am Verzeichnis, kann sie ändern und
-// nicht entfernen. Alle drei Handlungen dieser Datei hängen deshalb an
-// derselben Auskunft, und `diagnostics: null` heißt „keine Auskunft" und nicht
-// „nein" — der Versuch geht dann hinaus, und der Arm entscheidet.
-//
-// ⚠️ LÖSCHEN FRAGT NACH, und zwar als einzige Handlung dieser Fläche. Sie ist
-// auch die einzige, die Daten des Betreibers VERNICHTET: der Hub hält keine
-// Kopie, der Arm hat keinen Papierkorb, und ein Klick daneben ist nicht
-// zurückzunehmen. Umbenennen und Anlegen sind es nicht — sie sind mit einem
-// zweiten Aufruf rückgängig zu machen.
-//
-// ⚠️ DER DIALOG UND KEIN `window.confirm`, dieselbe Entscheidung wie bei
-// `RemoveHostDialog` in `features/hosts/HostCard.tsx` (D4): der Kasten des
-// Browsers trägt weder Schrift noch Farben dieser Oberfläche, blockiert den
-// ganzen Reiter, und neben dem deutschen Satz stünden zwei englische
-// Schaltflächen des Systems.
-//
-// ⚠️ THE ACTION NAMES ARE THE HUB'S (`create-directory`, `rename`, `delete`)
-// and not the agent's (`create-folder` for the first). The translation lives
-// in the server (`OWN_ACTION_NAMES` in `server/src/features/files/actions.ts`)
-// and is none of this surface's business.
-
-/** Was die Diagnose über das Schreiben im Verzeichnis sagt — drei Fälle. */
+// Creating uses uploadable; rename/delete use their separate capability.
 type Verdict = "allowed" | "blocked" | "unknown";
 
 export function writeVerdict(listing: FileListing): Verdict {
@@ -109,7 +84,8 @@ export function CreateDirectory({
   onDone: () => void;
 }) {
   const t = useTranslations();
-  const verdict = writeVerdict(listing);
+  const sourceId = useFileSource();
+  const verdict: Verdict = listing.diagnostics === null ? "unknown" : listing.diagnostics.uploadable ? "allowed" : "blocked";
   const [name, setName] = useState("");
   const { busy, errorKey, run } = useCommand(onDone);
 
@@ -135,7 +111,7 @@ export function CreateDirectory({
           data-testid="files-create-directory-submit"
           onClick={() =>
             run(
-              () => applyFileCommand(hostId, containerId, { action: "create-directory", path: listing.path, name }),
+              () => applyFileCommand(hostId, containerId, { action: "create-directory", path: listing.path, name }, sourceId),
               () => setName("")
             )
           }
@@ -145,7 +121,7 @@ export function CreateDirectory({
         </Button>
       </div>
 
-      {blocked ? (
+      {blocked || listing.diagnostics?.deletable === false ? (
         <p role="alert" className="text-[12px] text-state-warn" data-testid="files-write-blocked">
           {t("filesWriteBlocked")}
         </p>
@@ -177,6 +153,7 @@ function RenameEntry({
   onDone: () => void;
 }) {
   const t = useTranslations();
+  const sourceId = useFileSource();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(entry.name);
   const { busy, errorKey, setErrorKey, run } = useCommand(onDone);
@@ -240,7 +217,7 @@ function RenameEntry({
                     // `create-directory`. Deshalb `childPath`.
                     path: childPath(listing.path, entry.name),
                     name
-                  }),
+                  }, sourceId),
                 () => setOpen(false)
               )
             }
@@ -276,6 +253,7 @@ function DeleteEntry({
   onDone: () => void;
 }) {
   const t = useTranslations();
+  const sourceId = useFileSource();
   const [open, setOpen] = useState(false);
   const { busy, errorKey, setErrorKey, run } = useCommand(onDone);
 
@@ -324,7 +302,7 @@ function DeleteEntry({
                   applyFileCommand(hostId, containerId, {
                     action: "delete",
                     path: childPath(listing.path, entry.name)
-                  }),
+                  }, sourceId),
                 () => setOpen(false)
               )
             }
@@ -337,14 +315,7 @@ function DeleteEntry({
   );
 }
 
-/**
- * Umbenennen und Löschen eines Eintrags — die Spalte „Aktionen" der Liste.
- *
- * ⚠️ BEIDE HÄNGEN AM RECHT AM VERZEICHNIS (`deletable`) und nicht an der Art
- * des Eintrags: ein Verzeichnis wird genauso umbenannt und entfernt wie eine
- * Datei, und ein `symlink` auch — der Agent fasst dabei den Verweis an und
- * nicht sein Ziel.
- */
+// Rename/delete require their own capability, independent of uploads.
 export function EntryActions({
   hostId,
   containerId,
@@ -358,9 +329,7 @@ export function EntryActions({
   entry: WebftpEntry;
   onDone: () => void;
 }) {
-  // „Keine Auskunft" sperrt NICHT: der Versuch geht hinaus, und der Arm
-  // entscheidet. Der Satz dazu steht einmal über der Liste (`CreateDirectory`)
-  // und nicht an jeder Zeile — zwanzig gleiche Hinweise sind keiner.
+  // Unknown diagnostics still defer to the agent.
   const blocked = writeVerdict(listing) === "blocked";
 
   return (

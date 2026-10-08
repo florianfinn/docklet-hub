@@ -66,6 +66,8 @@
 // skipped.
 
 import {
+  fileSourcesResponseSchema,
+  type FileSource,
   containerShareLookupSchema,
   containerShareResponseSchema,
   fileActionResponseSchema,
@@ -143,8 +145,11 @@ export function entryChangedAt(entry: WebftpEntry): Date {
  * nicht am `?`. So bleibt das Literal der reine Pfad, und die Abfrage kommt
  * dahinter.
  */
-function pathQuery(path: string): string {
-  return path === "" ? "" : `?path=${encodeURIComponent(path)}`;
+function pathQuery(path: string, sourceId?: string): string {
+  const params = new URLSearchParams();
+  if (path) params.set("path", path);
+  if (sourceId) params.set("sourceId", sourceId);
+  return params.size ? `?${params}` : "";
 }
 
 /**
@@ -210,10 +215,11 @@ export function removeContainerShare(hostId: string, containerId: string): Promi
 export async function fetchFileListing(
   hostId: string,
   containerId: string,
-  path: string
+  path: string,
+  sourceId?: string
 ): Promise<{ listing: FileListing; maxUploadBytes: number }> {
   const url =
-    `/api/hosts/${encodeURIComponent(hostId)}/containers/${encodeURIComponent(containerId)}/files` + pathQuery(path);
+    `/api/hosts/${encodeURIComponent(hostId)}/containers/${encodeURIComponent(containerId)}/files` + pathQuery(path, sourceId);
   return parseResponse(url, fileListingResponseSchema, await request(url));
 }
 
@@ -235,10 +241,10 @@ export async function fetchFileListing(
  * leere Abfrage wäre die Bitte, ein Verzeichnis herunterzuladen, und die soll
  * gar nicht erst absendbar aussehen.
  */
-export function containerFileUrl(hostId: string, containerId: string, path: string): string {
+export function containerFileUrl(hostId: string, containerId: string, path: string, sourceId?: string): string {
   return (
     `/api/hosts/${encodeURIComponent(hostId)}/containers/${encodeURIComponent(containerId)}/file` +
-    `?path=${encodeURIComponent(path)}`
+    `?path=${encodeURIComponent(path)}${sourceId ? `&sourceId=${encodeURIComponent(sourceId)}` : ""}`
   );
 }
 
@@ -275,11 +281,12 @@ export async function fetchContainerShare(
 export async function fetchFileText(
   hostId: string,
   containerId: string,
-  path: string
+  path: string,
+  sourceId?: string
 ): Promise<{ text: FileText }> {
   const url =
     `/api/hosts/${encodeURIComponent(hostId)}/containers/${encodeURIComponent(containerId)}/file-text` +
-    `?path=${encodeURIComponent(path)}`;
+    `?path=${encodeURIComponent(path)}${sourceId ? `&sourceId=${encodeURIComponent(sourceId)}` : ""}`;
   return parseResponse(url, fileTextResponseSchema, await request(url));
 }
 
@@ -293,10 +300,11 @@ export async function fetchFileText(
 export async function applyFileCommand(
   hostId: string,
   containerId: string,
-  command: FileCommand
+  command: FileCommand,
+  sourceId?: string
 ): Promise<{ done: FileActionDone }> {
   const url = `/api/hosts/${encodeURIComponent(hostId)}/containers/${encodeURIComponent(containerId)}/files`;
-  return parseResponse(url, fileActionResponseSchema, await postJson(url, command));
+  return parseResponse(url, fileActionResponseSchema, await postJson(url, sourceId ? { ...command, sourceId } : command));
 }
 
 // ── Die zwei Aufrufe mit rohem Rumpf ────────────────────────────────────────
@@ -352,11 +360,12 @@ export async function saveFileText(
   containerId: string,
   path: string,
   content: string,
-  expectedHash: string
+  expectedHash: string,
+  sourceId?: string
 ): Promise<{ hash: string }> {
   const url =
     `/api/hosts/${encodeURIComponent(hostId)}/containers/${encodeURIComponent(containerId)}/file-text` +
-    `?path=${encodeURIComponent(path)}&expectedHash=${encodeURIComponent(expectedHash)}`;
+    `?path=${encodeURIComponent(path)}&expectedHash=${encodeURIComponent(expectedHash)}${sourceId ? `&sourceId=${encodeURIComponent(sourceId)}` : ""}`;
   const response = await fetch(url, {
       credentials: "include",
       method: "PUT",
@@ -423,13 +432,13 @@ export function uploadContainerFile(
   containerId: string,
   path: string,
   file: File,
-  options: { signal?: AbortSignal; onProgress?: (progress: UploadProgress) => void } = {}
+  options: { sourceId?: string; signal?: AbortSignal; onProgress?: (progress: UploadProgress) => void } = {}
 ): Promise<{ uploaded: FileUploaded }> {
   return new Promise<{ uploaded: FileUploaded }>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const url =
       `/api/hosts/${encodeURIComponent(hostId)}/containers/${encodeURIComponent(containerId)}/file` +
-      `?path=${encodeURIComponent(path)}&name=${encodeURIComponent(file.name)}`;
+      `?path=${encodeURIComponent(path)}&name=${encodeURIComponent(file.name)}${options.sourceId ? `&sourceId=${encodeURIComponent(options.sourceId)}` : ""}`;
     xhr.open("PUT", url);
     // Dasselbe wie `credentials: "include"` bei den vier Helfern: ohne das
     // schickt der Browser das Sitzungscookie bei einer Adresse neben der des
@@ -505,4 +514,9 @@ function errorDetail(xhr: XMLHttpRequest): string {
   } catch {
     return xhr.statusText;
   }
+}
+
+export async function fetchFileSources(hostId: string, containerId: string): Promise<{ sources: FileSource[] }> {
+  const url = `/api/hosts/${encodeURIComponent(hostId)}/containers/${encodeURIComponent(containerId)}/file-sources`;
+  return parseResponse(url, fileSourcesResponseSchema, await request(url));
 }

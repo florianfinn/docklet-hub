@@ -8,6 +8,7 @@ Zielbild und Begründungen. Arbeitsstand steht in GitHub Issues und Meilensteine
 | [concept-and-plan.md](concept-and-plan.md) | Zielbild von docklet hub |
 | [container-lifecycle.md](container-lifecycle.md) | Projektpfade, Anlegen Hub-eigener Projekte, Laufzeitaktionen und Container-Lebenszyklus |
 | [feature-architecture.md](feature-architecture.md) | Architektur nach Features |
+| [file-access.md](file-access.md) | Mount-Auswahl, Dateizugriff und gemeinsamer Editor mit Konflikt- und Geheimnisschutz |
 | [game-console.md](game-console.md) | Games-Konsole |
 | [hub-color-and-structure.md](hub-color-and-structure.md) | Farbsystem und Gliederung der Oberfläche |
 | [language-layer.md](language-layer.md) | Die Sprachschicht der Oberfläche |
