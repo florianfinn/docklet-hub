@@ -2,6 +2,7 @@ import { handleFileSources } from "./routes/file-source-routes.js";
 import { handleUpdatePreview, handleUpdateStart } from "./routes/update-routes.js";
 import { handleBackups, handleRestorePreview, handleRestoreStart } from "./routes/restore-routes.js";
 import { handleJobs, handleJob } from "./routes/job-routes.js";
+
 import { handleStopIntents } from "./routes/stop-intent-routes.js";
 import type http from "node:http";
 import { handleSelfHealingStatus, handleSelfHealingMaintenance, handleSelfHealingAcknowledge } from "./routes/self-healing-control-routes.js";
@@ -9,7 +10,7 @@ import { handleSelfHealingConfig } from "./routes/self-healing-routes.js";
 import { CONTRACT_HEADERS, CONTRACT_VERSION } from "./contract.js";
 import { containerIdFromPath, checkRoute } from "./route-policy.js";
 import { EnvRedactionUnavailableError } from "./env-file.js";
-import { KeyedMutexBusyError } from "./concurrency.js";
+import { ActionQueueError, KeyedMutexBusyError } from "./concurrency.js";
 import { AGENT_VERSION } from "./version.js";
 
 import {
@@ -455,6 +456,7 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
         return;
       }
 
+
       if (request.method === "GET" && action === "share-candidates") {
         await handleShareCandidates({ ...ctx, containerId, action });
         return;
@@ -581,7 +583,7 @@ export async function handleRequest(request: http.IncomingMessage, response: htt
       send(response, 400, { error: "invalid-json", field: "" });
       return;
     }
-    if (error instanceof KeyedMutexBusyError) {
+    if (error instanceof KeyedMutexBusyError || error instanceof ActionQueueError) {
       audit.write({
         action: "stack-busy",
         containerId: null,

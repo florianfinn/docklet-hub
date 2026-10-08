@@ -180,6 +180,7 @@ export const GET_ROUTES_WITH_EFFECT: readonly string[] = [
 
   // Nennt die Bind-Mounts des Containers, also die Struktur des Hosts;
   // Audit-Handler `share-candidates`.
+  "/hosts/:hostId/containers/:containerId/file-sources",
   "/hosts/:hostId/containers/:containerId/share-candidates",
 
   // Die Verzeichnisliste der Freigabe; Audit-Handler `webftp-list`.

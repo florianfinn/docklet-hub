@@ -14,11 +14,11 @@ import {
   startAgent
 } from "../../platform/agent-transport/agent-roundtrip-test-support.js";
 import { REGISTRY_SYNC_ACTOR, syncRegistry } from "../../domain/containers/index.js";
-import { AgentError } from "../../platform/agent-transport/protocol.js";
 import {
   applyFileAction,
   downloadFile,
   listFiles,
+  listFileSources,
   readFileText,
   uploadFile,
   writeFileText
@@ -54,12 +54,16 @@ test("Dateien: Liste, Text, Speichern, Upload, Download und die drei Aktionen tr
     { actor: REGISTRY_SYNC_ACTOR, fetchImpl: agent.fetchImpl }
   );
   const options = { actor: { kind: "user" as const, id: "u-1" }, fetchImpl: agent.fetchImpl };
-  const root = { share: SHARE, path: "" };
+  const sources = await listFileSources(agent.target, CONTAINER_ID, options);
+  assert.equal(sources.length, 1);
+  assert.equal(sources[0].kind, "project");
+  assert.equal(sources[0].writable, true);
+  const root = { sourceId: sources[0].sourceId, path: "" };
 
   const listing = await listFiles(agent.target, CONTAINER_ID, root, options);
   assert.deepEqual(listing.entries.map((entry) => entry.name), ["index.html"]);
 
-  const file = { share: SHARE, path: "index.html" };
+  const file = { sourceId: sources[0].sourceId, path: "index.html" };
   const text = await readFileText(agent.target, CONTAINER_ID, file, options);
   const written = await writeFileText(
     agent.target,
@@ -70,11 +74,10 @@ test("Dateien: Liste, Text, Speichern, Upload, Download und die drei Aktionen tr
   );
   assert.equal(written.ok, true);
 
-  // The fake Docker takes the upload's archive and writes nothing, so the
-  // download reads the file that is there.
+  // Descriptor writes change the local fixture; downloads return those bytes.
   await uploadFile(agent.target, CONTAINER_ID, { ...root, name: "robots.txt" }, new TextEncoder().encode("x"), options);
   const download = await downloadFile(agent.target, CONTAINER_ID, file, options);
-  assert.equal(await new Response(download.stream).text(), "<h1>hi</h1>\n");
+  assert.equal(await new Response(download.stream).text(), "<h1>hallo</h1>\n");
 
   // The three actions, each with the fields it takes. Whether the agent can
   // carry them out against the fake is not the question here; that it reads
@@ -86,9 +89,7 @@ test("Dateien: Liste, Text, Speichern, Upload, Download und die drei Aktionen tr
     { action: rename, path: "index.html", name: "start.html" },
     { action: remove, path: "start.html" }
   ]) {
-    await applyFileAction(agent.target, CONTAINER_ID, SHARE, command, options).catch((error: unknown) => {
-      if (!(error instanceof AgentError) || error.status === null) throw error;
-    });
+    await applyFileAction(agent.target, CONTAINER_ID, SHARE, command, options);
   }
 
   assert.deepEqual(schemaRefusals(agent), []);

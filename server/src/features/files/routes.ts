@@ -94,6 +94,15 @@ export function registerFileRoutes(
     userId
   });
 
+  router.get("/hosts/:hostId/containers/:containerId/file-sources", requireAdmin(auth),
+    withSession(auth, async (request, response, user) => {
+      response.setHeader("Cache-Control", "no-store");
+      const result = await service.listSources(containerRef(request, user.id));
+      if (!result.ok) { respondWithFailure(response, result.failure); return; }
+      response.json({ sources: result.sources });
+    })
+  );
+
   // ── Die Wahl der Freigabe ─────────────────────────────────────────────────
 
   // Welche Bind-Mounts dieses Containers als Freigabe taugen.
@@ -161,7 +170,7 @@ export function registerFileRoutes(
     "/hosts/:hostId/containers/:containerId/files",
     requireAdmin(auth),
     withSession(auth, async (request, response, user) => {
-      const result = await service.list(containerRef(request, user.id), { path: request.query.path });
+      const result = await service.list(containerRef(request, user.id), { path: request.query.path, sourceId: request.query.sourceId });
       if (!result.ok) {
         respondWithFailure(response, result.failure);
         return;
@@ -178,7 +187,7 @@ export function registerFileRoutes(
     "/hosts/:hostId/containers/:containerId/file",
     requireAdmin(auth),
     withSession(auth, async (request, response, user) => {
-      const plan = await service.planDownload(containerRef(request, user.id), { path: request.query.path });
+      const plan = await service.planDownload(containerRef(request, user.id), { path: request.query.path, sourceId: request.query.sourceId });
       if (!plan.ok) {
         respondWithFailure(response, plan.failure);
         return;
@@ -206,7 +215,7 @@ export function registerFileRoutes(
     "/hosts/:hostId/containers/:containerId/file-text",
     requireAdmin(auth),
     withSession(auth, async (request, response, user) => {
-      const result = await service.readText(containerRef(request, user.id), { path: request.query.path });
+      const result = await service.readText(containerRef(request, user.id), { path: request.query.path, sourceId: request.query.sourceId });
       if (!result.ok) {
         respondWithFailure(response, result.failure);
         return;
@@ -221,6 +230,7 @@ export function registerFileRoutes(
     requireAdmin(auth),
     withSession(auth, async (request, response, user) => {
       const plan = await service.planUpload(containerRef(request, user.id), {
+        sourceId: request.query.sourceId,
         path: request.query.path,
         name: request.query.name,
         jsonBody: isJsonBody(request)
@@ -249,6 +259,7 @@ export function registerFileRoutes(
     requireAdmin(auth),
     withSession(auth, async (request, response, user) => {
       const plan = await service.planTextSave(containerRef(request, user.id), {
+        sourceId: request.query.sourceId,
         path: request.query.path,
         expectedHash: request.query.expectedHash,
         jsonBody: isJsonBody(request)

@@ -178,8 +178,11 @@ function installFakeDocker(modules: AgentModules, projectDir: string): void {
   // apply stops at its first step and answers with a named result, which is
   // all this test needs from it. The rest is never reached.
   Object.assign(rawOps, {
-    async config() {
-      throw new ComposeError("compose config failed (fake)");
+    async config(_dir: string, fileName: string) {
+      if (fileName.startsWith(".")) throw new ComposeError("compose config failed (fake)");
+      return { services: { [SERVICE_NAME]: { image: "nginx:1.27", volumes: [
+        { type: "bind", source: `${projectDir}/${SHARE}`, target: "/usr/share/nginx/html" }
+      ] } } };
     },
     async containerIds() {
       return new Map([[SERVICE_NAME, CONTAINER_ID]]);

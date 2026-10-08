@@ -73,7 +73,6 @@ function fixture(t: TestContext, flags: { observeOnly?: boolean; externallyManag
 }
 
 const routes = [
-  ["GET", `/containers/${id}/file-sources`, false, "file-sources", "file-sources", undefined],
   ["POST", "/update-previews", false, "update-preview", "update", updatePreviewBody],
   ["POST", "/updates", true, "update", "update", updateBody],
   ["GET", `/containers/${id}/backups`, false, "backups", "backups", undefined],
@@ -196,7 +195,8 @@ test("contract 13 exposes route response shapes, optional file source selection 
 
 test("nine coordinated routes replace all three GET preview paths", async (t) => {
   fixture(t);
-  assert.equal(routes.length, 9);
+  assert.equal(routes.length + 1, 9);
+  assert.ok(findRoute("GET", `/containers/${id}/file-sources`));
   for (const url of [`/containers/${id}/update-preview`, `/projects/${id}/update-preview`,
     `/containers/${id}/restore-preview?backupId=backup`]) {
     assert.equal(findRoute("GET", url.split("?")[0]), null);
@@ -315,4 +315,30 @@ test("not-implemented follows the unchanged shared HTTP error sequence", () => {
   assert.deepEqual(SHARED_HTTP_ERRORS.slice(0, -1).map((entry) => entry.code),
     ["invalid-request", "invalid-json", "unauthorized", "actor-not-allowed", "observe-only", "externally-managed",
       "too-many-streams", "too-many-sessions"]);
+});
+
+test("file source discovery authenticates, checks the allowlist and returns contract 13", async (t) => {
+  fixture(t);
+  t.mock.method(engine, "listContainerIds", async () => [id]);
+  const url = `/containers/${id}/file-sources`;
+  assert.equal((await request("GET", url, undefined, false)).status, 401);
+  const allowed = await request("GET", url);
+  assert.equal(allowed.status, 200);
+  assert.equal(fileSourcesResponseSchema.safeParse(allowed.body()).success, true);
+  registry.replaceAll([]);
+  assert.equal((await request("GET", url)).status, 404);
+});
+
+test("every file mutation immediately rejects a held Compose project lock", async (t) => {
+  fixture(t);
+  const { stackLocks } = await import("./runtime/state.js");
+  let release!: () => void;
+  const active = stackLocks.runExclusive("demo", () => new Promise<void>((resolve) => { release = resolve; }));
+  try {
+    for (const [method, endpoint] of [["PUT", "file"], ["PUT", "file-text"], ["POST", "files"], ["PUT", "env"]]) {
+      const response = await request(method, `/containers/${id}/${endpoint}`, {});
+      assert.equal(response.status, 409, endpoint);
+      assert.equal(response.body().error, "busy", endpoint);
+    }
+  } finally { release(); await active; }
 });

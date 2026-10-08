@@ -410,3 +410,20 @@ test("eine Aktion mit falscher Form kostet weder die Kette noch den Agenten", as
   assert.deepEqual(f.opened, []);
   assert.deepEqual(f.calls, []);
 });
+
+test("source IDs reuse existing CRUD forwarding without requiring a project share", async () => {
+  const f = fixture();
+  const query = { sourceId: "source-opaque", path: "file.txt" };
+  assert.equal((await f.service.list(REF, query)).ok, true);
+  assert.equal((await f.service.readText(REF, query)).ok, true);
+  const download = await f.service.planDownload(REF, query);
+  assert.equal(download.ok, true);
+  if (download.ok) await download.start(new AbortController().signal);
+  const write = await f.service.planTextSave(REF, { ...query, expectedHash: "hash", jsonBody: false });
+  assert.equal(write.ok, true);
+  if (write.ok) await write.send(Buffer.from("content"));
+  assert.equal((await f.service.applyAction(REF, { ...query, action: "rename", name: "renamed.txt" })).ok, true);
+  assert.equal(f.calls.every((call) => JSON.stringify(call.args).includes("source-opaque")), true);
+  assert.equal(f.store.share, null);
+  assert.equal((await f.service.list(REF, { sourceId: "", path: "" })).ok, false);
+});

@@ -1,7 +1,7 @@
 import { RuntimeBudget } from "../runtime-budget.js";
 import { runContainerAction } from "../container-action.js";
 import { actionConnection } from "../runtime/action-connection.js";
-import { applySpecRequestSchema, containerActionRequestSchema, type RuntimeAction } from "contract";
+import { applySpecRequestSchema, containerActionRequestSchema, type RuntimeAction, ACTION_QUEUE_WAIT_MS } from "contract";
 import {
   EngineError
 } from "../engine.js";
@@ -185,7 +185,10 @@ export async function handleApplySpec(ctx: ContainerRouteContext): Promise<void>
     // Gate/inspect happened before waiting for the project lock. If an
     // immediately preceding stack action moved the id anchor, this request
     // must not continue with the old grant.
-    if (!registry.isAllowed(containerId)) return { stale: true as const };
+    const fresh = await gate(containerId, { mutating: true, action: "apply-spec", actor });
+    if (!fresh.ok) return { stale: true as const };
+    const currentContext = composeContextOf(fresh.inspect.Config?.Labels ?? undefined, composeBasePath);
+    if (!currentContext || currentContext.project !== context.project || currentContext.projectDir !== context.projectDir) return { stale: true as const };
     const outcome = await applyCompose(applyOps, {
       location,
       spec,
@@ -195,7 +198,7 @@ export async function handleApplySpec(ctx: ContainerRouteContext): Promise<void>
     });
     if (outcome.ok) registry.replaceContainerId(containerId, outcome.containerId);
     return { stale: false as const, outcome };
-  });
+  }, { waitMs: ACTION_QUEUE_WAIT_MS });
   if (lockedOutcome.stale) {
     audit.write({
       action: "apply-spec",

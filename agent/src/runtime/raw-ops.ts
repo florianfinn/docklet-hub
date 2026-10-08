@@ -19,6 +19,8 @@ import {
   readComposeFile
 } from "../compose-store.js";
 import type { ComposeConfirmations, ComposeRawFailureReason } from "contract";
+import { ACTION_QUEUE_WAIT_MS } from "contract";
+import { ActionQueueError, KeyedMutexBusyError } from "../concurrency.js";
 import {
   checkConfirmation,
   validateRawContent,
@@ -503,6 +505,9 @@ export async function executeRaw(
   return stackLocks.runExclusive(rawLockKey(operation), async () => {
     operation.onLocked?.();
     return executeRawLocked(operation);
+  }, { waitMs: ACTION_QUEUE_WAIT_MS }).catch((error: unknown) => {
+    if (error instanceof ActionQueueError) throw new KeyedMutexBusyError(rawLockKey(operation));
+    throw error;
   });
 }
 

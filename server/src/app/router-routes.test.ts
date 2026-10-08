@@ -39,6 +39,7 @@ const EXPECTED_LAYERS = [
   // `PUT /settings/logs`, so the order changes no answer; the case below holds
   // (`MOVED_BY_FEATURES`).
   "PUT /settings/logs",
+  "GET /hosts/:hostId/containers/:containerId/file-sources",
   "GET /hosts/:hostId/containers/:containerId/share-candidates",
   "GET /hosts/:hostId/containers/:containerId/share",
   "PUT /hosts/:hostId/containers/:containerId/share",
