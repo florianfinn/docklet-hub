@@ -184,6 +184,7 @@ export async function handleMonitorEvents(ctx: RouteContext): Promise<void> {
     "cache-control": "no-store, no-transform",
     "x-accel-buffering": "no"
   });
+  response.flushHeaders();
   await new Promise<void>((resolve) => {
     const unsubscribe = dockerEvents.subscribe((event) => {
       if (registry.isAllowed(event.containerId) || monitors.has(event.containerId, event.containerName)) {
@@ -297,6 +298,7 @@ export async function handleAuditArchive(ctx: RouteContext): Promise<void> {
     "x-audit-sha256": handoff.sha256,
     "cache-control": "no-store"
   });
+  response.flushHeaders();
   if (handoff.bytes === 0) {
     response.end();
     return;

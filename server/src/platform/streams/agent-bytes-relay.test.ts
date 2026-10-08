@@ -28,6 +28,7 @@ type FakeResponse = PassThrough & {
   sentHeaders: Record<string, string>;
   status: (code: number) => FakeResponse;
   setHeader: (name: string, value: string) => FakeResponse;
+  flushHeaders: () => void;
 };
 
 function fakeResponse(highWaterMark = 1): FakeResponse {
@@ -42,6 +43,7 @@ function fakeResponse(highWaterMark = 1): FakeResponse {
     response.sentHeaders[name] = value;
     return response;
   };
+  response.flushHeaders = () => {};
   return response;
 }
 

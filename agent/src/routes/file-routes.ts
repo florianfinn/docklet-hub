@@ -248,6 +248,7 @@ async function handleFileUnlocked(ctx: ContainerRouteContext): Promise<void> {
     if (!loaded.ok) return void reject("missing" in loaded && loaded.missing ? 404 : 400, loaded.reason);
     audit.write({ action: auditAction, containerId, containerName: before.containerName, actor, outcome: "allowed", reason: checked.relative });
     response.writeHead(200, { "content-type": "application/octet-stream", "content-length": String(loaded.size), "cache-control": "no-store" });
+    response.flushHeaders();
     try { await pipeline(Readable.from(loaded.stream), response); }
     catch { response.destroy(); }
     finally { await loaded.cancel(); }
