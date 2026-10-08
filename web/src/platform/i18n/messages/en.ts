@@ -27,6 +27,21 @@ import type { de } from "./de";
 // sonst; der typografische Apostroph ’ steht stattdessen.
 
 export const en = {
+  editorConflictTitle: "The file changed externally.",
+  editorConflictBody: "Your draft is preserved. Reload discards it; an explicit overwrite saves against the current hash.",
+  editorConflictReload: "Reload and discard",
+  editorConflictOverwrite: "Save my draft",
+  editorSave: "Save",
+  editorSaving: "Saving …",
+  editorSaved: "Saved",
+  editorRevealFailed: "The value could not be loaded.",
+  editorKeyboardHint: "Tab indents. Escape, then Tab leaves the field. Shift+Tab without indentation moves back.",
+  editorRevealValue: "Reveal and edit {key}",
+  editorHideValue: "Mask {key}",
+  editorDirty: "Unsaved draft",
+  editorInvalidText: "The text contains invalid characters or exceeds the size limit.",
+  editorDiscardConfirm: "Discard the unsaved draft?",
+
   // The tab bar of the stack page. The texts of the tabs themselves live in
   // the features `logs` and `compose` (`web/src/features/<name>/messages/`).
   stackTabsLabel: "Tabs for this stack",

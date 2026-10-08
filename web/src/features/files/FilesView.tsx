@@ -1,3 +1,5 @@
+import { FileSourceContext } from "./source-context";
+import { SourceChooser } from "./SourceChooser";
 import { useCallback } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { useTranslations } from "use-intl";
@@ -10,6 +12,7 @@ import type { ShareCandidate } from "./api";
 import { fileErrorKey, isShareUnset } from "./file-errors";
 import { FILES_EDIT_PARAM, FILES_PATH_PARAM } from "./file-paths";
 import {
+  useFileSources,
   useContainerShare,
   useFileListing,
   useListingRefresh,
@@ -62,6 +65,8 @@ export function FilesView({ hostId, containerId }: { hostId: string; containerId
   // das ab, ein zweites `decodeURIComponent` machte aus einem Namen still einen
   // anderen.
   const [params] = useSearchParams();
+  const sourceId = params.get("sourceId") ?? undefined;
+  const sources = useFileSources(hostId, containerId);
   const path = params.get(FILES_PATH_PARAM) ?? "";
   // ⚠️ `null` HEISST „KEIN EDITOR OFFEN" und ist nicht dasselbe wie der leere
   // Text: ein `?edit=` ohne Wert wäre die Bitte, ein VERZEICHNIS als Text zu
@@ -70,8 +75,8 @@ export function FilesView({ hostId, containerId }: { hostId: string; containerId
   const navigate = useNavigate();
 
   const share = useContainerShare(hostId, containerId);
-  const shareSet = share.isSuccess && share.data !== null;
-  const listing = useFileListing(hostId, containerId, path, shareSet);
+  const shareSet = !!sourceId || (share.isSuccess && share.data !== null);
+  const listing = useFileListing(hostId, containerId, path, shareSet, sourceId);
   // ⚠️ ONLY `share-unset` LEADS INTO THE CHOICE. A `409 share-unknown` comes
   // from `PUT …/share` and means the opposite — a path the candidate list does
   // not hold. Treating both alike sent the operator back into the choice they
@@ -95,8 +100,8 @@ export function FilesView({ hostId, containerId }: { hostId: string; containerId
   // Adresse ab.
   const hrefFor = useCallback(
     (next: string): string =>
-      next === "" ? pathname : `${pathname}?${FILES_PATH_PARAM}=${encodeURIComponent(next)}`,
-    [pathname]
+      `${pathname}?${sourceId ? `sourceId=${encodeURIComponent(sourceId)}&` : ""}${FILES_PATH_PARAM}=${encodeURIComponent(next)}`,
+    [pathname, sourceId]
   );
 
   /**
@@ -109,9 +114,9 @@ export function FilesView({ hostId, containerId }: { hostId: string; containerId
   const editHrefFor = useCallback(
     (file: string): string => {
       const here = path === "" ? "" : `${FILES_PATH_PARAM}=${encodeURIComponent(path)}&`;
-      return `${pathname}?${here}${FILES_EDIT_PARAM}=${encodeURIComponent(file)}`;
+      return `${pathname}?${sourceId ? `sourceId=${encodeURIComponent(sourceId)}&` : ""}${here}${FILES_EDIT_PARAM}=${encodeURIComponent(file)}`;
     },
-    [pathname, path]
+    [pathname, path, sourceId]
   );
 
   /**
@@ -156,9 +161,20 @@ export function FilesView({ hostId, containerId }: { hostId: string; containerId
   // ⚠️ THE FIRST QUESTION FIRST. While its answer is out, everything else is
   // unknown; and if it says "none chosen", there is nothing to list. Both are
   // decided HERE and not inferred from a failing listing.
-  if (share.isError) return failed(share.error);
-  if (!share.isSuccess) return loading;
-  if (share.data === null) return candidateChoice();
+  if (sources.isError) return failed(sources.error);
+  if (share.isError && !sourceId) return failed(share.error);
+  if (!share.isSuccess && !sourceId) return loading;
+  if (share.data === null && !sourceId) return <><SourceChooser sources={sources.data?.sources ?? []} pathname={pathname} />{candidateChoice()}</>;
+
+  const selectedSource = sources.data?.sources.find((source) => source.sourceId === sourceId);
+  if (selectedSource?.estimatedBytes !== null && selectedSource?.estimatedBytes !== undefined) {
+    return <FileSourceContext value={sourceId}>
+      <SourceChooser sources={sources.data?.sources ?? []} pathname={pathname} selected={sourceId} />
+      {editing !== null ? <FileEditor hostId={hostId} containerId={containerId} path="" writable={selectedSource.writable}
+        onClose={closeEditor} onSaved={() => { void sources.refetch(); }} />
+        : <Button onClick={() => { void navigate(editHrefFor("")); }}>{t("filesEditorLabel")}</Button>}
+    </FileSourceContext>;
+  }
 
   // ⚠️ AN ERROR BEFORE THE DATA. A failed reload keeps the old list in the
   // cache; showing it would present a directory as current that could not be
@@ -174,6 +190,7 @@ export function FilesView({ hostId, containerId }: { hostId: string; containerId
   if (shown === undefined) return loading;
 
   return (
+    <FileSourceContext value={sourceId}>
     <div
       className="flex flex-col gap-3"
       data-testid="files-view"
@@ -184,6 +201,7 @@ export function FilesView({ hostId, containerId }: { hostId: string; containerId
       // unterscheiden — zwei Fassungen, die auf dem Bild gleich aussehen.
       data-refreshing={listing.isFetching ? "true" : undefined}
     >
+      <SourceChooser sources={sources.data?.sources ?? []} pathname={pathname} selected={sourceId} />
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
         <p className="text-[13px] text-subtle-foreground">
           {t("filesCurrentShare", { share: shown.listing.share })}
@@ -219,6 +237,8 @@ export function FilesView({ hostId, containerId }: { hostId: string; containerId
           Blick nach unten. */}
       {editing === null || editing === "" ? null : (
         <FileEditor
+          sourceIdentity={sourceId ?? share.data?.path ?? "unknown"}
+          writable={sourceId ? sources.data?.sources.find((source) => source.sourceId === sourceId)?.writable === true : shown.listing.diagnostics?.uploadable !== false}
           hostId={hostId}
           containerId={containerId}
           path={editing}
@@ -237,5 +257,6 @@ export function FilesView({ hostId, containerId }: { hostId: string; containerId
         onChanged={refreshListing}
       />
     </div>
+    </FileSourceContext>
   );
 }

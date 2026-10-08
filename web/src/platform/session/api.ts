@@ -1,3 +1,4 @@
+import { clearEditorDrafts } from "../editor/useEditorDocument";
 import { postJson, request } from "../http/transport";
 import type { SessionUser } from "./session-user";
 
@@ -23,5 +24,6 @@ export function fetchSession(): Promise<{ user: SessionUser }> {
 // first sign-up (`features/account/api.ts`). It stays here because the shell
 // calls it, and a shell imports no feature.
 export function signOut(): Promise<unknown> {
+  clearEditorDrafts();
   return postJson("/api/auth/sign-out", {});
 }

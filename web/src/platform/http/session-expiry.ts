@@ -1,3 +1,4 @@
+import { clearEditorDrafts } from "../editor/useEditorDocument";
 // Der eine Ort, an dem eine abgelaufene Sitzung ankommt (#127).
 //
 // ⚠️ WARUM ES DIESE DATEI GIBT. Bis hierher stand `status === 401` genau
@@ -35,6 +36,7 @@ const listeners = new Set<UnauthorizedListener>();
  * wird. Genau das tut React beim Aufräumen eines Effekts.
  */
 export function reportUnauthorized(): void {
+  clearEditorDrafts();
   for (const listener of [...listeners]) listener();
 }
 

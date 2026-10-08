@@ -1,3 +1,4 @@
+import { useFileSource } from "./source-context";
 import { Upload, X } from "lucide-react";
 import type { Messages } from "use-intl";
 import { useId, useRef, useState } from "react";
@@ -104,6 +105,7 @@ export function FileUpload({
   onUploaded: () => void;
 }) {
   const t = useTranslations();
+  const sourceId = useFileSource();
   const { language } = useLanguage();
   const verdict = uploadVerdict(listing);
 
@@ -151,6 +153,7 @@ export function FileUpload({
     setProgress({ sent: 0, total: chosen.size });
 
     void uploadContainerFile(hostId, containerId, listing.path, chosen, {
+      sourceId,
       signal: controller.signal,
       onProgress: setProgress
     })

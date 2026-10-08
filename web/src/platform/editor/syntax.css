@@ -1,0 +1,25 @@
+/* Fixed syntax colors preserve contrast independently of the host palette. */
+:root {
+  --editor-syntax-key: #7caaff;
+  --editor-syntax-string: #a1e5a2;
+  --editor-syntax-literal: #eece74;
+  --editor-syntax-special: #65e9e8;
+  --editor-syntax-anchor: #dd87d6;
+  --editor-syntax-variable: #fcb5f5;
+}
+
+[data-scheme="light"] {
+  --editor-syntax-key: #2757b6;
+  --editor-syntax-string: #00721b;
+  --editor-syntax-literal: #735a00;
+  --editor-syntax-special: #006c6c;
+  --editor-syntax-anchor: #8c3287;
+  --editor-syntax-variable: #6b1667;
+}
+
+.editor-syntax-key { color: var(--editor-syntax-key); }
+.editor-syntax-string { color: var(--editor-syntax-string); }
+.editor-syntax-literal { color: var(--editor-syntax-literal); }
+.editor-syntax-special { color: var(--editor-syntax-special); }
+.editor-syntax-anchor { color: var(--editor-syntax-anchor); }
+.editor-syntax-variable { color: var(--editor-syntax-variable); }

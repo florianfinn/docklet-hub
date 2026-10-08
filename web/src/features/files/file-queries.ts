@@ -3,6 +3,7 @@ import { useCallback } from "react";
 
 import { queryKeys } from "../../platform/query/query-keys";
 import {
+  fetchFileSources,
   fetchContainerShare,
   fetchFileListing,
   fetchFileText,
@@ -64,10 +65,10 @@ export function useShareCandidates(hostId: string, containerId: string, enabled:
 }
 
 /** `GET …/files?path=…`, only when `enabled`; `""` is the root of the share. */
-export function useFileListing(hostId: string, containerId: string, path: string, enabled: boolean) {
+export function useFileListing(hostId: string, containerId: string, path: string, enabled: boolean, sourceId?: string) {
   return useQuery({
-    queryKey: queryKeys.files.listing(hostId, containerId, path),
-    queryFn: () => fetchFileListing(hostId, containerId, path),
+    queryKey: [...queryKeys.files.listing(hostId, containerId, path), sourceId ?? ""],
+    queryFn: () => fetchFileListing(hostId, containerId, path, sourceId),
     enabled
   });
 }
@@ -119,12 +120,17 @@ export function useShareChoice(hostId: string, containerId: string) {
  * No retry: the read writes an audit entry at the arm, and the editor showed a
  * failure at once before it became a query.
  */
-export function useFileText(hostId: string, containerId: string, path: string, round: number) {
+export function useFileText(hostId: string, containerId: string, path: string, round: number, sourceId?: string) {
   return useQuery({
-    queryKey: queryKeys.files.text(hostId, containerId, path, round),
-    queryFn: async () => (await fetchFileText(hostId, containerId, path)).text,
+    queryKey: [...queryKeys.files.text(hostId, containerId, path, round), sourceId ?? ""],
+    queryFn: async () => (await fetchFileText(hostId, containerId, path, sourceId)).text,
     staleTime: Infinity,
     gcTime: 0,
     retry: false
   });
+}
+
+export function useFileSources(hostId: string, containerId: string) {
+  return useQuery({ queryKey: [...queryKeys.files.container(hostId, containerId), "sources"],
+    queryFn: () => fetchFileSources(hostId, containerId), retry: false });
 }

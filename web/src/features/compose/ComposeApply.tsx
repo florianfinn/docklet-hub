@@ -1,3 +1,4 @@
+import { EditorConflict } from "../../platform/editor/EditorConflict";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "use-intl";
 
@@ -107,6 +108,7 @@ export type ComposeApplyProps = {
 
 export function ComposeApply(props: ComposeApplyProps) {
   const t = useTranslations();
+  const [resolvedHash, setResolvedHash] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage | null>(null);
   const [confirmations, setConfirmations] = useState<Confirmations>(NO_CONFIRMATIONS);
   // The failure of the run itself (before the stream stood); the failure of the
@@ -137,7 +139,7 @@ export function ComposeApply(props: ComposeApplyProps) {
     void applyCompose(
       props.hostId,
       props.containerId,
-      applyInputOf(props.draft, props.expectedComposeHash, withConfirmations),
+      applyInputOf(props.draft, resolvedHash ?? props.expectedComposeHash, withConfirmations),
       {
         signal: controller.signal,
         onStart: (start) => setStage({ kind: "running", live: start.live, steps: [], dropped: 0 }),
@@ -241,6 +243,11 @@ export function ComposeApply(props: ComposeApplyProps) {
     );
   }
 
+  if (stage.kind === "question" && stage.question.kind === "changed-elsewhere") {
+    const hash = stage.question.actualHash;
+    return <EditorConflict testId="compose-editor" onReload={props.onReload}
+      onOverwrite={() => { setResolvedHash(hash); setStage(null); }} />;
+  }
   if (stage.kind === "question") {
     return (
       <QuestionCard
@@ -321,7 +328,7 @@ function PreviewCard({
       ) : null}
       {preview.configError !== null ? (
         <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[12px] text-destructive">
-          {preview.configError}
+          {t("composeBlockerInvalid")}
         </pre>
       ) : null}
 

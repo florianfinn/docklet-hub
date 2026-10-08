@@ -8,7 +8,7 @@ import type {
 } from "../../domain/hosts/index.js";
 import { AgentError, type Actor } from "../../platform/agent-transport/protocol.js";
 import type { RouteFailure } from "../../platform/http/route-failure.js";
-import { HUB_STREAM_BROKEN } from "contract";
+import { envWriteRequestSchema, HUB_STREAM_BROKEN } from "contract";
 import * as agentClient from "./agent-client.js";
 import { MAX_COMPOSE_BYTES } from "./agent-client.js";
 import { isExternallyManagedStack } from "./externally-managed-stack.js";
@@ -55,7 +55,7 @@ import type {
 // hub stores nothing; the choice lives in the agent's state and survives a
 // restart there (`selection-client.ts` says why).
 
-export type ComposeAgent = Pick<
+export type ComposeAgent = { writeProjectEnv?: typeof agentClient.writeProjectEnv } & Pick<
   typeof agentClient,
   "readComposeFile" | "previewComposeOnAgent" | "applyCompose" | "applyComposeStreaming" | "readProjectEnv"
 > &
@@ -139,6 +139,7 @@ export type ComposeService = {
   read: (
     ref: ContainerRef
   ) => Promise<(Failed & { selectionSupported?: boolean }) | { ok: true; compose: ComposeFileWire }>;
+  writeEnv: (ref: ContainerRef, body: unknown) => Promise<Failed | { ok: true; hash: string }>;
   readEnv: (ref: ContainerRef, plaintext: boolean) => Promise<Failed | { ok: true; env: ProjectEnv }>;
   preview: (ref: ContainerRef, body: unknown) => Promise<Failed | { ok: true; preview: ComposeDryRun }>;
   planApply: (ref: ContainerRef, body: unknown) => Promise<ApplyPlan>;
@@ -435,6 +436,17 @@ export function createComposeService(deps: ComposeServiceDeps): ComposeService {
       };
     },
 
+    writeEnv: async (ref, body) => {
+      const parsed = envWriteRequestSchema.safeParse(body);
+      if (!parsed.success) return problem(400, "invalid-input", "Ungültige Umgebungsänderung.");
+      const opened = await deps.openContainer(ref, "writes");
+      if (!opened.ok) return opened;
+      const { access } = opened;
+      if (ownStack(access)) return problem(403, "hub-own-stack", "Die Umgebung des Hub-Stacks bleibt gesperrt.");
+      if (isExternallyManagedStack(access.container, access.containers)) return problem(403, "externally-managed", "Die Definition wird extern verwaltet.");
+      const saved = await asked(() => (agent.writeProjectEnv ?? agentClient.writeProjectEnv)(access.target, access.container.id, parsed.data, access.options));
+      return saved.ok ? { ok: true, hash: saved.value.hash } : saved;
+    },
     readEnv: async (ref, plaintext) => {
       const opened = await deps.openContainer(ref, "reads");
       if (!opened.ok) return opened;

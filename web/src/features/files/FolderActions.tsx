@@ -1,3 +1,4 @@
+import { useFileSource } from "./source-context";
 import { FolderPlus, Pencil, Trash2 } from "lucide-react";
 import type { Messages } from "use-intl";
 import { useState } from "react";
@@ -109,6 +110,7 @@ export function CreateDirectory({
   onDone: () => void;
 }) {
   const t = useTranslations();
+  const sourceId = useFileSource();
   const verdict = writeVerdict(listing);
   const [name, setName] = useState("");
   const { busy, errorKey, run } = useCommand(onDone);
@@ -135,7 +137,7 @@ export function CreateDirectory({
           data-testid="files-create-directory-submit"
           onClick={() =>
             run(
-              () => applyFileCommand(hostId, containerId, { action: "create-directory", path: listing.path, name }),
+              () => applyFileCommand(hostId, containerId, { action: "create-directory", path: listing.path, name }, sourceId),
               () => setName("")
             )
           }
@@ -177,6 +179,7 @@ function RenameEntry({
   onDone: () => void;
 }) {
   const t = useTranslations();
+  const sourceId = useFileSource();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(entry.name);
   const { busy, errorKey, setErrorKey, run } = useCommand(onDone);
@@ -240,7 +243,7 @@ function RenameEntry({
                     // `create-directory`. Deshalb `childPath`.
                     path: childPath(listing.path, entry.name),
                     name
-                  }),
+                  }, sourceId),
                 () => setOpen(false)
               )
             }
@@ -276,6 +279,7 @@ function DeleteEntry({
   onDone: () => void;
 }) {
   const t = useTranslations();
+  const sourceId = useFileSource();
   const [open, setOpen] = useState(false);
   const { busy, errorKey, setErrorKey, run } = useCommand(onDone);
 
@@ -324,7 +328,7 @@ function DeleteEntry({
                   applyFileCommand(hostId, containerId, {
                     action: "delete",
                     path: childPath(listing.path, entry.name)
-                  }),
+                  }, sourceId),
                 () => setOpen(false)
               )
             }

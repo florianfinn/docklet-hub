@@ -8,6 +8,54 @@
 import type { deFiles } from "./de";
 
 export const enFiles = {
+  filesBlockerSourceUnknown: "The selected source is unknown.",
+  filesBlockerSourceProtected: "This source is protected.",
+  filesBlockerSourceShared: "Other containers use this source; access is read-only.",
+  filesBlockerSourceOwnershipUnknown: "Exclusive ownership of this source cannot be confirmed.",
+  filesBlockerSourceReadOnly: "This source is read-only.",
+  filesBlockerBackupDirectoryProtected: "The backup directory cannot be accessed.",
+  filesBlockerNotMounted: "This path is not mounted in the container.",
+  filesBlockerAgentReadOnly: "The agent is in read-only mode.",
+  filesBlockerNotAllowlisted: "This container is not allowlisted.",
+  filesBlockerNameNotUsableAsDirectory: "The container name cannot be used as a directory.",
+  filesBlockerInvalidComposeFileName: "The Compose file name is invalid.",
+  filesBlockerComposeProjectNameMissingOrInvalid: "The Compose project name is missing or invalid.",
+  filesBlockerProjectDirOutsideBasePath: "The project directory is outside the permitted base path.",
+  filesBlockerSelfManagementLocked: "The agent cannot edit its own operating files.",
+  filesBlockerComposeFileMissing: "The Compose file is missing.",
+  filesBlockerComposeAnchorLabelsMissing: "The Compose labels do not identify the project.",
+  filesBlockerComposeAnchorOutsideBasePath: "The Compose project is outside the permitted base path.",
+  filesBlockerComposeAnchorFileAmbiguous: "The Compose file cannot be identified unambiguously.",
+  filesBlockerDirectoryTaken: "The project directory is already in use.",
+  filesBlockerStackServiceNotAllowlisted: "A service in this project is not allowlisted.",
+  filesBlockerExternallyManaged: "This project is managed externally.",
+  filesBlockerComposeHashMissing: "The expected Compose hash is missing.",
+  filesBlockerConfirmationMissing: "A required confirmation is missing.",
+  filesBlockerTooManyStreams: "Too many requests are active.",
+  filesBlockerStackBusy: "Another operation is changing this project.",
+  filesBlockerPathEmpty: "The path is empty.",
+  filesBlockerPathAbsolute: "Only relative paths are permitted.",
+  filesBlockerPathTraversal: "The path must remain inside the selected source.",
+  filesBlockerPathInvalidCharacters: "The path contains invalid characters.",
+  filesBlockerPathBlocked: "This file uses a protected editing route.",
+  filesBlockerPathOutside: "The path is outside the selected source.",
+  filesBlockerFileReplaced: "The file or directory was replaced during access.",
+  filesBlockerNotReadable: "The source cannot be read.",
+  filesBlockerNotWritable: "Ownership or permissions prevent writing.",
+  filesBlockerWrongKind: "Only regular files and directories are supported.",
+  filesBlockerNotATextFile: "This file is not valid UTF-8 text.",
+  filesBlockerTooLarge: "The content exceeds the permitted byte limit.",
+  filesBlockerAlreadyExists: "The destination already exists. Choose another name.",
+  filesBlockerFileChangedExternally: "The file was changed externally.",
+  filesBlockerExpectedHashMissing: "The expected content hash is missing.",
+  filesBlockerBusy: "A change is already running for this project.",
+  filesSourcesLabel: "Choose mount source",
+  filesSourceProject: "Project",
+  filesSourceExternal: "External bind mount",
+  filesSourceVolume: "Named volume",
+  filesSourceWritable: "Writable",
+  filesSourceReadOnly: "Read only",
+
   containerTabFiles: "Files",
 
   // ── The file surface (web FTP), package B5 stage E5a (#5) ────────────────
@@ -98,8 +146,6 @@ export const enFiles = {
     "Someone or something else touched it while it was open here. Your text is still in the field below — you do not have to retype it. Either fetch the other version and discard your change, or save your version over theirs.",
   filesEditorConflictNoMerge:
     "This view does not show both versions side by side: on a conflict the agent reports THAT something changed, not what. To be sure, open the other version in a second tab.",
-  filesEditorConflictReload: "Reload, discard my change",
-  filesEditorConflictOverwrite: "Save my version",
 
   // ── Upload ───────────────────────────────────────────────────────────────
   //

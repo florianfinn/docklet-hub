@@ -55,6 +55,7 @@ const EXPECTED_LAYERS = [
   "GET /hosts/:hostId/containers/:containerId/compose/candidates",
   "PUT /hosts/:hostId/containers/:containerId/compose/selection",
   "DELETE /hosts/:hostId/containers/:containerId/compose/selection",
+  "PUT /hosts/:hostId/containers/:containerId/compose/env",
   "GET /hosts/:hostId/containers/:containerId/compose/env",
   "POST /hosts/:hostId/containers/:containerId/compose/preview",
   "POST /hosts/:hostId/containers/:containerId/compose",

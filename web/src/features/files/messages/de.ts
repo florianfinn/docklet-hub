@@ -16,6 +16,54 @@
 // it, and its assertions would fall away without a test going red.
 
 export const deFiles = {
+  filesBlockerSourceUnknown: "Die Quelle ist nicht bekannt.",
+  filesBlockerSourceProtected: "Die Quelle ist geschützt.",
+  filesBlockerSourceShared: "Andere Container verwenden diese Quelle.",
+  filesBlockerSourceOwnershipUnknown: "Die Zuordnung der Quelle ist unklar.",
+  filesBlockerSourceReadOnly: "Die Quelle ist nur lesbar.",
+  filesBlockerBackupDirectoryProtected: "Das Sicherungsverzeichnis ist gesperrt.",
+  filesBlockerNotMounted: "Die Quelle ist nicht gemountet.",
+  filesBlockerAgentReadOnly: "Der Agent erlaubt nur Lesezugriff.",
+  filesBlockerNotAllowlisted: "Der Container ist nicht freigegeben.",
+  filesBlockerNameNotUsableAsDirectory: "Der Projektname ist kein gültiger Verzeichnisname.",
+  filesBlockerInvalidComposeFileName: "Der Compose-Dateiname ist ungültig.",
+  filesBlockerComposeProjectNameMissingOrInvalid: "Der Compose-Projektname fehlt oder ist ungültig.",
+  filesBlockerProjectDirOutsideBasePath: "Das Projekt liegt außerhalb des freigegebenen Bereichs.",
+  filesBlockerSelfManagementLocked: "Agent und Hub können sich hier nicht selbst verwalten.",
+  filesBlockerComposeFileMissing: "Die Compose-Datei fehlt.",
+  filesBlockerComposeAnchorLabelsMissing: "Der bestätigte Compose-Anker fehlt.",
+  filesBlockerComposeAnchorOutsideBasePath: "Der Compose-Anker liegt außerhalb des freigegebenen Bereichs.",
+  filesBlockerComposeAnchorFileAmbiguous: "Der Compose-Anker benennt mehrere Dateien.",
+  filesBlockerDirectoryTaken: "Das Projektverzeichnis ist bereits belegt.",
+  filesBlockerStackServiceNotAllowlisted: "Nicht alle Dienste sind freigegeben.",
+  filesBlockerExternallyManaged: "Die Definition wird extern verwaltet.",
+  filesBlockerComposeHashMissing: "Der Inhaltshash der Compose-Datei fehlt.",
+  filesBlockerConfirmationMissing: "Eine erforderliche Bestätigung fehlt.",
+  filesBlockerTooManyStreams: "Es sind zu viele Datenströme geöffnet.",
+  filesBlockerStackBusy: "Für dieses Projekt läuft bereits eine Änderung.",
+  filesBlockerPathEmpty: "Ein Dateipfad fehlt.",
+  filesBlockerPathAbsolute: "Der Pfad muss relativ sein.",
+  filesBlockerPathTraversal: "Der Pfad enthält unzulässige Abschnitte.",
+  filesBlockerPathInvalidCharacters: "Der Pfad enthält unzulässige Zeichen.",
+  filesBlockerPathBlocked: "Diese Datei hat einen geschützten Bearbeitungsweg.",
+  filesBlockerPathOutside: "Der Pfad liegt außerhalb der Quelle.",
+  filesBlockerFileReplaced: "Die Datei wurde während des Zugriffs ausgetauscht.",
+  filesBlockerNotReadable: "Die Quelle ist nicht lesbar.",
+  filesBlockerNotWritable: "Die Dateirechte verhindern das Schreiben.",
+  filesBlockerWrongKind: "Der Eintrag hat einen ungeeigneten Dateityp.",
+  filesBlockerNotATextFile: "Der Inhalt ist kein gültiger UTF-8-Text.",
+  filesBlockerTooLarge: "Der Inhalt überschreitet die Größengrenze.",
+  filesBlockerAlreadyExists: "Das Ziel existiert bereits. Wähle einen anderen Namen.",
+  filesBlockerFileChangedExternally: "Die Datei wurde extern geändert.",
+  filesBlockerExpectedHashMissing: "Der Inhaltshash aus dem Laden fehlt.",
+  filesBlockerBusy: "Für dieses Projekt läuft bereits eine Änderung.",
+  filesSourcesLabel: "Mount-Quelle wählen",
+  filesSourceProject: "Projekt",
+  filesSourceExternal: "Externer Bind-Mount",
+  filesSourceVolume: "Benanntes Volume",
+  filesSourceWritable: "Beschreibbar",
+  filesSourceReadOnly: "Nur lesbar",
+
   // Der Reiter selbst.
   containerTabFiles: "Dateien",
 
@@ -129,8 +177,6 @@ export const deFiles = {
     "Jemand oder etwas anderes hat sie angefasst, während sie hier offen war. Ihr Text steht unverändert im Feld darunter — Sie müssen ihn nicht neu tippen. Entweder Sie holen den fremden Stand und verwerfen dabei Ihre Änderung, oder Sie speichern Ihre Fassung über den fremden Stand.",
   filesEditorConflictNoMerge:
     "Beide Stände nebeneinander zeigt diese Fläche nicht: der Arm meldet beim Konflikt, DASS sich etwas geändert hat, und nicht was. Wer sicher gehen will, öffnet den fremden Stand in einem zweiten Reiter.",
-  filesEditorConflictReload: "Neu laden, meine Änderung verwerfen",
-  filesEditorConflictOverwrite: "Meine Fassung speichern",
 
   // ── Hochladen ────────────────────────────────────────────────────────────
   //

@@ -5,6 +5,7 @@ Der Querschnitt der Oberfläche ohne Fachwissen. Was hier liegt, kennt weder
 
 | Ordner         | Inhalt                                                                                              |
 | -------------- | --------------------------------------------------------------------------------------------------- |
+| `editor/`      | Gemeinsamer Textkern, Hervorhebung und Hülle mit Bytegrenze, Maskierungsbereichen, Hash-Konflikten und zielgebundenen Entwürfen im Arbeitsspeicher |
 | `http/`        | Transport zum Hub (`request`, `parseResponse`, `ApiError`) und der Umgang mit abgelaufener Sitzung |
 | `streams/`     | Strom-Store für NDJSON-Ströme (`createStreamStore`, `sharedStream`) und `useStream`: ein Strom je Schlüssel, Deckel, Abbruch nach dem letzten Leser |
 | `query/`       | TanStack Query: `createQueryClient` (Wiederholung, kein Nachladen bei Fokus) und alle Query-Schlüssel in `query-keys.ts` |

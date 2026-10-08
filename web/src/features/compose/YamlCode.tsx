@@ -1,4 +1,6 @@
-import { classOfKind, highlightLines, type CodePiece } from "./yaml-highlight";
+import { maskProjection } from "../../platform/editor/masking";
+import { composeMaskRanges } from "./editor-masks";
+import { highlightLines } from "./yaml-highlight";
 
 // Die Anzeige eines YAML-Textes mit Zeilennummern.
 //
@@ -23,29 +25,11 @@ export type YamlCodeProps = {
   className?: string;
 };
 
-/** Eine Zeile, gefärbt. Ohne Stücke bleibt sie leer und behält ihre Höhe. */
-export function CodeLine({ pieces }: { pieces: CodePiece[] }) {
-  // ⚠️ Ein leeres Element hätte die Höhe null und brächte die Zeilenspalte zum
-  // Verrutschen. Das Nullbreiten-Leerzeichen hält die Zeile auf.
-  if (pieces.length === 0) return <>{"​"}</>;
-  return (
-    <>
-      {pieces.map((piece, index) => {
-        const className = classOfKind(piece.kind);
-        return className === "" ? (
-          <span key={index}>{piece.text}</span>
-        ) : (
-          <span key={index} className={className}>
-            {piece.text}
-          </span>
-        );
-      })}
-    </>
-  );
-}
+export { CodeLine } from "../../platform/editor/CodeLine";
+import { CodeLine } from "../../platform/editor/CodeLine";
 
 export function YamlCode({ text, firstLine = 1, className }: YamlCodeProps) {
-  const lines = highlightLines(text);
+  const lines = highlightLines(maskProjection(text, composeMaskRanges(text), new Set()).text);
   return (
     <div className={`overflow-x-auto font-mono text-[12.5px] leading-[1.55] ${className ?? ""}`}>
       <div className="flex min-w-fit">

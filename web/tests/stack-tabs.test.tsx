@@ -4,6 +4,7 @@ import { renderInDom, settle, settleQueries } from "./dom-harness.js";
 import { composeSettled } from "./compose-harness.js";
 
 import React from "react";
+import { clearEditorDrafts } from "../src/platform/editor/useEditorDocument.js";
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -186,7 +187,9 @@ function stubHub(scripted: Scripted = {}): { calls: Call[]; restore: () => void 
             filePresent: true,
             plaintext,
             entries: [
-              { key: "API_KEY", inFile: true, empty: false, ...(plaintext ? { value: "s3cret-value" } : {}) }
+              { key: "API_KEY", inFile: true, empty: false, ...(plaintext ? { value: "s3cret-value" } : {}) },
+              { key: "PUBLIC", inFile: true, empty: false, ...(plaintext ? { value: "unrevealed-public-value" } : {}) },
+              { key: "DB_PASSWORD", inFile: true, empty: false, ...(plaintext ? { value: "unrevealed-password-value" } : {}) }
             ]
           }
         })
@@ -217,6 +220,7 @@ function stubHub(scripted: Scripted = {}): { calls: Call[]; restore: () => void 
 }
 
 async function mount(tab: "overview" | "compose", role: Role = "admin", scripted: Scripted = {}) {
+  clearEditorDrafts();
   const server = stubHub(scripted);
   // ⚠️ DER `TooltipProvider` GEHÖRT ZUM PRÜFSTAND UND NICHT ZUM BAUTEIL.
   // `StackScreen` steht in der Anwendung unter `AppShell`, und der setzt ihn an
@@ -469,7 +473,7 @@ test("der Tooltip sagt dasselbe wie die Beschreibung des Feldes", async () => {
 
     assert.equal(await hintText(), description);
     // Und die Gegenprobe, dass beide überhaupt etwas sagen.
-    assert.equal(description, en.composeEditKeyboardHint);
+    assert.equal(description, en.editorKeyboardHint);
   } finally {
     mounted.server.restore();
     await mounted.unmount();
@@ -644,15 +648,17 @@ test("die .env steht maskiert da, der Klartext kommt auf Klick und geht mit Verb
     assert.ok(content().includes("API_KEY"));
     assert.ok(!content().includes("s3cret-value"), "maskiert");
 
-    const reveal = [...document.querySelectorAll("button")].find((entry) => entry.textContent === en.composeEnvReveal);
+    const reveal = [...document.querySelectorAll("button")].find((entry) => entry.textContent === en.editorRevealValue.replace("{key}", "API_KEY"));
     assert.ok(reveal, "der Knopf zum Anzeigen fehlt");
     reveal.click();
     await settle();
     assert.equal(envCalls().length, 2);
     assert.match(envCalls()[1].url, /compose\/env\?plaintext=1$/);
     assert.ok(content().includes("s3cret-value"), "Klartext nach dem Klick");
+    assert.equal(content().includes("unrevealed-public-value"), false);
+    assert.equal(content().includes("unrevealed-password-value"), false);
 
-    const hide = [...document.querySelectorAll("button")].find((entry) => entry.textContent === en.composeEnvHide);
+    const hide = [...document.querySelectorAll("button")].find((entry) => entry.textContent === en.editorHideValue.replace("{key}", "API_KEY"));
     assert.ok(hide, "der Knopf zum Verbergen fehlt");
     hide.click();
     await settle();

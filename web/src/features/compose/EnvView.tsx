@@ -1,72 +1,65 @@
-import { Eye, EyeOff } from "lucide-react";
+import { useState } from "react";
 import { useTranslations } from "use-intl";
-
-import { errorCode } from "../../platform/http/transport";
+import { ApiError, errorCode } from "../../platform/http/transport";
 import { Button } from "../../platform/ui/shadcn/button";
+import { EditorShell } from "../../platform/editor/EditorShell";
+import { EditorConflict } from "../../platform/editor/EditorConflict";
+import { useEditorDocument } from "../../platform/editor/useEditorDocument";
 import { composeErrorKey } from "./compose-errors";
 import { useProjectEnv, useRevealEnv } from "./compose-queries";
-
-// The `.env` of the project next to the compose file (#265: loaded through
-// `compose-queries.ts`). The masked list is a query; the plaintext is a click
-// and lives only as long as this view shows it (`useRevealEnv`).
-
-function envErrorKey(error: unknown): ReturnType<typeof composeErrorKey> | "composeEnvOwnStack" {
-  return errorCode(error) === "hub-own-stack" ? "composeEnvOwnStack" : composeErrorKey(error);
+import { envEditorAdapter, envEditorChanges, envEditorContent, parseEnvEditor } from "./env-editor-adapter";
+import { saveProjectEnv } from "./api";
+import { MASK } from "../../platform/editor/masking";
+function conflictHash(error: unknown): string | null {
+  if (!(error instanceof ApiError) || error.status !== 409) return null;
+  try {
+    const body = JSON.parse(error.message) as { reason?: string; error?: string; actualHash?: string };
+    return body.reason === "file-changed-externally" || body.error === "file-changed-externally" ? body.actualHash ?? null : null;
+  } catch { return null; }
 }
-
 export function EnvView({ hostId, containerId }: { hostId: string; containerId: string }) {
   const t = useTranslations();
   const masked = useProjectEnv(hostId, containerId);
   const reveal = useRevealEnv(hostId, containerId);
-
-  // The plaintext, once asked for, replaces the masked list until "hide".
-  const env = reveal.data ?? masked.data;
+  const [busy, setBusy] = useState(false);
+  const [revealedByTarget, setRevealedByTarget] = useState<Record<string, Record<string, string>>>({});
+  const env = masked.data;
+  const documentTarget = JSON.stringify([hostId, containerId, env?.projectDir, ".env"]);
+  const revealedValues = revealedByTarget[documentTarget] ?? {};
+  const entries = env?.entries.map((entry) => Object.prototype.hasOwnProperty.call(revealedValues, entry.key) ? { ...entry, value: revealedValues[entry.key] } : entry) ?? [];
+  const document = useEditorDocument(documentTarget, env ? { content: envEditorContent(entries), hash: env.envHash ?? (env.filePresent ? "" : "absent") } : undefined, envEditorAdapter.maxBytes);
   const failure = reveal.error ?? masked.error;
-
-  if (failure !== null) return <p className="p-4 text-sm text-destructive">{t(envErrorKey(failure))}</p>;
-  if (env === undefined) return <p className="p-4 text-sm text-muted-foreground">{t("loading")}</p>;
-
-  return (
-    <div className="flex min-h-[40vh] flex-col">
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-accent-line bg-accent px-3 py-1.5">
-        <span className="min-w-0 truncate font-mono text-[12px] text-muted-foreground" title={env.projectDir}>
-          {env.projectDir}
-        </span>
-        {env.filePresent && env.entries.length > 0 ? (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={reveal.isPending}
-            onClick={() => { if (env.plaintext) reveal.reset(); else reveal.mutate(); }}
-          >
-            {env.plaintext ? <EyeOff data-icon="inline-start" aria-hidden="true" /> : <Eye data-icon="inline-start" aria-hidden="true" />}
-            {t(env.plaintext ? "composeEnvHide" : "composeEnvReveal")}
-          </Button>
-        ) : null}
-      </div>
-      {!env.filePresent ? (
-        <p className="p-4 text-sm text-muted-foreground">{t("composeEnvMissing")}</p>
-      ) : env.entries.length === 0 ? (
-        <p className="p-4 text-sm text-muted-foreground">{t("composeEnvEmpty")}</p>
-      ) : (
-        <div className="max-h-[70vh] overflow-auto py-3 font-mono text-[12.5px] leading-[1.55]" data-testid="compose-env-content">
-          <div className="min-w-fit">
-            {env.entries.map((entry, index) => (
-              <div key={entry.key} className="flex whitespace-pre">
-                <span aria-hidden="true" className="sticky left-0 min-w-10 select-none border-r border-border bg-card pr-2 pl-3 text-right text-subtle-foreground">{index + 1}</span>
-                <span className="px-3">
-                  <span className="compose-syntax-key">{entry.key}</span>
-                  <span>=</span>
-                  <span className="compose-syntax-string">{env.plaintext && entry.value !== undefined ? entry.value.replace(/\r/g, "\\r").replace(/\n/g, "\\n") : entry.empty ? "" : "••••••••"}</span>
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {env.filePresent && env.entries.length > 0 ? (
-        <p className="border-t border-border px-3 py-2 text-[12px] text-muted-foreground">{t("composeEnvParsedNote")}</p>
-      ) : null}
+  if (failure && !document.hasDraft) return <p className="p-4 text-sm text-destructive">{t(errorCode(failure) === "hub-own-stack" ? "composeEnvOwnStack" : composeErrorKey(failure))}</p>;
+  if (!env) return <p className="p-4">{t("loading")}</p>;
+  const save = (expectedHash: string) => {
+    setBusy(true);
+    void document.save(async (content, hash) => {
+      const changes = envEditorChanges(content, entries);
+      return saveProjectEnv(hostId, containerId, { ...changes, expectedEnvHash: hash === "absent" ? null : hash });
+    }, conflictHash, expectedHash).finally(() => setBusy(false));
+  };
+  return <div className="flex min-h-[40vh] flex-col gap-2 p-3">
+    {!env.filePresent ? <p>{t("composeEnvMissing")}</p> : null}
+    {document.conflict === null ? null : <EditorConflict testId="env-editor" busy={busy}
+      onReload={() => { document.discard(); reveal.reset(); void masked.refetch(); }}
+      onOverwrite={() => save(document.conflict!)} />}
+    {document.error === null ? null : <p role="alert">{t(composeErrorKey(document.error))}</p>}
+    <div data-testid="compose-env-content">
+      <EditorShell key={documentTarget} value={document.content} onChange={document.edit} adapter={envEditorAdapter} label={t("composeEnvFileName")}
+        testId="env-editor" dirty={document.dirty} disabled={busy} onReveal={async (id) => {
+          const plaintext = await reveal.mutateAsync();
+          const selected = plaintext.entries.find((entry) => entry.key === id);
+          if (!selected || selected.value === undefined) throw new Error("reveal-unavailable");
+          setRevealedByTarget((current) => ({ ...current, [documentTarget]: { ...current[documentTarget], [id]: selected.value! } }));
+          if (document.hasDraft) {
+            const values = parseEnvEditor(document.content);
+            if (values[id] === MASK) values[id] = selected.value;
+            document.edit(envEditorContent(Object.entries(values).map(([key, value]) => ({ key, value, empty: !value }))));
+          }
+        }} />
     </div>
-  );
+    <Button size="sm" disabled={busy || !document.dirty || !document.valid || !document.hash} data-testid="env-editor-save" onClick={() => save(document.hash)}>{t(busy ? "editorSaving" : "editorSave")}</Button>
+    {document.saved ? <p>{t("editorSaved")}</p> : null}
+    <p className="text-xs text-muted-foreground">{t("composeEnvParsedNote")}</p>
+  </div>;
 }
