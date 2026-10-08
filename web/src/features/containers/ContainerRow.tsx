@@ -3,10 +3,9 @@ import { Link } from "react-router";
 import type { OverviewContainer } from "contract";
 import { containerPath } from "../../platform/routes/container-path";
 import { ContainerStateDot } from "./container-state";
-import { LifecycleControls } from "./LifecycleControls";
 import type { ContainerRowNotice, ContainerSlots } from "./slots";
 
-// Navigation, marks and actions are siblings so that no control is nested in a link.
+// Navigation and marks are siblings so that no control is nested in a link.
 export function ContainerRow({ container, hostId, slots }: {
   container: OverviewContainer; hostId: string; slots?: ContainerSlots;
 }) {
@@ -24,7 +23,6 @@ export function ContainerRow({ container, hostId, slots }: {
         <span className="truncate text-xs text-subtle-foreground">{container.status}</span>
       </span>
     </div>
-    <LifecycleControls target={{ kind: "container", hostId, container }} />
     {notice !== null ? <span role="alert" className="block pl-5 text-[12px] text-destructive">{notice}</span> : null}
   </div>;
 }

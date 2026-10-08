@@ -29,7 +29,7 @@ die Update-Vorschau und -Abnahme wenden ausschließlich die beiden
 Compose-Bedingungen an. Die vollständigen Update-Kriterien stehen in
 [update-and-rollback.md](update-and-rollback.md).
 
-Die Aktionen stehen direkt in der Zeile jedes Containers und Stacks und in der Detailansicht, nicht nur im Kontextmenü. Auf schmalen Ansichten bleiben sie als Schaltflächen mit ausreichender Trefferfläche erreichbar; nichts hängt allein an Hover oder Rechtsklick. Jede Schaltfläche ist per Tastatur erreichbar und trägt ihren Namen auch für Screenreader.
+Die Aktionen stehen nur auf der Seite des Containers und auf der Seite des Stacks. Übersicht und Container-Liste zeigen Zustand und Navigation, aber keine Aktionen, Selbstheilungs- oder Absturzzeilen; das Kontextmenü eines Stacks bietet nur Öffnen und Ausblenden. Auf schmalen Ansichten bleiben sie als Schaltflächen mit ausreichender Trefferfläche erreichbar; nichts hängt allein an Hover oder Rechtsklick. Jede Schaltfläche ist per Tastatur erreichbar und trägt ihren Namen auch für Screenreader.
 
 ## Beschriftung nach wirksamem Modus
 
@@ -65,7 +65,7 @@ Nach jedem Vorgang zeigt die Oberfläche den tatsächlichen Stand aus dem Live-S
 
 ## Absicht, Wartung und Vorfall
 
-Ein gestoppter Container mit Stopp-Absicht zeigt „manuell gestoppt“ mit Zeitpunkt und, wenn bekannt, wer gestoppt hat. Der Hub löst `user:<id>` zum Kontonamen auf und entfernt E-Mail-Adressen aus dem Namen; bei gelöschtem Konto, leerem Namen oder fehlgeschlagener Auflösung steht „Akteur unbekannt“. Systemakteure heißen „Hub“ beziehungsweise „Selbstheilung“. Ein gestoppter Container ohne Absicht mit Exit-Code ungleich 0 zeigt „abgestürzt“. Aktive Wartung erscheint als Kennzeichen mit Ablaufzeit; ein- und ausgeschaltet wird sie in der Detailansicht und im Menü des Ziels, mit wählbarer Dauer, ab Werk eine Stunde, auf Wunsch unbegrenzt. Ein offener Vorfall der Selbstheilung erscheint am Container mit Ursache, Versuchen, empfohlener Handlung und Log-Auszug und lässt sich dort quittieren. Die Regeln dahinter stehen in [self-healing.md](self-healing.md).
+Ein gestoppter Container mit Stopp-Absicht zeigt „manuell gestoppt“ mit Zeitpunkt und, wenn bekannt, wer gestoppt hat. Der Hub löst `user:<id>` zum Kontonamen auf und entfernt E-Mail-Adressen aus dem Namen; bei gelöschtem Konto, leerem Namen oder fehlgeschlagener Auflösung steht „Akteur unbekannt“. Systemakteure heißen „Hub“ beziehungsweise „Selbstheilung“. Ein gestoppter Container ohne Absicht mit Exit-Code ungleich 0 zeigt „abgestürzt“. Aktive Wartung erscheint auf der Seite des Containers bzw. Stacks als Kennzeichen mit Ablaufzeit; ein- und ausgeschaltet wird sie dort über einen Umschalter, mit wählbarer Dauer, ab Werk eine Stunde, auf Wunsch unbegrenzt. Ein offener Vorfall der Selbstheilung erscheint am Container mit Ursache, Versuchen, empfohlener Handlung und Log-Auszug und lässt sich dort quittieren. Die Regeln dahinter stehen in [self-healing.md](self-healing.md).
 
 ## Update, Recreate und Entfernen
 

@@ -33,8 +33,8 @@ export function context(current: HostOverview): HubRuntimeContext {
     expectedStack: { projectName: stack.project, projectDir: "/srv/example/demo", composeFileName: "compose.yml", services }, services };
 }
 export type Call = { path: string; method: string; body: unknown; signal?: AbortSignal | null };
-export async function fixture({ kind = "container", current = host(), role = "admin", detail = false, copies = 1, strict = false,
-  action }: { kind?: "container" | "stack"; current?: HostOverview; role?: "admin" | "user"; detail?: boolean; copies?: number; strict?: boolean;
+export async function fixture({ kind = "container", current = host(), role = "admin", copies = 1, strict = false,
+  action }: { kind?: "container" | "stack"; current?: HostOverview; role?: "admin" | "user"; copies?: number; strict?: boolean;
   action?: (call: Call) => Promise<Response> | Response } = {}) {
   const fetchBefore = globalThis.fetch;
   const languagesBefore = Object.getOwnPropertyDescriptor(globalThis.navigator, "languages");
@@ -58,7 +58,7 @@ export async function fixture({ kind = "container", current = host(), role = "ad
   const target: LifecycleTarget = kind === "container" ? { kind, hostId: current.host.id, container: current.stacks[0].containers[0] }
     : { kind, hostId: current.host.id, stack: current.stacks[0] };
   const tree = <AppLanguageProvider><LifecycleProvider role={role}>{Array.from({ length: copies }, (_, index) =>
-    <LifecycleControls key={index} target={target} detail={detail} />)}</LifecycleProvider></AppLanguageProvider>;
+    <LifecycleControls key={index} target={target} />)}</LifecycleProvider></AppLanguageProvider>;
   const mounted = await renderInDom(strict ? <React.StrictMode>{tree}</React.StrictMode> : tree);
   await React.act(async () => { mounted.queryClient.setQueryData(queryKeys.containers.overview(), [current]); });
   await settle();

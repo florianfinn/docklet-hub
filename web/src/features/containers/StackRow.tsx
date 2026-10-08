@@ -15,7 +15,6 @@ import {
   ContextMenuTrigger
 } from "../../platform/ui/shadcn/context-menu";
 import { stackPath } from "../../platform/routes/stack-path";
-import { LifecycleControls } from "./LifecycleControls";
 import { ContainerList } from "./ContainerList";
 import { ContainerStateDot } from "./container-state";
 import type { ContainerSlots } from "./slots";
@@ -40,7 +39,7 @@ export function StackRow({ hostId, stack, open, onHiddenChange, slots }: StackRo
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div className="flex items-center rounded-md hover:bg-accent data-[state=open]:bg-accent">
-            {/* Navigation and lifecycle actions stay outside the disclosure button. */}
+            {/* Navigation stays outside the disclosure button. */}
             <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[13px]">
               <ChevronRight
                 aria-hidden="true"
@@ -80,7 +79,6 @@ export function StackRow({ hostId, stack, open, onHiddenChange, slots }: StackRo
           ) : null}
         </ContextMenuContent>
       </ContextMenu>
-      <LifecycleControls target={{ kind: "stack", hostId, stack }} />
       {/* data-indent and pl-stack-indent must share the same element. */}
       <CollapsibleContent data-indent={stack.indent} className="pl-stack-indent">
         <ContainerList containers={stack.containers} hostId={hostId} slots={slots} />
