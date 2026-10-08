@@ -1,23 +1,12 @@
 import { Line, LineChart, XAxis, YAxis } from "recharts";
 
+import { isolatedPointIndices } from "./isolated-points";
+
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "../shadcn/chart";
 
-// Ein Verlauf ohne Achsen — die letzten zehn Minuten einer Messgröße (#213,
-// #214), gezeichnet mit dem shadcn-Baustein `chart`
-// (docs/design/management-aids.md §4.1).
-//
-// ⚠️ `connectNulls={false}`: ein `null` ist beim Agenten „gerade nicht
-// ermittelbar" und wird eine LÜCKE in der Linie. Eine Linie, die über die
-// Lücke hinweg verbunden wird, behauptete Werte, die niemand gemessen hat;
-// eine Null behauptete einen ruhigen Container.
-//
-// ⚠️ OHNE ANIMATION. Die Fläche fragt alle zehn Sekunden neu, und eine Linie,
-// die bei jeder Antwort neu einfliegt, zeigt Bewegung, wo sich kaum etwas
-// geändert hat.
-//
-// ⚠️ `data-points` trägt die Zahl der Messpunkte. Die Abnahme von #213
-// („nach zehn Minuten 60 Werte") ist daran ablesbar, ohne die gezeichnete
-// Linie auszuzählen.
+// Null samples remain gaps; isolated valid samples need a dot to be visible.
+// Animation stays disabled for the periodically refreshed series.
+// `data-points` exposes the sample count for acceptance checks.
 
 export type SparklinePoint = { sampledAt: string; value: number | null };
 
@@ -30,15 +19,16 @@ export function Sparkline({
   testId
 }: {
   points: readonly SparklinePoint[];
-  // Was der Verlauf zeigt — für den Screenreader, der die Linie nicht sieht.
+  // Accessible description of the series.
   label: string;
-  // Eine Farbe aus der Palette, etwa `var(--chart-1)`.
+  // Palette color, e.g. `var(--chart-1)`.
   color: string;
-  // Obergrenze der Skala; ohne sie folgt sie den Werten.
+  // Optional upper bound; otherwise the scale follows the values.
   max?: number;
   format: (value: number) => string;
   testId?: string;
 }) {
+  const isolatedIndices = isolatedPointIndices(points.map((point) => point.value));
   const config = { value: { label, color } } satisfies ChartConfig;
   return (
     <ChartContainer
@@ -61,7 +51,11 @@ export function Sparkline({
           type="monotone"
           stroke="var(--color-value)"
           strokeWidth={1.5}
-          dot={false}
+          dot={({ index, cx, cy }) =>
+            isolatedIndices.has(index) && cx != null && cy != null
+              ? <circle key={index} cx={cx} cy={cy} r={2} fill="var(--color-value)" />
+              : null
+          }
           connectNulls={false}
           isAnimationActive={false}
         />
