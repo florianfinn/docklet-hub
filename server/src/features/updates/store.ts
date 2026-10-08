@@ -1,5 +1,5 @@
 import { UPDATE_START_DEADLINE_SECONDS, updateContainerSettingsSchema, type UpdateTarget,
-  type UpdateContainerSettings, type AgentJobsResponse } from "contract";
+  type UpdateContainerSettings } from "contract";
 import type { Pool } from "pg";
 
 export function updateSettingKey(target: UpdateTarget): string {
@@ -17,12 +17,4 @@ export async function writeUpdateSetting(pool: Pool, hostId: string, target: Upd
     ON CONFLICT (host_id, target_key) DO UPDATE SET start_deadline_seconds = EXCLUDED.start_deadline_seconds`,
   [hostId, updateSettingKey(target), setting.startDeadlineSeconds]);
   return setting;
-}
-export async function recordUpdateJobs(pool: Pool, hostId: string, jobs: AgentJobsResponse): Promise<void> {
-  for (const progress of [...jobs.active, ...jobs.recent]) {
-    await pool.query(`INSERT INTO container_update_job (host_id, job_id, progress, completed_at) VALUES ($1, $2, $3::jsonb, $4)
-      ON CONFLICT (host_id, job_id) DO UPDATE SET progress = EXCLUDED.progress,
-      completed_at = EXCLUDED.completed_at, updated_at = now()`, [hostId, progress.jobId, JSON.stringify(progress), progress.completedAt]);
-  }
-  await pool.query("DELETE FROM container_update_job WHERE host_id = $1 AND completed_at <= now() - interval '24 hours'", [hostId]);
 }

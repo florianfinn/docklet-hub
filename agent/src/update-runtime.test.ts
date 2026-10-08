@@ -6,60 +6,85 @@ import test, { after, type TestContext } from "node:test";
 import type { ComposeProject, UpOptions } from "./compose-cli.js";
 import type { RawInspect } from "./engine.js";
 import type { UpdateServiceSelection } from "contract";
+const { buildRegistryEntries, toRegistryRequestBody } = await import(new URL("../../server/src/domain/containers/registry-sync.ts", import.meta.url).href);
+import { UpdateRunner } from "./update-runner.js";
+import { AgentJobs } from "./agent-jobs.js";
+import { KeyedMutex } from "./concurrency.js";
+import { runtimeStateOf } from "./runtime-actions.js";
 import { UpdateBudget } from "./update-budget.js";
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "updates-runtime-"));
 Object.assign(process.env, { DOCKER_AGENT_SECRET: "s".repeat(64), DOCKER_AGENT_BIND_BASE_PATH: directory,
   DOCKER_AGENT_REGISTRY_FILE: path.join(directory, "registry.json"), DOCKER_AGENT_AUDIT_FILE: path.join(directory, "audit.jsonl"),
   DOCKER_AGENT_MONITOR_FILE: path.join(directory, "monitor.json") });
 const { engine, registry, config, stopIntents } = await import("./runtime/state.js");
-const { updateRuntimeOps: ops, updateCompose, authorizeUpdateSelection } = await import("./runtime/updates.js");
+const { updateRuntimeOps: ops, updateCompose, authorizeUpdateSelection, updateJournal } = await import("./runtime/updates.js");
 after(() => fs.rmSync(directory, { recursive: true, force: true }));
+const offered = `sha256:${"b".repeat(64)}`;
 const digest = `sha256:${"c".repeat(64)}`;
-function fixture(t: TestContext, status = "running", compose = false) {
+function fixture(t: TestContext, status = "running", compose = false, reference = "example/app:1.0") {
+  fs.rmSync(path.join(directory, "update-pending.json"), { force: true });
   const projectDir = path.join(directory, "demo"); fs.mkdirSync(projectDir, { recursive: true });
   fs.writeFileSync(path.join(projectDir, "compose.yaml"), "services: {}\n");
   const labels: Record<string, string> = compose ? { "com.docker.compose.project": "demo", "com.docker.compose.service": "web",
-    "com.docker.compose.project.working_dir": projectDir, "com.docker.compose.project.config_files": path.join(projectDir, "compose.yaml") } : {};
+    "com.docker.compose.project.working_dir": projectDir, "com.docker.compose.project.config_files": path.join(projectDir, "compose.yaml"), "com.docker.compose.config-hash": "original-definition" } : {};
   let raw: RawInspect = { Id: "old", Name: "/demo", Image: "old-image", RestartCount: 0,
-    Config: { Image: "example/app:1.0", Env: ["DEMO=value"], Labels: labels, Healthcheck: { Test: ["CMD", "true"] } },
+    Config: { Image: reference, Env: ["DEMO=value"], Labels: labels, Healthcheck: { Test: ["CMD", "true"] } },
     HostConfig: { RestartPolicy: { Name: "no" } }, State: { Status: status, Running: ["running", "paused", "restarting"].includes(status),
       Paused: status === "paused", Restarting: status === "restarting", StartedAt: "seen", Health: { Status: "healthy" } } };
   const original = structuredClone(raw); const trace: string[] = []; let count = 0;
-  registry.replaceAll([{ containerId: raw.Id, containerName: "demo", imageRef: "example/app:1.0", allowed: true,
+  registry.replaceAll([{ containerId: raw.Id, containerName: "demo", imageRef: reference, allowed: true,
     ...(compose ? { compose: { projectDir, projectName: "demo", serviceName: "web", composeFileName: "compose.yaml", origin: "dashboard" as const } } : {}) }]);
   t.mock.property(config, "readOnly", false);
-  t.mock.method(engine, "inspect", async () => structuredClone(raw));
-  t.mock.method(engine, "inspectImage", async () => ({ Id: "old-image", RepoDigests: [`example/app@${digest}`] }));
-  t.mock.method(engine, "listWithComposeLabels", async () => [{ id: raw.Id, name: "demo", image: "example/app:1.0", status: raw.State!.Status!, labels: raw.Config!.Labels! }]);
-  t.mock.method(engine, "stop", async () => { trace.push("stop"); raw.State = { ...raw.State, Running: false, Status: "exited" }; });
-  t.mock.method(engine, "rename", async () => { trace.push("rename"); });
-  t.mock.method(engine, "create", async (_name: string, payload: Record<string, unknown>) => {
-    trace.push(`create:${payload.Image}`); raw = { ...structuredClone(original), Id: `new-${++count}`, Image: String(payload.Image),
-      Config: { ...original.Config, Image: String(payload.Image) }, State: { Status: "created", Running: false, StartedAt: "" } }; return raw.Id;
+  const containers = new Map<string, RawInspect>([[raw.Id, raw]]);
+  let taggedImage = "old-image";
+  const get = (id: string) => {
+    if (id === raw.Id) return raw;
+    const found = containers.get(id); if (!found) throw new Error(`Unknown container ${id}`); return found;
+  };
+  t.mock.method(engine, "inspect", async (id: string) => structuredClone(get(id)));
+  t.mock.method(engine, "inspectImage", async (ref: string) => {
+    const id = ref === "old-image" || ref === "new-image" ? ref : taggedImage;
+    return { Id: id, RepoDigests: [`example/app@${id === "old-image" ? digest : offered}`] };
   });
-  t.mock.method(engine, "start", async () => { trace.push("start"); raw.State = { Running: true, Status: "running", StartedAt: "new-start", Health: { Status: "healthy" } }; });
-  t.mock.method(engine, "pause", async (_id: string, paused: boolean) => { trace.push(`pause:${paused}`); raw.State = { ...raw.State, Paused: paused, Status: paused ? "paused" : "running" }; });
-  t.mock.method(engine, "remove", async () => { trace.push("remove"); });
-  t.mock.method(updateCompose, "config", async () => ({ services: { web: { image: "example/app:1.0" } } }));
+  t.mock.method(engine, "remoteManifestDigest", async () => offered);
+  t.mock.method(engine, "pull", async () => { trace.push("pull"); taggedImage = "new-image"; });
+  t.mock.method(engine, "tagImage", async (id: string, repo: string, tag: string) => {
+    assert.equal(repo, "example/app"); assert.equal(tag, reference === "example/app" ? "latest" : "1.0"); trace.push(`tag:${id}`); taggedImage = id;
+  });
+  t.mock.method(engine, "listWithComposeLabels", async () => [...containers.values()].map((c) => ({ id: c.Id,
+    name: c.Name.slice(1), image: c.Config!.Image!, imageId: c.Image!, status: c.State!.Status!, labels: c.Config!.Labels! })));
+  t.mock.method(engine, "stop", async (id: string) => { trace.push("stop"); const c = get(id); c.State = { ...c.State, Running: false, Status: "exited" }; });
+  t.mock.method(engine, "rename", async (id: string, name: string) => { trace.push("rename"); get(id).Name = `/${name}`; });
+  t.mock.method(engine, "create", async (name: string, payload: Record<string, unknown>) => {
+    const ref = String(payload.Image); trace.push(`create:${ref}`);
+    raw = { ...structuredClone(original), Name: `/${name}`, Id: `new-${++count}`, Image: ref === "old-image" || ref === "new-image" ? ref : taggedImage,
+      Config: { ...original.Config, Image: ref }, State: { Status: "created", Running: false, StartedAt: "" } };
+    containers.set(raw.Id, raw); return raw.Id;
+  });
+  t.mock.method(engine, "start", async (id: string) => { trace.push("start"); get(id).State = { Running: true, Status: "running", StartedAt: "new-start", Health: { Status: "healthy" } }; });
+  t.mock.method(engine, "pause", async (id: string, paused: boolean) => { trace.push(`pause:${paused}`); const c = get(id); c.State = { ...c.State, Paused: paused, Status: paused ? "paused" : "running" }; });
+  t.mock.method(engine, "remove", async (id: string) => { trace.push("remove"); containers.delete(id); });
+  t.mock.method(updateCompose, "config", async () => ({ services: { web: { image: reference } } }));
   t.mock.method(updateCompose, "up", async (project: ComposeProject, options: UpOptions) => {
     assert.equal(project.composeFileName, "compose.yaml"); assert.equal(options.noStart, true); assert.equal(options.noDeps, true);
     assert.equal(options.pullNever, true); assert.equal(options.removeOrphans, false);
-    const file = path.join(project.projectDir, options.snapshotOverrideFileName!); assert.equal(fs.statSync(file).mode & 0o777, 0o600);
-    const snapshot = JSON.parse(fs.readFileSync(file, "utf8")); trace.push(`compose:${snapshot.services.web.image}`);
-    raw = { ...structuredClone(original), Id: `new-${++count}`, Image: snapshot.services.web.image, State: { Status: "created", Running: false, StartedAt: "" } };
+    assert.equal("snapshotOverrideFileName" in options, false); assert.notEqual(options.rollbackOverride, true);
+    containers.delete(raw.Id);
+    await engine.create("demo", { Image: original.Config!.Image });
+    trace.push(`compose:${raw.Config!.Image}`);
   });
   const selection: UpdateServiceSelection = { target: compose ? { kind: "compose", projectName: "demo", serviceName: "web" }
     : { kind: "container", containerName: "demo" }, expectedContainer: { containerId: "old", status, startedAt: "seen" }, startDeadlineSeconds: 10, backup: null };
-  return { original, selection, trace, change: (patch: Partial<RawInspect>) => { raw = { ...raw, ...patch }; } };
+  return { original, selection, trace, get: () => structuredClone(raw), tag: (id: string) => { taggedImage = id; }, tagged: () => taggedImage, change: (patch: Partial<RawInspect>) => { raw = { ...raw, ...patch }; containers.set(raw.Id, raw); } };
 }
 for (const compose of [false, true]) for (const status of ["running", "paused", "restarting", "exited", "created"]) {
   test(`immutable image and captured definition rollback: compose=${compose}, status=${status}`, async (t) => {
     const f = fixture(t, status, compose); const snapshot = await ops.prepare(f.selection, null, new UpdateBudget(60_000));
-    const finish = ops.intentional([snapshot]); const updated = await ops.exchange(snapshot, "new-image", new UpdateBudget(60_000), () => {}, () => {});
-    assert.equal(updated.Image, "new-image"); assert.equal(updated.State!.Running, f.original.State!.Running);
+    f.tag("new-image"); const finish = ops.intentional([snapshot]); const updated = await ops.exchange(snapshot, "new-image", new UpdateBudget(60_000), () => {}, () => {});
+    assert.equal(updated.Image, "new-image"); assert.equal(updated.Config!.Image, "example/app:1.0"); assert.equal(updated.State!.Running, f.original.State!.Running);
     assert.equal(Boolean(updated.State!.Paused), status === "paused"); assert.equal(stopIntents.updateIntentActive(updated), true);
     const restored = await ops.rollback(snapshot, new UpdateBudget(60_000)); finish();
-    assert.equal(restored.Image, "old-image"); assert.equal(restored.State!.Running, f.original.State!.Running);
+    assert.equal(restored.Image, "old-image"); assert.equal(restored.Config!.Image, "example/app:1.0"); assert.equal(f.tagged(), "old-image"); assert.equal(restored.State!.Running, f.original.State!.Running);
     assert.equal(Boolean(restored.State!.Paused), status === "paused");
     assert.equal(f.trace.filter((entry) => entry === "start").length, f.original.State!.Running ? 2 : 0);
     assert.equal(fs.readdirSync(path.join(directory, "demo")).some((file) => file.startsWith(".docklet-update")), false);
@@ -107,4 +132,78 @@ test("rollback failure produces the existing incident and live notification", as
       imageId: "new-image", definitionHash: "hash", backupId: null, updateError: "update-health-timeout", rollbackError: "update-rollback-failed", resumeError: null }] }, "operator");
   assert.equal(selfHealingState.status(selfHealingConfig.read(), true, Date.now()).incidents.length, 1);
   assert.deepEqual(notifications, ["old"]); assert.equal(records.length, 1);
+});
+for (const compose of [false, true]) for (const rollback of [false, true]) test(`reference survives registry sync and second update: compose=${compose}, rollback=${rollback}`, async (t) => {
+  const f = fixture(t, "running", compose);
+  const snapshot = await ops.prepare(f.selection, null, new UpdateBudget(60_000));
+  const pulled = await ops.pull(snapshot, new UpdateBudget(60_000));
+  await ops.exchange(snapshot, pulled.imageId, new UpdateBudget(60_000), () => {}, () => {});
+  if (rollback) await ops.rollback(snapshot, new UpdateBudget(60_000));
+  const current = f.get(); const anchor = registry.get(current.Id)!.compose;
+  const entries = buildRegistryEntries([{ id: current.Id, name: "demo", image: current.Config!.Image!, externalManagement: null }],
+    anchor ? [{ ...anchor, services: [{ serviceName: "web", containerId: current.Id }] }] : []);
+  registry.replaceAll(toRegistryRequestBody(entries).entries);
+  assert.equal(registry.expectedImageRef(current.Id), "example/app:1.0");
+  const state = runtimeStateOf(current);
+  const next = await ops.prepare({ ...f.selection, expectedContainer: { containerId: state.containerId!, status: state.status!, startedAt: state.startedAt } }, null, new UpdateBudget(60_000));
+  assert.equal(next.preview.blocker, null); assert.equal(await ops.manifest(next, new UpdateBudget(60_000)), offered);
+  assert.equal(next.preview.currentDigest, rollback ? digest : offered);
+  assert.equal(f.tagged(), rollback ? "old-image" : "new-image");
+  const second = await ops.pull(next, new UpdateBudget(60_000));
+  const updated = await ops.exchange(next, second.imageId, new UpdateBudget(60_000), () => {}, () => {});
+  assert.equal(updated.Image, "new-image"); assert.equal(updated.Config!.Image, "example/app:1.0");
+});
+for (const compose of [false, true]) test(`tag race refuses the wrong image before start and restores the old reference: compose=${compose}`, async (t) => {
+  const f = fixture(t, "running", compose); const snapshot = await ops.prepare(f.selection, null, new UpdateBudget(60_000));
+  f.tag("new-image");
+  await assert.rejects(ops.exchange(snapshot, "different-image", new UpdateBudget(60_000), () => {}, () => {}), { code: "update-state-mismatch" });
+  assert.equal(f.trace.includes("start"), false);
+  const restored = await ops.rollback(snapshot, new UpdateBudget(60_000));
+  assert.equal(restored.Image, "old-image"); assert.equal(restored.Config!.Image, "example/app:1.0"); assert.equal(f.tagged(), "old-image");
+});
+test("compose rollback refuses a changed config-hash", async (t) => {
+  const f = fixture(t, "running", true); const snapshot = await ops.prepare(f.selection, null, new UpdateBudget(60_000));
+  f.tag("new-image"); await ops.exchange(snapshot, "new-image", new UpdateBudget(60_000), () => {}, () => {});
+  const up = updateCompose.up;
+  t.mock.method(updateCompose, "up", async (...args: Parameters<typeof up>) => {
+    await up(...args); f.change({ Config: { ...f.get().Config, Labels: { ...f.get().Config!.Labels, "com.docker.compose.config-hash": "changed" } } });
+  });
+  await assert.rejects(ops.rollback(snapshot, new UpdateBudget(60_000)), { code: "update-rollback-failed" });
+});
+
+for (const compose of [false, true]) test(`digest reference never pulls, exchanges or retags: compose=${compose}`, async (t) => {
+  const f = fixture(t, "running", compose, `example/app@${digest}`);
+  t.mock.method(engine, "remoteManifestDigest", async () => digest);
+  t.mock.method(engine, "pull", async () => { assert.fail("Digest refs never pull"); });
+  t.mock.method(engine, "tagImage", async () => { assert.fail("Digest refs never retag"); });
+  let finish!: (result: import("contract").UpdateResult) => void;
+  const completed = new Promise<import("contract").UpdateResult>((resolve) => { finish = resolve; });
+  const runner = new UpdateRunner(new AgentJobs(() => true), new KeyedMutex(), { ...ops, finished: (result) => finish(result) });
+  const preview = await runner.preview({ target: f.selection.target, services: [f.selection] }, null);
+  assert.equal(preview.services[0].offeredDigest, digest); assert.equal(preview.services[0].currentDigest, digest);
+  runner.start({ previewId: preview.previewId, target: preview.target, confirmed: true, services: [{ ...preview.services[0], offeredDigest: digest }] }, null);
+  assert.equal((await completed).outcome, "unchanged"); assert.deepEqual(f.trace, []);
+  const snapshot = await ops.prepare(f.selection, null, new UpdateBudget(60_000));
+  const restored = await ops.rollback(snapshot, new UpdateBudget(60_000));
+  assert.equal(restored.Image, "old-image"); assert.equal(restored.Config!.Image, `example/app@${digest}`);
+});
+
+test("implicit latest reference is preserved and retagged on rollback", async (t) => {
+  const f = fixture(t, "running", false, "example/app"); const snapshot = await ops.prepare(f.selection, null, new UpdateBudget(60_000));
+  f.tag("new-image"); const updated = await ops.exchange(snapshot, "new-image", new UpdateBudget(60_000), () => {}, () => {});
+  assert.equal(updated.Config!.Image, "example/app");
+  const restored = await ops.rollback(snapshot, new UpdateBudget(60_000)); assert.equal(restored.Image, "old-image");
+  assert.equal(restored.Config!.Image, "example/app"); assert.equal(f.tagged(), "old-image");
+});
+for (const compose of [false, true]) test(`journal survives a restart before assessment and clears after success: compose=${compose}`, async (t) => {
+  const f = fixture(t, "running", compose); const snapshot = await ops.prepare(f.selection, null, new UpdateBudget(60_000));
+  let entered!: () => void; let resume!: () => void;
+  const starting = new Promise<void>((resolve) => { entered = resolve; }); const waiting = new Promise<void>((resolve) => { resume = resolve; });
+  const start = engine.start;
+  t.mock.method(engine, "start", async (...args: Parameters<typeof start>) => { await start(...args); entered(); await waiting; });
+  f.tag("new-image"); const updating = ops.exchange(snapshot, "new-image", new UpdateBudget(60_000), () => {}, () => {});
+  await starting;
+  assert.deepEqual(updateJournal.read(), [{ target: snapshot.preview.target, containerId: "old", containerName: "demo" }]);
+  const persisted = JSON.parse(fs.readFileSync(path.join(directory, "update-pending.json"), "utf8"));
+  assert.deepEqual(persisted, updateJournal.read()); resume(); await updating; assert.deepEqual(updateJournal.read(), []);
 });

@@ -4,7 +4,7 @@ import type { Pool } from "pg";
 import type { ContainerAccessResult, HostRouteAccessResult } from "../../domain/hosts/index.js";
 import { AgentError } from "../../platform/agent-transport/protocol.js";
 import { createUpdatesService } from "./service.js";
-import { readUpdateSetting, writeUpdateSetting, updateSettingKey, recordUpdateJobs } from "./store.js";
+import { readUpdateSetting, writeUpdateSetting, updateSettingKey } from "./store.js";
 import type * as agentClient from "./agent-client.js";
 
 const target = { kind: "container", containerName: "demo" } as const;
@@ -51,8 +51,7 @@ test("host access, body validation and current container identity precede agent 
     (error: unknown) => error instanceof AgentError && (error.detail as { error: string }).error === "state-changed");
   assert.equal(mismatch.writes.includes("preview"), false);
 });
-test("recovered jobs are persisted and completed results expire after 24 hours", async () => {
-  const f = fixture(); await recordUpdateJobs(f.pool, "host", { active: [{ jobId: "job", kind: "update", target, service: null, phase: "queued",
-    phaseStartedAt: "2026-10-08T00:00:00Z", phaseDeadlineAt: "2026-10-08T00:01:00Z", completedAt: null, result: null, firstExchangeStarted: false, cancelAllowed: true }], recent: [] });
-  assert.match(f.calls[0].sql, /ON CONFLICT/); assert.equal(f.calls[0].args[1], "job"); assert.match(f.calls[1].sql, /24 hours/);
+test("job discovery reads the agent list without a local progress table", async () => {
+  const f = fixture(); assert.deepEqual(await f.service.list(ref, {}), { active: [], recent: [] });
+  assert.deepEqual(f.calls, []);
 });

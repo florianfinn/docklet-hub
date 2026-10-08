@@ -3,7 +3,7 @@ import { updatePreviewRequestSchema, updateStartRequestSchema, updateTargetSchem
 import type { Pool } from "pg";
 import type { HostRouteRequest, HostRouteAccessResult, ContainerAccessRequest, ContainerAccessResult } from "../../domain/hosts/index.js";
 import { AgentError } from "../../platform/agent-transport/protocol.js";
-import { readUpdateSetting, writeUpdateSetting, recordUpdateJobs } from "./store.js";
+import { readUpdateSetting, writeUpdateSetting } from "./store.js";
 import * as client from "./agent-client.js";
 
 export function rejectUpdate(status: number, error: string): never {
@@ -57,7 +57,7 @@ export function createUpdatesService(deps: {
     },
     async list(ref: HostRouteRequest, query: AgentJobsQuery) {
       const opened = await access(ref, "reads"); const jobs = await agent.list(opened.target, query, opened.options);
-      await recordUpdateJobs(deps.pool, ref.hostId, jobs); return jobs;
+      return jobs;
     },
     async progress(ref: HostRouteRequest, id: string) {
       const opened = await access(ref, "reads"); return agent.progress(opened.target, id, opened.options);

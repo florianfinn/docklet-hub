@@ -5,6 +5,7 @@ import { type UpdatePreviewRequest, type UpdateResult, type UpdateStartRequest, 
 import { AgentJobs } from "./agent-jobs.js";
 import { KeyedMutex } from "./concurrency.js";
 import { UpdateRunner, updateResultConsistent, type UpdateOps, type UpdateSnapshot } from "./update-runner.js";
+import { StackEndpointError } from "./stack-control.js";
 import { UpdateFailure } from "./update-budget.js";
 import type { RawInspect } from "./engine.js";
 const oldDigest = `sha256:${"a".repeat(64)}`; const newDigest = `sha256:${"b".repeat(64)}`;
@@ -52,9 +53,10 @@ test("manifest-only preview queries services in parallel under one total deadlin
   const f = fixture(["web", "db"], { manifest: async () => { entered++; if (entered === 2) release(); await waiting; return newDigest; },
     pull: async () => { throw new Error("preview must not pull"); } });
   const response = await f.runner.preview(f.request, null); assert.equal(entered, 2); assert.equal(response.digestSource, "registry-manifest");
-  const blocked = fixture(["web"], { manifest: async () => new Promise(() => {}) });
+  let queryStarted!: () => void; const querying = new Promise<void>((resolve) => { queryStarted = resolve; });
+  const blocked = fixture(["web"], { manifest: async () => { queryStarted(); return new Promise(() => {}); } });
   t.mock.timers.enable({ apis: ["setTimeout"] });
-  const expired = blocked.runner.preview(blocked.request, null); await Promise.resolve(); await Promise.resolve(); t.mock.timers.tick(60_001);
+  const expired = blocked.runner.preview(blocked.request, null); await querying; t.mock.timers.tick(60_001);
   await assert.rejects(expired, /update-phase-deadline-exceeded/);
 });
 test("all images are pulled before dependency-ordered exchange and start returns only jobId", async () => {
@@ -197,3 +199,26 @@ test("fresh precheck has a separate budget and cannot consume the exchange allow
   };
   f.runner.start(await f.preview(), null); assert.equal((await f.completed).outcome, "updated");
 });
+test("only changed services acquire update intent", async () => {
+  let intended: string[] = [];
+  const f = fixture(["web", "db"], { manifest: async (s) => s.preview.target.kind === "compose" && s.preview.target.serviceName === "db" ? oldDigest : newDigest,
+    intentional: (snapshots) => { intended = snapshots.map((s) => s.preview.expectedContainer.containerId); return () => {}; } });
+  f.runner.start(await f.preview(), null); assert.equal((await f.completed).outcome, "updated"); assert.deepEqual(intended, ["web"]);
+});
+test("digest-bound references stay unchanged without pull, retag or exchange", async () => {
+  const f = fixture(["web"], { manifest: async () => oldDigest }); const prepare = f.ops.prepare;
+  f.ops.prepare = async (...args) => { const snapshot = await prepare(...args); snapshot.preview.imageRef = `example/app@${oldDigest}`; return snapshot; };
+  f.runner.start(await f.preview(), null); assert.equal((await f.completed).outcome, "unchanged");
+  assert.equal(f.trace.some((s) => /pull:|exchange:|rollback:/.test(s)), false);
+});
+
+for (const key of ["self-management-locked", "externally-managed", "agent-read-only", "not-allowlisted", "observe-only", "container-gone"]) {
+  test(`fresh eligibility failure retains or maps the gate key: ${key}`, async () => {
+    const f = fixture(); const prepare = f.ops.prepare; let calls = 0;
+    f.ops.prepare = async (...args) => { if (++calls === 3) throw new StackEndpointError(403, key); return prepare(...args); };
+    f.runner.start(await f.preview(), null); const result = await f.completed;
+    assert.equal(result.updateError, ["observe-only", "container-gone"].includes(key) ? "state-changed" : key);
+    assert.equal(result.services[0].updateError, result.updateError); assert.equal(result.rollbackError, null);
+    assert.equal(f.trace.some((s) => /exchange:|rollback:/.test(s)), false);
+  });
+}

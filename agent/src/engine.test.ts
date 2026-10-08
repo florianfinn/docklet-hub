@@ -491,3 +491,23 @@ test("die event exit code remains local evidence even after a newer inspect rese
     assert.equal(monitorEventOf({ Type: "container", Action: "die", Actor: { ID: "a".repeat(64), Attributes: { exitCode } } })?.exitCode, undefined);
   }
 });
+
+test("rollback retag uses the immutable ID, split repo/tag and the remaining deadline", async (t) => {
+  const requests: http.RequestOptions[] = []; let status = 201;
+  t.mock.method(http, "request", (options: http.RequestOptions, callback: (response: http.IncomingMessage) => void) => {
+    requests.push(options); const request = new EventEmitter() as http.ClientRequest;
+    request.end = (() => {
+      const response = Object.assign(new EventEmitter(), { statusCode: status }) as http.IncomingMessage;
+      callback(response); response.emit("end"); return request;
+    }) as typeof request.end;
+    return request;
+  });
+  const engine = new DockerEngine({ socketPath: "/unused.sock" });
+  const oldId = `sha256:${"a".repeat(64)}`;
+  await engine.tagImage(oldId, "registry.example.org:5443/team/app", "1.0", { timeoutMs: 321 });
+  assert.equal(requests[0].method, "POST"); assert.equal(requests[0].timeout, 321);
+  const url = new URL(String(requests[0].path), "http://engine.example.org");
+  assert.equal(decodeURIComponent(url.pathname), `/images/${oldId}/tag`);
+  assert.equal(url.searchParams.get("repo"), "registry.example.org:5443/team/app"); assert.equal(url.searchParams.get("tag"), "1.0");
+  status = 500; await assert.rejects(engine.tagImage(oldId, "example/app", "1.0"), EngineError);
+});

@@ -7,6 +7,7 @@ import { AgentJobs } from "./agent-jobs.js";
 import { KeyedMutex } from "./concurrency.js";
 import type { RawInspect } from "./engine.js";
 import { runtimeStateOf } from "./runtime-actions.js";
+import { updateFailureCode } from "./update-failure.js";
 import { UpdateBudget, UpdateFailure } from "./update-budget.js";
 
 class UpdateCancelled extends Error {}
@@ -94,7 +95,7 @@ export class UpdateRunner {
     const lockKey = request.target.kind === "container" ? `container:${request.target.containerName}` : request.target.projectName;
     const execute = async (): Promise<UpdateResult> => {
       const snapshots: UpdateSnapshot[] = []; const exchanged: UpdateSnapshot[] = []; const images = new Map<UpdateSnapshot, string>();
-      let failure: UpdateError | null = null; let rollbackError: UpdateError | null = null; let current: UpdateSnapshot | null = null;
+      let failure: UpdateResult["updateError"] = null; let rollbackError: UpdateError | null = null; let current: UpdateSnapshot | null = null;
       let finishIntent = () => {};
       try {
         for (const selection of request.services) {
@@ -123,11 +124,11 @@ export class UpdateRunner {
           images.set(snapshot, pulled.imageId);
         }
         if (!cancelled) {
-          finishIntent = this.ops.intentional(ordered);
+          finishIntent = this.ops.intentional(ordered.filter((snapshot) => images.has(snapshot)));
           for (const snapshot of ordered) {
             const image = images.get(snapshot); if (!image) continue;
             current = snapshot;
-            // Backup is supplied by step C. Unsupported requests never reach this boundary.
+            // Non-null backup requests are rejected before any mutation.
             if (cancelled && !progress.firstExchangeStarted) break;
             const ms = updateExchangeTimeoutMs(snapshot.preview.startDeadlineSeconds);
             phase("precheck", snapshot, UPDATE_PRECHECK_TIMEOUT_MS);
@@ -156,8 +157,7 @@ export class UpdateRunner {
           Object.assign(result, { state: runtimeStateOf(raw), imageId: raw.Image ?? null });
         }
       } catch (error) {
-        failure = error instanceof UpdateCancelled ? null : error instanceof UpdateFailure ? error.code : error instanceof Error && error.message === "action-queue-timeout"
-          ? "action-queue-timeout" : "update-exchange-failed";
+        failure = error instanceof UpdateCancelled ? null : updateFailureCode(error);
         if (current && failure) Object.assign(resultFor(current), { outcome: "failed", updateError: failure });
         for (const snapshot of [...exchanged].reverse()) {
           const ms = updateRollbackTimeoutMs(snapshot.preview.startDeadlineSeconds); phase("rollback", snapshot, ms);

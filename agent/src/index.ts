@@ -1,3 +1,4 @@
+import { recoverUpdates } from "./runtime/updates.js";
 import { startSelfHealing, stopSelfHealing } from "./runtime/self-healing.js";
 import path from "node:path";
 import { legacyEnvKeysInUse } from "./request-keys.js";
@@ -40,6 +41,8 @@ try {
   );
   process.exit(1);
 }
+
+await recoverUpdates();
 
 server.listen(config.listenPort, config.listenHost, async () => {
   console.log(

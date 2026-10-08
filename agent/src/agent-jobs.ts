@@ -9,7 +9,7 @@ const key = (target: unknown) => JSON.stringify(target);
 
 type Entry = { progress: AgentJobProgress; targets: StopIntentTarget[]; cancel: () => boolean };
 
-// Restore registers its own progress and cancellation boundary in the same store.
+// Job kinds share visibility, retention and cancellation checks.
 export class AgentJobs {
   private readonly entries = new Map<string, Entry>();
   constructor(private readonly known: (target: StopIntentTarget) => boolean, private readonly now = Date.now) {}

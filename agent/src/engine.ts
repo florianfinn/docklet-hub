@@ -302,6 +302,12 @@ export class DockerEngine {
     if (status !== 204) throw new EngineError("pause state change failed", status);
   }
 
+  async tagImage(imageId: string, repo: string, tag: string, options: RuntimeCallOptions = {}): Promise<void> {
+    const query = new URLSearchParams({ repo, tag });
+    const { status } = await this.request({ method: "POST", path: `/images/${encodeURIComponent(imageId)}/tag?${query}`, ...options });
+    if (status !== 201) throw new EngineError("image tag failed", status);
+  }
+
   async rename(containerId: string, name: string, options: RuntimeCallOptions = {}): Promise<void> {
     const { status, body } = await this.request({
       method: "POST",

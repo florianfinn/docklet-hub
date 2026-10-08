@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { updateAcceptance, UPDATE_STOP_TIMEOUT_MS, UPDATE_CREATE_TIMEOUT_MS, UPDATE_READBACK_TIMEOUT_MS,
   SELF_HEALING_RECOMMENDATION, updateDigestSchema, type UpdateServiceSelection, type UpdateResult } from "contract";
+import { UpdateJournal, recoverUpdateRemnants } from "../update-recovery.js";
 import { AgentJobs } from "../agent-jobs.js";
 import { UpdateRunner, type UpdateSnapshot, type UpdateOps } from "../update-runner.js";
 import { UpdateBudget, UpdateFailure } from "../update-budget.js";
@@ -26,6 +27,9 @@ import type { RawInspect } from "../engine.js";
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const sameTarget = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 type Definition = { project: ComposeProject | null; normalized: { services: Record<string, Record<string, unknown>> } | null; currentId: string; parkedId?: string; actor: string | null };
+export const updateJournal = new UpdateJournal(path.join(path.dirname(config.registryFile), "update-pending.json"));
+export const recoverUpdates = () => recoverUpdateRemnants({ engine, registry, journal: updateJournal, state: selfHealingState, basePath: composeBasePath,
+  notify: (id) => dockerEvents.notifyLifecycleChange(id) });
 export const updateCompose = { config: composeConfig, up: composeUp };
 export const agentJobs = new AgentJobs((target) => {
   const ids = containerIdsForTarget(target);
@@ -134,36 +138,19 @@ async function mutate(snapshot: UpdateSnapshot, imageId: string, budget: UpdateB
   const wasRunning = snapshot.preview.acceptance !== "created";
   if (definition.project) {
     const target = snapshot.preview.target as { serviceName: string };
-    const normalized = structuredClone(definition.normalized!);
-    normalized.services[target.serviceName].image = imageId;
-    const temporaryName = `.docklet-update-${randomUUID()}.json`;
-    const file = path.join(definition.project.projectDir, temporaryName);
-    fs.writeFileSync(file, JSON.stringify(normalized), { mode: 0o600, flag: "wx" });
     let startedAt = Date.now();
-    try {
-      await budget.run((options) => updateCompose.up(definition.project!, {
-        snapshotOverrideFileName: temporaryName,
-        ...options, removeOrphans: false, serviceName: target.serviceName, pullNever: true, noDeps: true,
-        forceRecreate: true, wait: false, noStart: true
-      }), UPDATE_STOP_TIMEOUT_MS + UPDATE_CREATE_TIMEOUT_MS);
-      const created = await read(snapshot, budget);
-      if (wasRunning) {
-        startedAt = Date.now(); await budget.run((options) => engine.start(created.Id, options), UPDATE_CREATE_TIMEOUT_MS);
-      }
-    } finally { fs.rmSync(file, { force: true }); }
+    await budget.run((options) => updateCompose.up(definition.project!, {
+      ...options, removeOrphans: false, serviceName: target.serviceName, pullNever: true, noDeps: true,
+      forceRecreate: true, wait: false, noStart: true
+    }), UPDATE_STOP_TIMEOUT_MS + UPDATE_CREATE_TIMEOUT_MS);
+    const created = await read(snapshot, budget);
+    if (created.Image !== imageId) throw new UpdateFailure(rollback ? "update-rollback-failed" : "update-state-mismatch");
+    if (wasRunning) {
+      startedAt = Date.now(); await budget.run((options) => engine.start(created.Id, options), UPDATE_CREATE_TIMEOUT_MS);
+    }
     return startedAt;
   }
-  if (rollback && definition.parkedId) {
-    const parked = await budget.run((options) => engine.inspect(definition.parkedId!, options));
-    if (parked.Image === snapshot.raw.Image) {
-      const id = definition.currentId;
-      if (id !== parked.Id) await budget.run((options) => engine.remove(id, { ...options, force: true }));
-      await budget.run((options) => engine.rename(parked.Id, snapshot.raw.Name.replace(/^\//, ""), options));
-      if (wasRunning) await budget.run((options) => engine.start(parked.Id, options));
-      if (id !== parked.Id && registry.get(id)) registry.replaceContainerId(id, parked.Id);
-      definition.currentId = parked.Id; definition.parkedId = undefined; return Date.now();
-    }
-  }
+  const previousParkedId = definition.parkedId;
   let current: RawInspect;
   try { current = await read(snapshot, budget); }
   catch { current = snapshot.raw; }
@@ -173,15 +160,18 @@ async function mutate(snapshot: UpdateSnapshot, imageId: string, budget: UpdateB
   const parked = `${name}-update-${randomUUID()}`;
   await budget.run((options) => engine.rename(current.Id, parked, options), UPDATE_CREATE_TIMEOUT_MS);
   definition.parkedId = current.Id;
-  const payload = buildCreatePayload(snapshot.raw, { imageRef: imageId });
+  const payload = buildCreatePayload(snapshot.raw, { imageRef: snapshot.preview.imageRef });
   try {
     const id = await budget.run((options) => engine.create(name, payload.config, options), UPDATE_CREATE_TIMEOUT_MS);
     definition.currentId = id;
+    const created = await budget.run((options) => engine.inspect(id, options));
+    if (created.Image !== imageId) throw new UpdateFailure(rollback ? "update-rollback-failed" : "update-state-mismatch");
     for (const network of payload.additionalNetworks) await budget.run((options) => engine.connectNetwork(network.name, id, network.endpoint, options));
     if (!registry.replaceContainerId(current.Id, id)) throw new UpdateFailure("update-state-mismatch");
     const startedAt = Date.now();
     if (wasRunning) await budget.run((options) => engine.start(id, options), UPDATE_CREATE_TIMEOUT_MS);
     await budget.run((options) => engine.remove(current.Id, { force: true, ...options }), UPDATE_CREATE_TIMEOUT_MS);
+    if (previousParkedId && previousParkedId !== current.Id) await budget.run((options) => engine.remove(previousParkedId, { force: true, ...options }), UPDATE_CREATE_TIMEOUT_MS);
     definition.parkedId = undefined;
     return startedAt;
   } catch (error) {
@@ -225,6 +215,7 @@ export const updateRuntimeOps: UpdateOps = {
   async exchange(snapshot, image, budget, verify, beginExchange) {
     const definition = snapshot.definition as Definition;
     beginExchange();
+    updateJournal.begin({ target: snapshot.preview.target, containerId: snapshot.raw.Id, containerName: snapshot.raw.Name.replace(/^\//, "") });
     const started = await mutate(snapshot, image, budget, false); verify();
     await verifyUpdate(() => read(snapshot, budget), snapshot.preview, image, budget, started);
     let raw = await read(snapshot, budget);
@@ -232,17 +223,26 @@ export const updateRuntimeOps: UpdateOps = {
     if (snapshot.preview.initialState.status === "paused") {
       await budget.run((options) => engine.pause(raw.Id, true, options)); raw = await read(snapshot, budget);
     }
+    updateJournal.complete(snapshot.preview.target);
     return raw;
   },
   async rollback(snapshot, budget) {
+    updateJournal.begin({ target: snapshot.preview.target, containerId: snapshot.raw.Id, containerName: snapshot.raw.Name.replace(/^\//, "") });
+    const reference = parseImageRef(snapshot.preview.imageRef);
+    if (!reference) throw new UpdateFailure("update-rollback-failed");
+    if (!reference.digest) await budget.run((options) => engine.tagImage(snapshot.raw.Image!, reference.fromImage, reference.tag ?? "latest", options));
     const started = await mutate(snapshot, snapshot.raw.Image!, budget, true);
     let raw = await read(snapshot, budget);
     if (snapshot.preview.initialState.status === "paused") {
       await budget.run((options) => engine.pause(raw.Id, true, options)); raw = await read(snapshot, budget);
     }
     const definition = snapshot.definition as Definition;
-    if (!definition.project && hash(buildCreatePayload(raw, { imageRef: snapshot.preview.imageRef })) !== snapshot.preview.definitionHash) throw new UpdateFailure("update-rollback-failed");
+    if (definition.project) {
+      const originalHash = snapshot.raw.Config?.Labels?.["com.docker.compose.config-hash"];
+      if (!originalHash || raw.Config?.Labels?.["com.docker.compose.config-hash"] !== originalHash) throw new UpdateFailure("update-rollback-failed");
+    } else if (hash(buildCreatePayload(raw, { imageRef: snapshot.preview.imageRef })) !== snapshot.preview.definitionHash) throw new UpdateFailure("update-rollback-failed");
     if (!rollbackStateMatches(raw, snapshot.raw)) raw = await verifyRollback(() => read(snapshot, budget), snapshot.preview, snapshot.raw, budget, started);
+    updateJournal.complete(snapshot.preview.target);
     return raw;
   },
   read, intentional: (snapshots) => stopIntents.beginUpdate(snapshots.map((s) => s.raw)), finished

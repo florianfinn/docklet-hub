@@ -144,7 +144,7 @@ async function main(): Promise<void> {
 
   // Live connections and their health probes deliver the current configuration.
   const selfHealingSync = createRuntimeSettingsSync({ pool, repository, agentSecret: config.agentSecret });
-  const updateRecovery = createUpdateRecovery({ pool, connect: createHostAccess({ pool, repository, agentSecret: config.agentSecret }).connect });
+  const updateRecovery = createUpdateRecovery({ connect: createHostAccess({ pool, repository, agentSecret: config.agentSecret }).connect });
   const hostCycle = startHostCycleService({
     pool,
     repository,

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Pool } from "pg";
 import type { HostRecord } from "../../domain/hosts/index.js";
 import { createUpdateRecovery } from "./recovery.js";
 import * as client from "./agent-client.js";
@@ -19,10 +18,12 @@ test("job queries encode stable target JSON and validate every agent response", 
 });
 test("startup/reconnect discovers unknown jobs through the list and coalesces concurrent probes", async (t) => {
   let calls = 0; let release!: () => void; const wait = new Promise<void>((resolve) => { release = resolve; });
-  t.mock.method(globalThis, "fetch", async () => { calls++; await wait; return Response.json({ active: [], recent: [] }); });
-  const pool = { query: async () => ({ rows: [] }) } as unknown as Pool;
-  const recovery = createUpdateRecovery({ pool, connect: async () => target }); const host = { id: "host" } as HostRecord;
+  const discovered = { active: [{ jobId: "unknown-before-reconnect", kind: "update", target: { kind: "container", containerName: "demo" },
+    phase: "queued", service: null, phaseStartedAt: "2026-10-08T00:00:00.000Z", phaseDeadlineAt: "2026-10-08T00:01:00.000Z",
+    completedAt: null, result: null, firstExchangeStarted: false, cancelAllowed: true }], recent: [] };
+  t.mock.method(globalThis, "fetch", async () => { calls++; await wait; return Response.json(discovered); });
+  const recovery = createUpdateRecovery({ connect: async () => target }); const host = { id: "host" } as HostRecord;
   const first = recovery.syncHost(host); const second = recovery.syncHost(host);
-  assert.equal(first, second); release(); await first; assert.equal(calls, 1);
+  assert.equal(first, second); release(); assert.deepEqual(await first, discovered); assert.equal(calls, 1);
   await recovery.syncHost(host); assert.equal(calls, 2);
 });
