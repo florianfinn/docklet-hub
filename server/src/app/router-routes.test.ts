@@ -73,6 +73,13 @@ const EXPECTED_LAYERS = [
   "PUT /hosts/:hostId/self-healing/maintenance",
   "DELETE /hosts/:hostId/self-healing/maintenance",
   "POST /hosts/:hostId/self-healing/incidents/acknowledge",
+  "POST /hosts/:hostId/update-previews",
+  "POST /hosts/:hostId/updates",
+  "GET /hosts/:hostId/jobs",
+  "GET /hosts/:hostId/jobs/:jobId",
+  "POST /hosts/:hostId/jobs/:jobId/cancel",
+  "GET /hosts/:hostId/containers/:containerId/update-settings",
+  "PUT /hosts/:hostId/containers/:containerId/update-settings",
   "GET /overview",
   "GET /hosts/:hostId/overview",
   // Moved up from behind `PUT /settings/network` with the feature `containers`

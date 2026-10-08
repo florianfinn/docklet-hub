@@ -452,8 +452,10 @@ export async function handleComposeCandidates(ctx: ContainerRouteContext): Promi
 export async function handleEnv(ctx: ContainerRouteContext): Promise<void> {
   if (ctx.request.method === "GET") return handleEnvUnlocked(ctx);
   const anchor = registry.get(ctx.containerId)?.compose;
-  const labelProject = anchor?.projectName ? null : (await engine.inspect(ctx.containerId)).Config?.Labels?.["com.docker.compose.project"];
-  const key = projectLockKey({ registryProject: anchor?.projectName, labelProject, containerId: ctx.containerId });
+  const inspect = anchor?.projectName ? null : await engine.inspect(ctx.containerId);
+  const labelProject = inspect?.Config?.Labels?.["com.docker.compose.project"];
+  const containerName = inspect?.Name?.replace(/^\//, "") ?? registry.get(ctx.containerId)?.containerName;
+  const key = projectLockKey({ registryProject: anchor?.projectName, labelProject, containerName, containerId: ctx.containerId });
   try { await stackLocks.runExclusive(key, () => handleEnvUnlocked(ctx)); }
   catch (error) {
     if (!(error instanceof KeyedMutexBusyError)) throw error;

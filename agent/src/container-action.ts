@@ -30,7 +30,7 @@ export async function runContainerAction(
     containerName = initial.inspect.Name.replace(/^\//, "");
     const context = composeContextOf(initial.inspect.Config?.Labels ?? undefined, composeBasePath);
     const lockKey = projectLockKey({ registryProject: registry.get(containerId)?.compose?.projectName,
-      labelProject: initial.inspect.Config?.Labels?.["com.docker.compose.project"], containerId });
+      labelProject: initial.inspect.Config?.Labels?.["com.docker.compose.project"], containerName });
     const result = await stackLocks.runExclusive(lockKey, async () => {
       const fresh = await gate(containerId, { mutating: true, action, actor, onDelegation, budget, onInspect });
       if (!fresh.ok && fresh.reason !== "container-gone" && fresh.reason !== "not-allowlisted") return { status: fresh.status, body: { error: fresh.reason } };

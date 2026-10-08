@@ -12,6 +12,7 @@ import { SelfHealingStore, type HealingEntry } from "./self-healing-store.js";
 export type HealingPorts = {
   onIncident?: (containerId: string) => void;
   config: () => SelfHealingConfig;
+  intentional?: (container: RawInspect) => boolean;
   eligible?: (container: RawInspect) => boolean;
   restartInProgress?: (id: string) => boolean;
   check: (id: string) => Promise<RawInspect | null>;
@@ -81,6 +82,7 @@ export class SelfHealingController {
   }
 
   reconcile(container: RawInspect): void {
+    if (this.ports.intentional?.(container)) return;
     const target = stopIntentTarget(container);
     if (!target) return;
     const entry = this.store.get(target);
@@ -105,6 +107,7 @@ export class SelfHealingController {
   }
 
   observe(event: DockerMonitorEvent, container: RawInspect, classification: "manual-stop" | "unexpected" | null, restartRequested = false): void {
+    if (this.ports.intentional?.(container)) return;
     const target = stopIntentTarget(container);
     if (!target) return;
     const at = event.atMs ?? this.now();

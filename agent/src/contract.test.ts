@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import { AGENT_CONTRACT, CONTRACT_VERSION } from "./contract.js";
 import { REGISTRY_COMPOSE_ORIGINS } from "./registry.js";
 import { ROUTES } from "./route-policy.js";
-import { handlerSource } from "./handler-source-test-support.js";
+import { emittedNdjsonKinds } from "./ndjson-kind-test-support.js";
+import { handlerSources } from "./handler-source-test-support.js";
 
 test("die Vertragsauskunft liest die aktive Routen- und Registry-Politik", () => {
   assert.deepEqual(AGENT_CONTRACT.routes, ROUTES);
@@ -23,8 +24,7 @@ test("die Vertragsauskunft liest die aktive Routen- und Registry-Politik", () =>
 });
 
 test("jede im Handler gesendete NDJSON-Art steht in der Vertragsauskunft", () => {
-  const source = handlerSource();
-  const actual = [...new Set([...source.matchAll(/kind: "([a-z-]+)"/g)].map((match) => match[1]))].sort();
+  const actual = [...new Set(handlerSources().flatMap(({ text }) => emittedNdjsonKinds(text)))].sort();
   const listed = [...new Set(Object.values(AGENT_CONTRACT.ndjsonKinds).flat())].sort();
   assert.deepEqual(listed, actual);
 });
@@ -49,4 +49,14 @@ test("a changed contract needs a new contract number", () => {
   };
   const actual = createHash("sha256").update(JSON.stringify(AGENT_CONTRACT)).digest("hex");
   assert.equal(actual, hashes[CONTRACT_VERSION]);
+});
+
+test("NDJSON guard distinguishes target kinds and rejects unknown or unresolved emitted kinds", () => {
+  const source = 'const target = { kind: "container" }; const stack = { kind: "compose" }; sendLine(response, { kind: "start" } satisfies StreamLine);';
+  assert.deepEqual(emittedNdjsonKinds(source), ["start"]);
+  const listed = [...new Set(Object.values(AGENT_CONTRACT.ndjsonKinds).flat())];
+  assert.equal(emittedNdjsonKinds('sendLine(response, { kind: "unknown-stream-kind" })').every((kind) => listed.includes(kind)), false);
+  assert.deepEqual(emittedNdjsonKinds('import { sendLine as emit } from "./http.js"; emit(response, { kind: "unknown-stream-kind" })'), ["unknown-stream-kind"]);
+  assert.deepEqual(emittedNdjsonKinds('http["sendLine"](response, { kind: "unknown-stream-kind" })'), ["unknown-stream-kind"]);
+  for (const expression of ['{ kind: value }', 'payload', '{ ...payload }']) assert.throws(() => emittedNdjsonKinds(`sendLine(response, ${expression})`), /Unresolved/);
 });

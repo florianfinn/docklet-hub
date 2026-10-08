@@ -23,12 +23,14 @@ process.env.DOCKER_AGENT_MONITOR_FILE = path.join(directory, "monitors.json");
 process.env.DOCKER_AGENT_AUDIT_FILE = path.join(directory, "audit.jsonl");
 process.env.DOCKER_AGENT_BIND_BASE_PATH = "/srv/apps";
 const { handleRequest } = await import("./dispatch.js");
+const { updateRecovery } = await import("./runtime/update-recovery.js");
+const { agentJobs } = await import("./runtime/updates.js");
 const { registry, engine, config, audit } = await import("./runtime/state.js");
 after(() => fs.rmSync(directory, { recursive: true, force: true }));
 
 const id = "a".repeat(64);
 const otherId = "b".repeat(64);
-const target = { kind: "container", containerName: "demo" };
+const target = { kind: "container" as const, containerName: "demo" };
 const expectedContainer = { containerId: id, status: "running", startedAt: "seen" };
 const service = { target, expectedContainer, startDeadlineSeconds: 120, backup: null,
   offeredDigest: `sha256:${"c".repeat(64)}`, definitionHash: "hash" };
@@ -43,6 +45,7 @@ class Response extends EventEmitter {
   headersSent = false;
   status = 0;
   payload = "";
+  setHeader() {}
   writeHead(status: number) { this.status = status; this.headersSent = true; }
   end(payload: string) { this.payload = payload; }
   body() { return JSON.parse(this.payload) as Record<string, unknown>; }
@@ -59,6 +62,7 @@ async function request(method: string, url: string, body?: unknown, authorized =
 }
 
 function fixture(t: TestContext, flags: { observeOnly?: boolean; externallyManaged?: boolean } = {}, own = false) {
+  t.mock.method(updateRecovery, "isReady", () => true);
   registry.replaceAll([{ containerId: id, containerName: "demo", imageRef: "example/app:1.0", allowed: true,
     ...flags, compose: { projectDir: "/srv/apps/demo", projectName: "demo", serviceName: "web",
       composeFileName: "compose.yaml", origin: "dashboard" } }]);
@@ -85,7 +89,7 @@ const routes = [
 ] as const;
 
 for (const [method, url, mutating, action, gate, body] of routes) {
-  test(`${method} ${url}: policy, authentication, audited 501 stub`, async (t) => {
+  test(`${method} ${url}: policy, authentication and audited response`, async (t) => {
     const records = fixture(t);
     const policy = findRoute(method, url.split("?")[0]);
     assert.equal(policy?.mutating, mutating);
@@ -94,10 +98,12 @@ for (const [method, url, mutating, action, gate, body] of routes) {
     assert.equal(policy?.public, undefined);
     assert.equal((await request(method, url, body, false)).status, 401);
     const response = await request(method, url, body);
-    assert.equal(response.status, 501);
-    assert.deepEqual(response.body(), { error: "not-implemented" });
+    const reason = url === "/update-previews" || url === "/updates" ? "state-changed"
+      : url.startsWith("/jobs/") ? "update-job-unknown" : url === "/jobs" ? undefined : "not-implemented";
+    assert.equal(response.status, reason === "state-changed" ? 409 : reason === "update-job-unknown" ? 404 : reason ? 501 : 200);
+    assert.deepEqual(response.body(), reason ? { error: reason } : { active: [], recent: [] });
     assert.equal(records.at(-1)?.action, action);
-    assert.equal(records.at(-1)?.reason, "not-implemented");
+    assert.equal(records.at(-1)?.reason, reason);
   });
 }
 
@@ -117,13 +123,13 @@ for (const [method, url, mutating, , gate, body] of routes.filter((route) => rou
   }
 }
 
-test("job cancellation checks kill switch before unresolved job target", async (t) => {
+test("unknown job cancellation discloses no target even under kill switch", async (t) => {
   fixture(t);
   config.readOnly = true;
   t.mock.method(engine, "inspect", async () => { throw new Error("unresolved job must not inspect Docker"); });
   const response = await request("POST", "/jobs/job/cancel");
-  assert.equal(response.status, 503);
-  assert.deepEqual(response.body(), { error: "agent-read-only" });
+  assert.equal(response.status, 404);
+  assert.deepEqual(response.body(), { error: "update-job-unknown" });
 });
 
 test("update preview and start gate every selected service", async (t) => {
@@ -141,11 +147,14 @@ test("update preview and start gate every selected service", async (t) => {
   const inspected: string[] = [];
   t.mock.method(engine, "inspect", async (containerId: string) => {
     inspected.push(containerId);
-    return { Id: containerId, Name: "/demo", Config: {}, HostConfig: {} } satisfies RawInspect;
+    return { Id: containerId, Name: "/demo", Config: { Labels: { "com.docker.compose.project": "demo",
+      "com.docker.compose.service": containerId === id ? "web" : "worker" } }, HostConfig: {}, State: { Status: "running", StartedAt: "seen" } } satisfies RawInspect;
   });
   for (const url of ["/updates", "/update-previews"]) {
     inspected.length = 0;
-    assert.equal((await request("POST", url, stackBody)).status, 501);
+    const body = { ...stackBody, services: stackBody.services.map((s) => ({ ...s, backup: updatePreviewBody.services[0].backup })) };
+    const response = await request("POST", url, body);
+    assert.equal(response.status, 409); assert.equal(response.body().error, "backup-incomplete");
     assert.deepEqual(inspected, [id, otherId]);
   }
   registry.replaceAll([entry, deniedEntry]);
@@ -172,7 +181,8 @@ test("invalid bodies and queries fail validation before stub; jobs target is JSO
     assert.equal((await request("POST", url, undefined, true, "{")).body().error, "invalid-json");
   }
   const response = await request("GET", `/jobs?target=${encodeURIComponent(JSON.stringify(target))}&kind=update`);
-  assert.equal(response.status, 501);
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body(), { active: [], recent: [] });
 });
 
 test("contract 13 exposes route response shapes, optional file source selection and shared 501", () => {
@@ -217,7 +227,7 @@ for (const [url, schema, body] of [
     fixture(t, { observeOnly: true }, true);
     config.readOnly = true;
     assert.deepEqual(schema.parse(body), body);
-    assert.equal((await request("POST", url, body)).status, 501);
+    assert.equal((await request("POST", url, body)).status, url === "/update-previews" ? 503 : 501);
   });
 }
 
@@ -276,15 +286,19 @@ test("restore preview resolves compose service and rejects unknown stable target
 });
 
 for (const mixed of [false, true]) {
-  test(`cancel stub fails closed on observer class, mixed registry=${mixed}`, async (t) => {
+  test(`known cancellation gates its resolved observer target, mixed registry=${mixed}`, async (t) => {
     fixture(t, { observeOnly: true });
-    if (mixed) registry.replaceAll([registry.get(id)!, { ...registry.get(id)!, containerId: otherId, observeOnly: false }]);
+    if (mixed) registry.replaceAll([registry.get(id)!, { ...registry.get(id)!, containerId: otherId, containerName: "other", compose: undefined, observeOnly: false }]);
+    agentJobs.register({ jobId: `cancel-${mixed}`, kind: "update", target: { kind: "compose", projectName: "demo", serviceName: "web" },
+      service: null, phase: "queued", phaseStartedAt: new Date().toISOString(), phaseDeadlineAt: new Date(Date.now() + 60_000).toISOString(),
+      completedAt: null, cancelAllowed: true, firstExchangeStarted: false, result: null },
+      [{ kind: "compose", projectName: "demo", serviceName: "web" }], () => true);
     t.mock.method(engine, "inspect", async () => { throw new Error("cancel stub must not inspect Docker"); });
-    const response = await request("POST", "/jobs/job/cancel");
+    const response = await request("POST", `/jobs/cancel-${mixed}/cancel`);
     assert.equal(response.status, 403);
     assert.deepEqual(response.body(), { error: "observe-only" });
     config.readOnly = true;
-    assert.deepEqual((await request("POST", "/jobs/job/cancel")).body(), { error: "agent-read-only" });
+    assert.deepEqual((await request("POST", `/jobs/cancel-${mixed}/cancel`)).body(), { error: "agent-read-only" });
   });
 }
 
@@ -293,8 +307,8 @@ test("unresolved jobs reveal no list or progress payload", async (t) => {
   registry.replaceAll([]);
   for (const url of ["/jobs", "/jobs/job"]) {
     const response = await request("GET", url);
-    assert.equal(response.status, 501);
-    assert.deepEqual(response.body(), { error: "not-implemented" });
+    assert.equal(response.status, url === "/jobs" ? 200 : 404);
+    assert.deepEqual(response.body(), url === "/jobs" ? { active: [], recent: [] } : { error: "update-job-unknown" });
   }
 });
 
@@ -382,4 +396,101 @@ test("protected or noncanonical user paths reject before archive discovery", asy
       assert.equal(response.status, 400, path);
     }
   }
+});
+
+test("manifest-only preview and ID-only start expose a completed job after the request ends", async (t) => {
+  fixture(t); registry.replaceAll([{ containerId: id, containerName: "demo", imageRef: "example/app:1.0", allowed: true }]);
+  const digest = `sha256:${"c".repeat(64)}`;
+  t.mock.method(engine, "inspect", async () => ({ Id: id, Name: "/demo", Image: "old-image", Config: { Image: "example/app:1.0", Labels: {} },
+    HostConfig: {}, State: { Status: "running", Running: true, StartedAt: "seen" } } satisfies RawInspect));
+  t.mock.method(engine, "inspectImage", async () => ({ Id: "old-image", RepoDigests: [`example/app@${digest}`] }));
+  let manifests = 0; t.mock.method(engine, "remoteManifestDigest", async () => { manifests++; return digest; });
+  t.mock.method(engine, "pull", async () => { throw new Error("equal digest must never pull"); });
+  const response = await request("POST", "/update-previews", { target, services: [{ target, expectedContainer, startDeadlineSeconds: 120, backup: null }] });
+  assert.equal(response.status, 200);
+  const { updatePreviewResponseSchema } = await import("contract"); const preview = updatePreviewResponseSchema.parse(response.body());
+  const started = await request("POST", "/updates", { previewId: preview.previewId, target, confirmed: true,
+    services: preview.services.map((s) => ({ target: s.target, expectedContainer: s.expectedContainer, offeredDigest: s.offeredDigest,
+      definitionHash: s.definitionHash, startDeadlineSeconds: s.startDeadlineSeconds, backup: null })) });
+  assert.equal(started.status, 200); assert.deepEqual(Object.keys(started.body()), ["jobId"]);
+  const jobId = String(started.body().jobId);
+  for (let attempt = 0; attempt < 20 && agentJobs.get(jobId)?.phase !== "completed"; attempt++) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await request("GET", `/jobs/${jobId}`)).status, 200);
+  assert.equal(agentJobs.get(jobId)?.result?.outcome, "unchanged"); assert.equal(manifests, 2);
+  registry.replaceAll([]); assert.equal((await request("GET", `/jobs/${jobId}`)).status, 404);
+  assert.deepEqual((await request("GET", `/jobs?target=${encodeURIComponent(JSON.stringify(target))}`)).body(), { active: [], recent: [] });
+});
+for (const action of ["recreate", "remove"]) test(`${action} cannot mutate a standalone target while its update lock is held`, async (t) => {
+  fixture(t); registry.replaceAll([{ containerId: id, containerName: "demo", imageRef: "example/app:1.0", allowed: true }]);
+  t.mock.method(engine, "imageId", async () => "old-image");
+  for (const method of ["stop", "rename", "remove", "create"] as const) t.mock.method(engine, method, async () => { throw new Error("concurrent mutation must never call Docker"); });
+  const { stackLocks } = await import("./runtime/state.js"); let release!: () => void;
+  const held = stackLocks.runExclusive("container:demo", () => new Promise<void>((resolve) => { release = resolve; }));
+  try {
+    const response = await request("POST", `/containers/${id}/${action}`, action === "recreate" ? { acknowledgeImageId: "old-image" } : undefined);
+    assert.equal(response.status, 409); assert.equal(response.body().error, "stack-busy");
+  } finally { release(); await held; }
+});
+
+test("new updates are denied before gates or job creation until recovery succeeds", async (t) => {
+  fixture(t); t.mock.method(updateRecovery, "isReady", () => false);
+  t.mock.method(engine, "inspect", async () => { assert.fail("Recovery blocks updates before Docker access"); });
+  const result = await request("POST", "/updates", updateBody);
+  assert.equal(result.status, 409); assert.deepEqual(result.body(), { error: "update-rollback-unavailable" });
+});
+
+for (const standalone of [false, true]) test(`file mutations share the actual update lock${standalone ? " by container name" : " with Compose apply"}`, { timeout: 10_000 }, async (t) => {
+  fixture(t);
+  if (standalone) registry.replaceAll([{ containerId: id, containerName: "demo", imageRef: "example/app:1.0", allowed: true }]);
+  else t.mock.method(engine, "inspect", async () => ({ Id: id, Name: "/demo", Config: { Labels: { "com.docker.compose.project": "drifted" } } }));
+  const { stackLocks } = await import("./runtime/state.js");
+  const { UpdateRunner } = await import("./update-runner.js");
+  const { AgentJobs } = await import("./agent-jobs.js");
+  const { executeRaw, rawLockKey } = await import("./runtime/raw-ops.js");
+  const digest = `sha256:${"d".repeat(64)}`;
+  let enter!: () => void; let release!: () => void; let finish!: () => void;
+  const entered = new Promise<void>((resolve) => { enter = resolve; });
+  const blocked = new Promise<void>((resolve) => { release = resolve; });
+  const finished = new Promise<void>((resolve) => { finish = resolve; });
+  let preparing = 0;
+  const runner = new UpdateRunner(new AgentJobs(() => true), stackLocks, {
+    prepare: async (selection) => {
+      if (++preparing === 2) { enter(); await blocked; }
+      return { raw: { Id: id, Name: "/demo" }, definition: {}, dependencies: [], preview: {
+        ...selection, imageRef: "example/app:1.0", currentDigest: digest, offeredDigest: null,
+        rollbackImageId: "old-image", definitionHash: "definition", acceptance: "service",
+        initialState: { ...expectedContainer, health: null, exitCode: 0 }, mounts: [], warnings: [], blocker: null
+      } };
+    },
+    manifest: async () => digest,
+    pull: async () => { throw new Error("unchanged image must not pull"); },
+    exchange: async () => { throw new Error("unchanged image must not exchange"); },
+    rollback: async () => { throw new Error("unchanged image must not roll back"); },
+    read: async () => ({ Id: id, Name: "/demo" }),
+    intentional: () => () => {},
+    finished: () => { finish(); }
+  });
+  if (!standalone) t.mock.timers.enable({ apis: ["setTimeout"] });
+  const selectionTarget = standalone ? target : { kind: "compose" as const, projectName: "demo", serviceName: "web" };
+  const preview = await runner.preview({ target: standalone ? target : { kind: "stack", projectName: "demo" },
+    services: [{ target: selectionTarget, expectedContainer, startDeadlineSeconds: 120, backup: null }] }, null);
+  runner.start({ previewId: preview.previewId, target: preview.target, confirmed: true,
+    services: preview.services.map((s) => ({ ...s, offeredDigest: s.offeredDigest! })) }, null);
+  await entered;
+  try {
+    for (const [method, endpoint] of [["PUT", "file"], ["PUT", "file-text"], ["POST", "files"], ["PUT", "env"]]) {
+      const response = await request(method, `/containers/${id}/${endpoint}`, {});
+      assert.equal(response.status, 409, endpoint);
+      assert.equal(response.body().error, "busy", endpoint);
+    }
+    if (!standalone) {
+      const operation = { containerId: id, stackName: "drifted", location: {
+        projectName: "drifted", projectDir: "/srv/apps/demo", composeFileName: "compose.yaml"
+      } } as Parameters<typeof executeRaw>[0];
+      assert.equal(rawLockKey(operation), "demo");
+      const applying = executeRaw(operation);
+      t.mock.timers.tick(60_001);
+      assert.deepEqual(await applying, { status: 409, body: { error: "action-queue-timeout" } });
+    }
+  } finally { release(); await finished; }
 });

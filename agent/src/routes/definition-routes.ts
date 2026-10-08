@@ -342,7 +342,7 @@ export async function handleRemove(ctx: ContainerRouteContext): Promise<void> {
   };
   const removed = removeProject
     ? await stackLocks.runExclusive(projectLockKey({ registryProject: registry.get(containerId)?.compose?.projectName, projectName: removeProject.projectName, containerId }), performRemove)
-    : await performRemove();
+    : await stackLocks.runExclusive(projectLockKey({ registryProject: registry.get(containerId)?.compose?.projectName, containerName }), performRemove);
   if (!removed) {
     audit.write({
       action: "remove",

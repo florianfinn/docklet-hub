@@ -113,6 +113,20 @@ nicht eine erneute Update-Abnahme als Dienst oder Abschlussauftrag.
 Ein vorher gestopptes Ziel bleibt gestoppt; ein erledigter Abschlussauftrag
 wird nicht allein für eine erneute Prüfung gestartet.
 
+Erzeugt wird stets mit der ursprünglichen Image-Referenz; Inspect muss danach
+die erwartete Image-ID bestätigen. Vor dem Rückweg setzt der Agent einen
+beweglichen Tag auf die gesicherte alte Image-ID zurück. Dieser Tag gilt
+hostweit, auch für andere Container und Projekte mit derselben Referenz.
+Nach dem Rückweg zeigt er auf das alte Image; digestgebundene Referenzen
+benötigen keinen Retag und bleiben bei gleichem Digest unverändert.
+Compose verwendet beim Rückweg die unveränderte Projektdefinition.
+Die folgenden Aussagen zum späteren `compose up` gelten, solange kein weiterer
+Pull oder Retag die Referenz verändert.
+Ein späteres `compose up` verwendet nach erfolgreichem Rückweg bei unveränderter Projektdefinition das alte Image, weil die ursprüngliche Referenz auf dessen Image-ID zeigt.
+Scheitert nach dem Retag das Erzeugen, zeigt die Referenz trotzdem auf das alte Image; ein späteres `compose up` versucht daher bei unveränderter Projektdefinition dieses alte Image zu erzeugen.
+Der dabei entstehende Vorfall nennt diesen Tag-Stand.
+Nach einem Pull ohne Austausch bleibt der Tag auf dem neuen Image; ein späteres `compose up` kann es deshalb entsprechend der Projektdefinition verwenden.
+
 War ein Dienst vorher `unhealthy`, `paused` oder `restarting`, verlangt der
 Rückweg kein `healthy`, sondern einen wie vorher laufenden Container.
 `restarting` zählt dabei wie bei Laufzeitaktionen als laufend; eine
@@ -175,6 +189,22 @@ anschließend den erwarteten Zustand erneut prüfen; ein überholter Auftrag dar
 nicht einfach auf den Ersatzcontainer angewendet werden. Damit können manuelle
 Aktionen und Selbstheilung den Rückweg nicht überholen. Auch Restore hält die
 entsprechende Sperre bis zur Wiederherstellung des vorherigen Laufzustands.
+
+Es gibt keine Sperre je Image-Referenz. Parallele Updates derselben Referenz
+auf verschiedenen Zielen werden über die Image-ID-Prüfung nach dem Erzeugen
+sicher erkannt, wenn ein konkurrierender Pull oder Retag eine andere Image-ID
+auflösen lässt; der betroffene Austausch gilt dann als fehlgeschlagen.
+
+Die Erkennung unterbrochener Updates läuft unabhängig vom Agent-Start und
+wiederholt Fehler mit Backoff bis zum ersten erfolgreichen Durchlauf.
+Bis dahin werden neue Update-Starts mit `update-rollback-unavailable` abgelehnt;
+die Selbstheilung lässt Journal-Ziele aus. Ein unlesbares Journal wird mit
+Zeitstempel und Rechten 0600 beiseitegelegt und als Vorfall gemeldet.
+Die Erkennung berücksichtigt nur Journal-Einträge oder bekannte Registry-Ziele.
+Sie erhält die Ursache eines offenen Vorfalls und ergänzt allenfalls Kontext.
+Ein geschlossener Vorfall für ein bewusst stehen gelassenes geparktes Original
+bleibt geschlossen, solange dessen beobachteter Zustand unverändert ist;
+Journal-ID und Containername bilden den persistenten Erkennungsschlüssel.
 
 Während eines Update- oder Restore-Laufs gelten Stopp, Entfernen und Tod des
 Originalcontainers und des Ersatzcontainers, einschließlich des Stopps vor dem
