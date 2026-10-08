@@ -126,13 +126,7 @@ function partsVersion(value: string): { numbers: number[]; prerelease: string | 
   };
 }
 
-// Negative if a is older. `null` if either of the two is unreadable — then
-// "older or newer" is not a finding but a guess, and the caller has to treat
-// it as such.
-//
-// Pre-release versions (`v1.0.0-rc1`) count AS OLDER than the final release
-// under semver. That is no formality here: the downgrade bolt below would
-// otherwise let an rc through against the release.
+// Unreadable versions have no ordering; final releases follow candidates of the same core.
 export function compareVersions(a: string, b: string): number | null {
   const left = partsVersion(a);
   const right = partsVersion(b);
@@ -143,20 +137,17 @@ export function compareVersions(a: string, b: string): number | null {
   if (left.prerelease === right.prerelease) return 0;
   if (left.prerelease === null) return 1;
   if (right.prerelease === null) return -1;
+  const leftCandidate = /^rc\.(\d+)$/.exec(left.prerelease);
+  const rightCandidate = /^rc\.(\d+)$/.exec(right.prerelease);
+  if (leftCandidate && rightCandidate) {
+    const leftNumber = BigInt(leftCandidate[1]);
+    const rightNumber = BigInt(rightCandidate[1]);
+    return leftNumber < rightNumber ? -1 : leftNumber > rightNumber ? 1 : 0;
+  }
   return left.prerelease < right.prerelease ? -1 : 1;
 }
 
-// The bolt that the README has known only as a paragraph since v0.11.0.
-//
-// Why it is needed at all: `:latest` says "the newest", but the signature
-// only confirms AUTHENTICITY, not DIRECTION. An older, genuinely signed image
-// would pass the check without complaint. Without this comparison an "Update"
-// button that silently downgrades would be a possible outcome — and nobody
-// would notice, because everything runs afterwards.
-//
-// Unreadable values do NOT count as a downgrade: the rejection for those
-// already sits in versionFromLabel(), and rejecting twice would mean making
-// the reason worse.
+// Unreadable labels are rejected separately by versionFromLabel.
 export function isRegression(runningVersion: string, newVersion: string): boolean {
   const comparison = compareVersions(newVersion, runningVersion);
   return comparison !== null && comparison < 0;

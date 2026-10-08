@@ -282,3 +282,16 @@ test("ein unlesbares Ziel wird abgelehnt, statt auf den eigenen Ref zurückzufal
     assert.deepEqual(parsed.error?.issues[0]?.path, ["imageRef"]);
   }
 });
+
+
+test("rc update ordering is numeric and keeps the final release after candidates", () => {
+  const versions = ["0.32.0-rc.3", "0.32.0-rc.4", "0.32.0-rc.9", "0.32.0-rc.10", "0.32.0", "0.32.1-rc.1"];
+  for (const [i, left] of versions.entries()) {
+    for (const [j, right] of versions.entries()) {
+      const compared = compareVersions(`v${left}`, right);
+      assert.ok(compared !== null);
+      assert.equal(Math.sign(compared) || 0, Math.sign(i - j) || 0, `${left} vs ${right}`);
+      assert.equal(isRegression(left, `v${right}`), j < i, `${left} to ${right}`);
+    }
+  }
+});
