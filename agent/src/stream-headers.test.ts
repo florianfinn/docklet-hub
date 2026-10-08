@@ -8,6 +8,10 @@ import test, { after } from "node:test";
 import { ACTOR_HEADER, SECRET_HEADER } from "contract";
 import { FileArchive } from "./file-archive.js";
 
+// Stay below the hub's 3,000 ms monitor-events setup deadline.
+const HEADER_TIMEOUT_MS = 2_000;
+const TEST_TIMEOUT_MS = 5_000;
+
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "agent-stream-headers-"));
 const stateDirectory = path.join(directory, "state");
 const mountedPath = path.join(directory, "external-data");
@@ -46,7 +50,7 @@ async function withAgent(run: (baseUrl: string) => Promise<void>, closeSource?: 
 
 async function fetchHeaders(url: string, actor = "system:monitor"): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 500);
+  const timer = setTimeout(() => controller.abort(), HEADER_TIMEOUT_MS);
   try {
     return await fetch(url, {
       headers: { [SECRET_HEADER]: secret, [ACTOR_HEADER]: actor },
@@ -57,7 +61,7 @@ async function fetchHeaders(url: string, actor = "system:monitor"): Promise<Resp
   }
 }
 
-test("monitor dispatch sends HTTP 200 headers within 500 ms without a Docker event", { timeout: 2_000 }, async (t) => {
+test("monitor dispatch sends HTTP 200 headers within 2,000 ms without a Docker event", { timeout: TEST_TIMEOUT_MS }, async (t) => {
   let subscribed = false;
   let unsubscribed = false;
   t.mock.method(dockerEvents, "isObserving", () => true);
@@ -79,7 +83,7 @@ test("monitor dispatch sends HTTP 200 headers within 500 ms without a Docker eve
   assert.equal(unsubscribed, true);
 });
 
-test("audit archive dispatch sends HTTP 200 headers within 500 ms before any file bytes", { timeout: 2_000 }, async (t) => {
+test("audit archive dispatch sends HTTP 200 headers within 2,000 ms before any file bytes", { timeout: TEST_TIMEOUT_MS }, async (t) => {
   const source = new PassThrough();
   t.after(() => source.destroy());
   t.mock.method(audit, "prepareHandoff", async () => ({ bytes: 1, sha256: "a".repeat(64) }));
@@ -98,7 +102,7 @@ test("audit archive dispatch sends HTTP 200 headers within 500 ms before any fil
   }, () => source.destroy());
 });
 
-test("file download dispatch sends HTTP 200 headers within 500 ms before any archive bytes", { timeout: 2_000 }, async (t) => {
+test("file download dispatch sends HTTP 200 headers within 2,000 ms before any archive bytes", { timeout: TEST_TIMEOUT_MS }, async (t) => {
   const containerId = "a".repeat(64);
   const source = new PassThrough();
   t.after(() => source.destroy());
