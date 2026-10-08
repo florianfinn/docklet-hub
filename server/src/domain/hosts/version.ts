@@ -20,7 +20,7 @@ export function parseAgentVersion(value: string | null | undefined): AgentVersio
 
 // Capability boundaries describe releases, so candidates of the same core remain eligible.
 export function compareAgentReleaseVersions(a: AgentVersion, b: AgentVersion): number {
-  for (let index = 0; index < 3; index += 1) {
+  for (const index of [0, 1, 2] as const) {
     if (a[index] !== b[index]) return a[index] - b[index];
   }
   return 0;
