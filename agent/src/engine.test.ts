@@ -391,6 +391,23 @@ test("the credentials reach the daemon even without a stream", async (t) => {
   assert.equal(unpacked.serveraddress, "ghcr.io");
 });
 
+test("stats asks for a one-shot sample instead of waiting for a second one", async (t) => {
+  const seen: string[] = [];
+  const server = http.createServer((request, response) => {
+    seen.push(request.url ?? "");
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ memory_stats: { usage: 1 } }));
+  });
+  const pathname = socketPath("stats-one-shot");
+  await new Promise<void>((done) => server.listen(pathname, done));
+  t.after(() => new Promise<void>((done) => void server.close(() => done())));
+
+  const stats = await new DockerEngine({ socketPath: pathname }).stats("abc");
+
+  assert.deepEqual(stats, { memory_stats: { usage: 1 } });
+  assert.deepEqual(seen, ["/containers/abc/stats?stream=false&one-shot=true"]);
+});
+
 // The two engineMessage tests above build their error themselves — they stay
 // green when the wording at the throw site changes and the prefix is no
 // longer peeled off. That is what happened when the error texts were switched

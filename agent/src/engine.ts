@@ -597,21 +597,16 @@ export class DockerEngine {
     if (state.failure) throw new EnginePullError(`pull failed: ${state.failure.slice(0, 300)}`);
   }
 
-  // One-shot stats (stage 6b), for the CPU/RAM display of the container view.
-  // `stream=false` returns ONE response with cpu_stats AND precpu_stats already
-  // delimited against each other (the daemon takes the two measurements
-  // internally) — no second call needed to compute a difference.
-  //
-  // Deliberately lenient on failure: stats are extra information, not a
-  // security feature. A container that is just stopping, a Docker that refuses
-  // stats instrumentation for a container that is not running, or a timeout
-  // must not knock over the container list — they return null instead of an
-  // exception the caller would only translate into "no data" anyway.
+  // One-shot stats for the CPU/RAM sampling. `one-shot=true` skips the daemon's
+  // second sample (about 1.8 s per container), so precpu_stats stays empty and
+  // the CPU share is computed from the agent's previous sample (stats.ts).
+  // Failures return null: stats are extra information and must not topple the
+  // container list.
   async stats(containerId: string): Promise<RawStats | null> {
     try {
       return await this.json<RawStats>({
         method: "GET",
-        path: `/containers/${encodeURIComponent(containerId)}/stats?stream=false`,
+        path: `/containers/${encodeURIComponent(containerId)}/stats?stream=false&one-shot=true`,
         timeoutMs: 10_000
       });
     } catch (error) {

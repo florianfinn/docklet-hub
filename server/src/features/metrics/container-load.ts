@@ -48,10 +48,7 @@ export type { HostLoad, LoadPoint };
 /**
  * CPU aus der Summe von `docker stats`-Werten, auf die Kerne umgerechnet.
  *
- * ⚠️ GEKAPPT BEI 100 %. Der erste Wert eines frisch gestarteten Containers
- * kann aus dem Ruder laufen (`precpu_stats` noch leer); die Formel des
- * Agenten fängt das mit `systemDelta <= 0` zwar ab, die Kappung hält
- * trotzdem jeden Ausreißer aus dem Verlauf (§4.2).
+ * Capped at 100 % so that a single outlier sample cannot distort the series.
  */
 function normalizeCpu(sum: number | null, cores: number | null): number | null {
   if (sum === null || cores === null) return null;
