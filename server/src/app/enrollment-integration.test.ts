@@ -73,7 +73,9 @@ import { listenOnFetchablePort } from "../platform/testing/port-test-support.js"
 const HUB_KEYS = generateWireGuardKeyPair();
 
 const ROLE_HEADER = "x-integration-role";
-const AGENT_VERSION = "0.32.0";
+const { version: AGENT_VERSION } = JSON.parse(
+  readFileSync(new URL("../../../package.json", import.meta.url), "utf8")
+) as { version: string };
 const DEFAULT_AGENT_PORT = 8099;
 
 // Ein Netz, das 127.0.0.1 enthält, und ein Hub, der nicht darauf sitzt.
