@@ -198,3 +198,16 @@ im selben Prozess gegen die echten Handler sprechen.
 | 10 | `GET /resources` liest Images, Volumes und Netzwerke (#10). |
 | 11 | Die Netzstufen-Kopfzeile entfällt; `GET /contract` meldet keine Netzstufen, fremde Aufrufer von `GET /monitor-events` erhalten `403 actor-not-allowed` (#152). |
 | 12 | Laufzeitaktionen für Container und Stacks mit erwartetem Status und Startzeit, Pflichtfeld `applyDefinition` bei Stack-Start und -Neustart, begrenzter Warteschlange, durchgängigem Fristbudget mit `runtime-deadline-exceeded`, nachgelesenen Service-Ergebnissen und NDJSON-Fortschritt einschließlich `queued` beim Warten auf einen laufenden Projektvorgang; `allowFallbackUp` und `capabilities.startRequiresApply` entfallen. `PUT /self-healing/config` verlangt `system:hub` und fünf Pflichtfelder, quittiert die atomar gespeicherte Konfiguration und erlaubt `null` als unbegrenzte Wartungsdauer-Vorgabe (#98). `GET /stop-intents` liefert dauerhaft gespeicherte manuelle Stopp-Absichten mit Akteur, die letzten 256 Ausfallklassifikationen und den Beobachtungsstatus; bei fehlender Beobachtung antwortet die Route mit `503`, ebenso `/monitor-events`. Erkannte Neustarts setzen keine manuelle Stopp-Absicht (#19). `GET /self-healing/status` liefert Budget, Wartung und Vorfälle mit derselben `503`-Semantik. `PUT`/`DELETE /self-healing/maintenance` und `POST /self-healing/incidents/acknowledge` ändern den Agent-Zustand als `system:hub` oder menschlicher Akteur; Vorfälle tragen stabile ID, bereinigte Ursache, Versuche, Handlungsschlüssel und Log-Auszug beziehungsweise Auslassungsgrund (#20). |
+| 13 | Gemeinsame Grundlage für Agent-Update-Aufträge mit Vorschau per Manifest, bestätigtem Digest, Startfrist, abfragbarem Fortschritt, globaler Abbruchgrenze und getrennten Update-/Rückwegfehlern; Sicherungsoptionen und Restore-Auswahl über stabile Zielschlüssel und Sicherungs-ID; Quellenfähigkeiten und Inhaltshash-Konflikt. Eigene Phasenbudgets je Service, drei Sicherungsläufe und 1 GiB Platzreserve. Bestehende Routen bleiben unverändert; die neuen Schemas definieren noch keine implementierten Endpunkte (#14). |
+
+Vertrag 13 ist eine gemeinsame Protokollgrenze: Hub und Agent müssen gemeinsam
+aktualisiert werden. Neue Update-Anfragen verlangen je Ziel `expectedContainer`,
+`startDeadlineSeconds` und eine ausdrückliche Sicherungsauswahl (`backup: null`
+oder Optionen). Start verlangt zusätzlich `previewId`, `definitionHash`,
+`offeredDigest` und `confirmed: true`. Restore verlangt Sicherungs-ID, Mount-Auswahl,
+Vorschau-ID, erwarteten Zustand und eigene Bestätigung. Der Agent leitet Fähigkeiten
+und Abschlussauftragsregel selbst ab; Anfragewerte erteilen keine Berechtigungen.
+Die fachlichen Kriterien und die Herleitung der Konstanten stehen in
+[update-and-rollback.md](../docs/design/update-and-rollback.md) und
+[file-access.md](../docs/design/file-access.md). `GET /contract` meldet diese
+Grundlage, seine Routentabelle weiterhin ausschließlich implementierte Routen.

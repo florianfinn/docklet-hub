@@ -5,7 +5,7 @@ const container = (status, exitCode = null) => ({ id: "web-id", name: "demo-web"
   running: status === "running", startedAt: null, health: null, compose: { project: "demo", service: "web" }, stats: null,
   runtimeAccess: { blocker: null }, externalManagement: null, state: "ok", marks: [], system: false });
 const target = (status) => ({ kind: "container", hostId: "demo-host", container: container(status) });
-const host = { host: { status: "online" }, agent: { reachable: true, readOnly: false, contractVersion: 12 }, lifecycle: { applyDefinition: true, stopIntents: { observing: true, intents: [] } } };
+const host = { host: { status: "online" }, agent: { reachable: true, readOnly: false, contractVersion: 13 }, lifecycle: { applyDefinition: true, stopIntents: { observing: true, intents: [] } } };
 for (const status of ["running", "restarting", "paused", "created", "exited", "dead", "removing", "unknown"])
   for (const action of ["start", "stop", "restart"]) test(`${status}: ${action} follows the lifecycle matrix`, () => {
     const current = target(status);
@@ -16,7 +16,7 @@ for (const status of ["running", "restarting", "paused", "created", "exited", "d
   });
 for (const [reason, patch, role, busy] of [
   ["offline", { host: { status: "offline" } }, "admin", false],
-  ["role", {}, "user", false], ["read-only", { agent: { reachable: true, readOnly: true, contractVersion: 12 } }, "admin", false],
+  ["role", {}, "user", false], ["read-only", { agent: { reachable: true, readOnly: true, contractVersion: 13 } }, "admin", false],
   ["capability", { agent: { reachable: true, readOnly: false, contractVersion: 11 } }, "admin", false], ["busy", {}, "admin", true]
 ]) test(`${reason} blocks every runtime action`, () => assert.equal(runtimeBlocker(target("running"), { ...host, ...patch }, role, busy), reason));
 for (const reason of ["observe-only", "not-allowlisted", "self-management-locked"]) test(`agent eligibility ${reason} blocks`, () => {

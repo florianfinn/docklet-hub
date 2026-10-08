@@ -66,8 +66,10 @@ werden.
 Dateischreiben, Compose-Apply, Update und Restore teilen dieselbe Projekt- und
 Containersperre, auch bei direkt aufgerufenen Agent-Routen. Während ein Weg
 dasselbe Ziel verändert, darf kein anderer Weg dort schreiben oder eine
-Definition anwenden. Nach dem Warten werden erwarteter Inhaltshash, Quelle und
-Zustand erneut geprüft. So kann eine Dateiänderung die gesicherte Definition
+Definition anwenden. Update, Restore und Compose-Apply warten höchstens 60 Sekunden und prüfen
+danach Quelle und Zustand erneut. Dateischreiben wartet nicht: Bei belegter
+Sperre antwortet es sofort mit `busy`; den erwarteten Inhaltshash prüft es
+innerhalb des geschützten Schreibablaufs. So kann eine Dateiänderung die gesicherte Definition
 oder den Rückweg eines laufenden Updates nicht überholen.
 
 Der Agent erzwingt die Grenze der ausgewählten Quelle: keine absoluten
@@ -82,6 +84,8 @@ Routen, nicht nur für den Editor.
 
 Compose-Definitionen und `.env` erhalten ihre geschützten Bearbeitungswege. Die
 Sperre dieser Namen im allgemeinen Web-FTP wird nicht pauschal aufgehoben.
+Sicherung und Restore lassen diese Dateien im Projektverzeichnis ebenfalls aus;
+ein Archiv ist kein Umweg zum Anwenden einer Definition oder Ändern von `.env`.
 Compose-Schreiben bleibt an Vorschau, Validierung und Verwaltungsgrenzen
 gebunden; sensible Konfiguration wird nur über einen Weg mit Maskierung und
 gezielter Freigabe zugänglich. So kann eine gewöhnliche Dateiaktion weder die
@@ -213,7 +217,9 @@ Beleg einschließlich Screenshots.
   ausgetauschte Pfade und Zielkonflikte umgehen sie nicht.
 - Dateischreiben, Compose-Apply, Update und Restore teilen dieselbe Projekt- und
   Containersperre an allen Einstiegen. Kein zweiter Weg mutiert dasselbe Ziel
-  während eines Laufs; nach dem Warten werden Hash, Quelle und Zustand erneut geprüft.
+  während eines Laufs. Update, Restore und Compose-Apply warten höchstens
+  60 Sekunden und prüfen danach Quelle und Zustand; Dateischreiben wartet
+  nicht und meldet sofort `busy`. Der Hash wird im Schreibablauf geprüft.
 - Allgemeiner Dateizugriff umgeht weder Compose-Prüfung noch den geschützten
   `.env`-Weg. Maskierte Werte erscheinen nicht ungefragt in Vorschauen,
   Diagnoseausgaben oder öffentlichen Fehlerbelegen. Downloads sind bewusst

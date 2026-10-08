@@ -596,7 +596,7 @@ test("die Ansicht trägt genau die zugesagten Felder und kein Geheimnis", () => 
     registeredAt: new Date(),
     lastSeenAt: null
   };
-  const view = toHostView(record, { reachable: true, version: "0.32.0", contractVersion: 12, readOnly: false, entries: null });
+  const view = toHostView(record, { reachable: true, version: "0.32.0", contractVersion: 13, readOnly: false, entries: null });
   // The promised fields are the keys of `hostViewSchema` (#247) — the one list
   // that decides what goes out, reviewed in `contract`, not a second copy here.
   assert.deepEqual(Object.keys(view).sort(), Object.keys(hostViewSchema.shape).sort());
@@ -632,7 +632,7 @@ test("jede Variante von toHostView erfüllt das Schema", () => {
     { name: "reachable, older agent", view: toHostView(base, { reachable: true, version: "0.32.0", contractVersion: 6, readOnly: false, entries: null }) },
     { name: "reachable, no version", view: toHostView(base, { reachable: true, version: null, contractVersion: null, readOnly: null, entries: null }) },
     { name: "unreachable", view: toHostView(base, { reachable: false, error: "timeout" }) },
-    { name: "local", view: toHostView({ ...base, kind: "local", tunnelAddress: null }, { reachable: true, version: "0.32.0", contractVersion: 12, readOnly: false, entries: null }) },
+    { name: "local", view: toHostView({ ...base, kind: "local", tunnelAddress: null }, { reachable: true, version: "0.32.0", contractVersion: 13, readOnly: false, entries: null }) },
     { name: "pending", view: toHostView({ ...base, state: "pending", lastSeenAt: null }, null) }
   ];
 

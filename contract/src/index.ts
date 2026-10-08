@@ -468,3 +468,43 @@ export {
   LIFECYCLE_DELIVERY_RESERVE_MS, HUB_RUNTIME_TIMEOUT_MS, LIFECYCLE_TIMEOUT_MS,
   stopTimeoutSeconds, containerActionTimeoutMs, stackActionTimeoutMs
 } from "./agent/runtime-deadlines.js";
+
+export {
+  EDITOR_TEXT_LIMITS, FILE_SOURCE_ERRORS, FILE_ACCESS_ERRORS, fileAccessErrorSchema,
+  fileSourceSelectionSchema, fileSourceSchema, fileSourcesResponseSchema, sourceFileQuerySchema,
+  sourceFileTextWriteRequestSchema, fileContentConflictSchema
+} from "./agent/file-access.js";
+export type { FileAccessError, FileSource, SourceFileTextWriteRequest, FileContentConflict } from "./agent/file-access.js";
+
+export {
+  BACKUP_RETENTION_COUNT, BACKUP_FREE_RESERVE_BYTES, BACKUP_DIRECTORY_ENV, BACKUP_DIRECTORY_DEFAULT,
+  BACKUP_DIRECTORY_MODE, BACKUP_ARCHIVE_MODE, BACKUP_DEFAULT_MODE, BACKUP_ERRORS,
+  backupErrorSchema, backupModeSchema, backupOptionsSchema, backupArchiveSchema,
+  backupEntrySchema, backupListRequestSchema, backupListResponseSchema, backupStartRequestSchema,
+  restorePreviewRequestSchema, restorePreviewResponseSchema, restoreStartRequestSchema, restoreResultSchema
+} from "./agent/backups.js";
+export type { BackupError, BackupOptions, BackupEntry, RestoreStartRequest, RestoreResult } from "./agent/backups.js";
+
+export {
+  UPDATE_START_DEADLINE_SECONDS, UPDATE_STABILITY_WINDOW_MS, UPDATE_PRECHECK_TIMEOUT_MS, UPDATE_PULL_TIMEOUT_MS,
+  BACKUP_COPY_TIMEOUT_MS, UPDATE_STOP_TIMEOUT_MS, UPDATE_CREATE_TIMEOUT_MS, UPDATE_READBACK_TIMEOUT_MS,
+  UPDATE_MUTATION_RESERVE_MS, BACKUP_PHASE_TIMEOUT_MS, updateExchangeTimeoutMs, updateRollbackTimeoutMs,
+  restorePhaseTimeoutMs, updateRunBudgetMs
+} from "./agent/update-deadlines.js";
+
+export {
+  MUTATION_QUEUE_POLICY, UPDATE_CANCEL_BOUNDARY, UPDATE_COMPLETION_RULE, UPDATE_ERRORS,
+  updateErrorSchema, updateWarningSchema, updatePhaseSchema, updateOutcomeSchema,
+  updateTargetSchema, updateScopeSchema, updateStartDeadlineSchema, updateContainerSettingsSchema,
+  updateDigestSchema, updateServiceSelectionSchema, updatePreviewRequestSchema, updateServicePreviewSchema,
+  updatePreviewResponseSchema, updateStartRequestSchema, updateJobRequestSchema, updateStartResponseSchema,
+  updateCancelRequestSchema, updateCancelResponseSchema, updateServiceResultSchema, updateResultSchema,
+  updateProgressSchema, updateJobResponseSchema, updateAcceptance
+} from "./agent/updates.js";
+export type { UpdateError, UpdateWarning, UpdatePhase, UpdateOutcome, UpdateTarget, UpdateScope, UpdateContainerSettings, UpdatePreviewRequest, UpdateServicePreview, UpdatePreviewResponse, UpdateStartRequest, UpdateServiceResult, UpdateResult, UpdateProgress } from "./agent/updates.js";
+
+export type { FileSourceSelection, FileSourcesResponse, SourceFileQuery } from "./agent/file-access.js";
+
+export type { BackupMode, BackupArchive, BackupListRequest, BackupListResponse, BackupStartRequest, RestorePreviewRequest, RestorePreviewResponse } from "./agent/backups.js";
+
+export type { UpdateStartDeadline, UpdateDigest, UpdateServiceSelection, UpdateJobRequest, UpdateStartResponse, UpdateCancelRequest, UpdateCancelResponse, UpdateJobResponse } from "./agent/updates.js";

@@ -14,7 +14,7 @@ import * as z from "zod/mini";
  * The one version number of the agent's protocol. The agent reports it in
  * `GET /health` and `GET /contract`.
  */
-export const CONTRACT_VERSION = 12;
+export const CONTRACT_VERSION = 13;
 
 /** What a field added after the first numbered contract carries. */
 export type ContractSince = { since: number };

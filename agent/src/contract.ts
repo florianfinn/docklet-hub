@@ -1,4 +1,14 @@
 import {
+  UPDATE_START_DEADLINE_SECONDS, UPDATE_STABILITY_WINDOW_MS, UPDATE_PRECHECK_TIMEOUT_MS, UPDATE_PULL_TIMEOUT_MS,
+  BACKUP_COPY_TIMEOUT_MS, UPDATE_STOP_TIMEOUT_MS, UPDATE_CREATE_TIMEOUT_MS, UPDATE_READBACK_TIMEOUT_MS,
+  UPDATE_MUTATION_RESERVE_MS, BACKUP_PHASE_TIMEOUT_MS, MUTATION_QUEUE_POLICY,
+  UPDATE_CANCEL_BOUNDARY, UPDATE_COMPLETION_RULE, UPDATE_ERRORS, BACKUP_ERRORS, FILE_ACCESS_ERRORS,
+  BACKUP_RETENTION_COUNT, BACKUP_FREE_RESERVE_BYTES, BACKUP_DIRECTORY_ENV, BACKUP_DIRECTORY_DEFAULT,
+  BACKUP_DIRECTORY_MODE, BACKUP_ARCHIVE_MODE, BACKUP_DEFAULT_MODE, EDITOR_TEXT_LIMITS,
+  updatePreviewRequestSchema, updatePreviewResponseSchema, updateServiceSelectionSchema, updateServicePreviewSchema,
+  updateStartRequestSchema, updateProgressSchema, updateResultSchema, updatePhaseSchema, updateOutcomeSchema,
+  updateWarningSchema, backupOptionsSchema, backupEntrySchema, backupArchiveSchema, restoreStartRequestSchema,
+  restorePreviewRequestSchema, restoreResultSchema, fileSourceSchema, sourceFileTextWriteRequestSchema,
   SELF_HEALING_LIMITS,
   selfHealingConfigSchema,
   selfHealingMaintenanceRequestSchema, selfHealingIncidentSchema, selfHealingBudgetSchema,
@@ -80,8 +90,34 @@ export const AGENT_CONTRACT = {
     statusFields: fieldPresence(selfHealingStatusResponseSchema.shape),
     budgetFields: fieldPresence(selfHealingBudgetSchema.shape), incidentFields: fieldPresence(selfHealingIncidentSchema.shape)
   },
+  updates: {
+    startDeadlineSeconds: UPDATE_START_DEADLINE_SECONDS, stabilityWindowMs: UPDATE_STABILITY_WINDOW_MS,
+    phaseTimeouts: { precheck: UPDATE_PRECHECK_TIMEOUT_MS, pull: UPDATE_PULL_TIMEOUT_MS, backupCopy: BACKUP_COPY_TIMEOUT_MS,
+      stop: UPDATE_STOP_TIMEOUT_MS, create: UPDATE_CREATE_TIMEOUT_MS, readback: UPDATE_READBACK_TIMEOUT_MS,
+      mutationReserve: UPDATE_MUTATION_RESERVE_MS, backup: BACKUP_PHASE_TIMEOUT_MS },
+    queuePolicy: MUTATION_QUEUE_POLICY, cancelBoundary: UPDATE_CANCEL_BOUNDARY, completionRule: UPDATE_COMPLETION_RULE,
+    phases: updatePhaseSchema.options, outcomes: updateOutcomeSchema.options, warnings: updateWarningSchema.options,
+    previewRequestFields: fieldPresence(updatePreviewRequestSchema.shape),
+    previewResponseFields: fieldPresence(updatePreviewResponseSchema.shape),
+    selectionFields: fieldPresence(updateServiceSelectionSchema.shape), previewServiceFields: fieldPresence(updateServicePreviewSchema.shape),
+    startFields: fieldPresence(updateStartRequestSchema.shape), progressFields: fieldPresence(updateProgressSchema.shape),
+    resultFields: fieldPresence(updateResultSchema.shape)
+  },
+  backups: {
+    retention: BACKUP_RETENTION_COUNT, freeReserveBytes: BACKUP_FREE_RESERVE_BYTES,
+    directoryEnv: BACKUP_DIRECTORY_ENV, directoryDefault: BACKUP_DIRECTORY_DEFAULT,
+    directoryMode: BACKUP_DIRECTORY_MODE, archiveMode: BACKUP_ARCHIVE_MODE, defaultMode: BACKUP_DEFAULT_MODE,
+    optionFields: fieldPresence(backupOptionsSchema.shape), entryFields: fieldPresence(backupEntrySchema.shape),
+    archiveFields: fieldPresence(backupArchiveSchema.shape), restorePreviewFields: fieldPresence(restorePreviewRequestSchema.shape),
+    restoreStartFields: fieldPresence(restoreStartRequestSchema.shape), restoreResultFields: fieldPresence(restoreResultSchema.shape)
+  },
+  fileAccess: {
+    textLimits: EDITOR_TEXT_LIMITS, sourceFields: fieldPresence(fileSourceSchema.shape),
+    textWriteFields: fieldPresence(sourceFileTextWriteRequestSchema.shape), conflict: "file-changed-externally"
+  },
   ndjsonKinds: NDJSON_KINDS,
   errors: {
+    updates: UPDATE_ERRORS, backups: BACKUP_ERRORS, fileAccess: FILE_ACCESS_ERRORS,
     sharedHttp: SHARED_HTTP_ERRORS,
     runtimeActions: RUNTIME_ACTION_ERRORS,
     logsStream: LOGS_STREAM_FAILURE_REASONS,
