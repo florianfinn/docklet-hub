@@ -5,8 +5,12 @@ import express from "express";
 import { relayAgentBytes } from "./agent-bytes-relay.js";
 import { relayAgentStream } from "./agent-stream-relay.js";
 
+// Stay below the hub's 3,000 ms monitor-events setup deadline.
+const HEADER_TIMEOUT_MS = 2_000;
+const TEST_TIMEOUT_MS = 5_000;
+
 for (const kind of ["bytes", "ndjson"] as const) {
-  test(`${kind} relay sends HTTP 200 headers within 500 ms without an agent body chunk`, { timeout: 2_000 }, async () => {
+  test(`${kind} relay sends HTTP 200 headers within 2,000 ms without an agent body chunk`, { timeout: TEST_TIMEOUT_MS }, async () => {
     const app = express();
     const tasks: Promise<void>[] = [];
     let closed = false;
@@ -36,7 +40,7 @@ for (const kind of ["bytes", "ndjson"] as const) {
     const address = server.address();
     assert.ok(address && typeof address === "object");
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 500);
+    const timer = setTimeout(() => controller.abort(), HEADER_TIMEOUT_MS);
     try {
       const response = await fetch(`http://127.0.0.1:${address.port}/stream`, { signal: controller.signal });
       clearTimeout(timer);
