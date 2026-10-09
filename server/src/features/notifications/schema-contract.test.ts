@@ -273,8 +273,11 @@ test("manual retry and test requests carry no new event, secret or repair action
 test("notification failures accept a fixed internal error without raw details", () => {
   for (const error of ["invalid-input", "unauthenticated", "admin-required", "forbidden-origin", "target-unknown",
     "ticket-unknown", "channel-unconfigured", "delivery-unknown", "conflict", "queue-full",
-    "configuration-incomplete", "internal-error"])
-    assert.deepEqual(notificationFailureSchema.parse({ error }), { error });
+    "configuration-incomplete", "internal-error"]) {
+    const result = notificationFailureSchema.safeParse({ error });
+    assert.equal(result.success, true);
+    if (result.success) assert.deepEqual(result.data, { error });
+  }
   rejects(notificationFailureSchema, [{ error: "unknown" }, { error: "synthetic raw database diagnostic" }, {}]);
   for (const field of ["message", "cause", "endpoint", "secret"])
     assert.equal(notificationFailureSchema.safeParse({ error: "internal-error", [field]: "synthetic-example-value" }).success, false);
