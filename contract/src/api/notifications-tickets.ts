@@ -13,13 +13,14 @@ export const notificationTicketViewSchema = z.strictObject({
   affectedContainers: z.array(z.strictObject({ containerId: notificationIdSchema, label: notificationLabelSchema }))
     .check(z.maxLength(NOTIFICATION_LIMITS.maxAffectedContainers),
       z.refine((items) => new Set(items.map((item) => item.containerId)).size === items.length)),
-  affectedContainerCount: z.number().check(z.int(), z.minimum(0))
+  affectedContainerCount: z.number().check(z.int(), z.minimum(0)),
+  pendingDeliveryCount: z.number().check(z.int(), z.minimum(0), z.maximum(8))
 }).check(z.refine((ticket) => {
   if (ticket.state === "open" && (ticket.acknowledgedAt !== null || ticket.resolvedAt !== null)) return false;
   if (ticket.state === "acknowledged" && (ticket.acknowledgedAt === null || ticket.resolvedAt !== null)) return false;
   if (ticket.state === "resolved" && ticket.resolvedAt === null) return false;
-  if (ticket.acknowledgedAt !== null && ticket.acknowledgedAt < ticket.openedAt) return false;
-  if (ticket.resolvedAt !== null && ticket.resolvedAt < (ticket.acknowledgedAt ?? ticket.openedAt)) return false;
+  if (ticket.acknowledgedAt !== null && Date.parse(ticket.acknowledgedAt) < Date.parse(ticket.openedAt)) return false;
+  if (ticket.resolvedAt !== null && Date.parse(ticket.resolvedAt) < Date.parse(ticket.acknowledgedAt ?? ticket.openedAt)) return false;
   if (ticket.affectedContainerCount < ticket.affectedContainers.length) return false;
   if (ticket.event !== "connection-lost" && (ticket.affectedContainerCount !== 0 || ticket.affectedContainers.length !== 0)) return false;
   if (["connection-lost", "agent-update-available"].includes(ticket.event) && ticket.target.kind !== "host") return false;
@@ -55,10 +56,13 @@ export const notificationDeliveryViewSchema = z.strictObject({
   includeLogs: z.boolean()
 }).check(z.refine((delivery) => {
   if ((delivery.phase === "test") !== (delivery.ticketId === null)) return false;
-  if (delivery.updatedAt < delivery.createdAt) return false;
+  if (Date.parse(delivery.updatedAt) < Date.parse(delivery.createdAt)) return false;
   const terminal = ["delivered", "failed", "cancelled"].includes(delivery.state);
   if (terminal !== (delivery.finishedAt !== null)) return false;
-  if (delivery.finishedAt !== null && delivery.finishedAt < delivery.createdAt) return false;
+  if (delivery.finishedAt !== null && (Date.parse(delivery.finishedAt) < Date.parse(delivery.createdAt) ||
+    Date.parse(delivery.finishedAt) > Date.parse(delivery.updatedAt))) return false;
+  if (delivery.state === "retrying" && delivery.nextAttemptAt !== null &&
+    Date.parse(delivery.nextAttemptAt) <= Date.parse(delivery.updatedAt)) return false;
   if (["queued", "retrying"].includes(delivery.state) !== (delivery.nextAttemptAt !== null)) return false;
   if (delivery.state === "queued" && (delivery.attempts !== 0 || delivery.failure !== null)) return false;
   if (delivery.state === "retrying" && (delivery.attempts < 1 || delivery.attempts >= NOTIFICATION_LIMITS.maxAttempts ||
@@ -66,6 +70,8 @@ export const notificationDeliveryViewSchema = z.strictObject({
   if (["sending", "delivered"].includes(delivery.state) && delivery.attempts < 1) return false;
   if (delivery.state === "delivered" && delivery.failure !== null) return false;
   if (delivery.state === "failed" && delivery.failure === null) return false;
+  if (delivery.state === "failed" && ["transient", "timeout"].includes(delivery.failure ?? "") &&
+    delivery.attempts !== NOTIFICATION_LIMITS.maxAttempts) return false;
   return true;
 }));
 export const notificationDeliveryResponseSchema = z.strictObject({ delivery: notificationDeliveryViewSchema });

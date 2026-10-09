@@ -3,9 +3,10 @@ import { NOTIFICATION_LIMITS, notificationAdditionalTextSchema, notificationChan
   notificationDeliveryOptionsSchema, notificationFormatSchema, notificationIdSchema,
   notificationScopeTargetSchema } from "./notifications.js";
 
-const secretValue = z.string().check(z.minLength(1), z.maxLength(NOTIFICATION_LIMITS.maxSecretChars));
+const secretValue = z.string().check(z.minLength(1), z.maxLength(NOTIFICATION_LIMITS.maxSecretChars),
+  z.refine((value) => !/[\u0000-\u001f\u007f]/u.test(value)));
 const endpoint = z.url().check(z.maxLength(NOTIFICATION_LIMITS.maxSecretChars),
-  z.refine((value) => { const url = new URL(value); return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password; }));
+  z.refine((value) => !/[\u0000-\u0020\u007f]/u.test(value) && /^https?:\/\/[^/@\s]+(?:[/?#]|$)/iu.test(value)));
 const secretUpdate = (value: typeof secretValue) => z.discriminatedUnion("operation", [
   z.strictObject({ operation: z.literal("keep") }),
   z.strictObject({ operation: z.literal("set"), value }),
@@ -17,7 +18,7 @@ const smtpConnection = z.strictObject({
   host: secretValue, port: z.number().check(z.int(), z.minimum(1), z.maximum(65535)),
   security: z.enum(["tls", "starttls"]), username: z.nullable(secretValue), password: z.nullable(secretValue),
   from: z.email().check(z.maxLength(320)), to: z.array(z.email().check(z.maxLength(320))).check(z.minLength(1), z.maxLength(20))
-});
+}).check(z.refine((connection) => (connection.username === null) === (connection.password === null)));
 export const notificationChannelWriteSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("discord"), endpoint: endpointUpdate, defaults: notificationDeliveryOptionsSchema }),
   z.strictObject({ kind: z.literal("webhook"), endpoint: endpointUpdate, authorization: notificationSecretInputSchema,
@@ -78,6 +79,9 @@ export const notificationScopeResponseSchema = z.strictObject({ target: notifica
   inheritedFrom: z.enum(["global", "stack", "container"]), effective: selections(notificationSelectionViewSchema) });
 export const notificationScopeRequestSchema = z.strictObject({ expectedRevision: settingsFields.revision,
   configuration: notificationScopeWriteSchema });
+export const notificationTargetRequestSchema = z.strictObject({ target: notificationScopeTargetSchema });
+export const notificationTargetWriteRequestSchema = z.strictObject({ target: notificationScopeTargetSchema,
+  ...notificationScopeRequestSchema.shape });
 export const notificationBulkRequestSchema = z.strictObject({ expectedRevision: settingsFields.revision,
   targets: z.array(notificationScopeTargetSchema).check(z.minLength(1), z.maxLength(NOTIFICATION_LIMITS.maxBulkTargets),
     z.refine((items) => new Set(items.map((item) => JSON.stringify(item))).size === items.length)),

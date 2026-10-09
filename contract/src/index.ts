@@ -548,6 +548,7 @@ export {
   notificationFormatSchema,
   notificationAdditionalTextSchema,
   notificationDeliveryOptionsSchema,
+  notificationContainerIdentitySchema,
   notificationTargetSchema,
   notificationScopeTargetSchema,
   notificationFailureSchema
@@ -573,6 +574,8 @@ export {
   notificationSettingsResponseSchema,
   notificationScopeResponseSchema,
   notificationScopeRequestSchema,
+  notificationTargetRequestSchema,
+  notificationTargetWriteRequestSchema,
   notificationBulkRequestSchema,
   notificationBulkResponseSchema,
   notificationTestRequestSchema,

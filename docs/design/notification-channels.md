@@ -18,13 +18,20 @@ Fünf Ereignisschlüssel bilden die vorhandenen Produktquellen ab:
 | `agent-update-available` | Host; vorhandenes geprüftes Agent-Update-Angebot | `review-update` |
 | `container-update-available` | Container oder Stack; nachgewiesenes Angebot einer tatsächlichen Image-Version | `review-update` |
 
-Container-Update-Verfügbarkeit erfordert eine Quelle, die Registry-Manifeste bzw.
-Digests mit dem tatsächlich eingesetzten Image vergleicht und die Update-Eignung
-prüft. Laufzeitstatus, Tags allein, ein Pull-Wunsch oder erfundene Statusfelder sind
-kein Angebot. Ohne diese Quelle entstehen keine Verfügbarkeitstickets; ihre
-Implementierung ist eine technische Abhängigkeit. Die Agent-API wird für diese
+Container-Update-Verfügbarkeit nutzt das vorhandene Agent-`GET
+/containers/:id/update-check`, das echte lokale und entfernte Registry-Digests
+liest. Der Hub muss diese Quelle autonom anbinden, Antwort und Update-Eignung
+prüfen und unbekannte Digests als unbekannt behandeln. Laufzeitstatus, Tags allein, ein Pull-Wunsch oder erfundene Statusfelder sind
+kein Angebot. Ohne gültigen Nachweis entstehen keine Verfügbarkeitstickets; die autonome
+Quellenanbindung ist eine technische Abhängigkeit. Die Agent-API wird für diese
 Grundlage nicht geändert. `CONTRACT_VERSION` bleibt 13, der Agent-Fingerprint und
-Release-/Mindest-Agent-Version bleiben unverändert. Die neuen Hub/Web-Schemas
+Release-/Mindest-Agent-Version bleiben unverändert. Agent-Jobs sind flüchtig
+und auf 24 Stunden bzw. 256 jüngste Ergebnisse begrenzt; ein Agent-Neustart kann
+sie verlieren. Self-update liefert den letzten persistierten Lauf, Healing
+höchstens 256 geschlossene Incidents. Polling garantiert keine Historie bei
+längerer Hub-Abwesenheit oder verlorenen Agent-Jobs. Der Hub speichert erkannte
+Tickets selbst 30 Tage; vollständige rückwirkende Erfassung erfordert einen
+eigenen dauerhaften Ergebnis-Handoff und wird hier nicht zugesagt. Die neuen Hub/Web-Schemas
 verwenden `zod/mini` und `NOTIFICATION_API_VERSION = 1`; sie sind kein Bestandteil
 des Agent-Drahtvertrags.
 
@@ -39,7 +46,11 @@ Tickets haben genau `open`, `acknowledged` und `resolved`. Quittieren setzt
 `acknowledgedAt`, bestätigt die Wahrnehmung und beendet Erinnerungen. Es setzt
 kein Selbstheilungsbudget zurück, ruft keine Reparatur auf und erzeugt keine
 Nachricht. Die bestehende separate Aktion zur Wiederfreigabe der Selbstheilung
-bleibt erforderlich. Wiederholtes Quittieren ist idempotent; erledigte Tickets
+bleibt erforderlich. Die vorhandene Agent-SelfHealingAcknowledge-Aktion setzt
+das Budget zurück und darf deshalb nie als Ticket-Ack aufgerufen werden. Ein
+stabilitätsbedingtes Refill schließt den Agent-Incident nicht; dessen offener
+Status allein ist ebenso wenig ein Recovery-Nachweis wie ein gefülltes Budget.
+Recovery braucht frischen belegten gesunden Laufzeit-/Healing-Zustand. Wiederholtes Quittieren ist idempotent; erledigte Tickets
 bleiben erledigt. Die API bietet weder manuelles Erledigen noch Wiederöffnen.
 
 Erledigen setzt `resolvedAt` ausschließlich nach belegter Erholung: aktuelle
@@ -127,7 +138,14 @@ Dienstfelder werden vor Commit auf Vollständigkeit geprüft. Unvollständige Di
 können unselektiert gespeichert werden; ein ausgewählter unvollständiger Dienst
 führt zu `configuration-incomplete`. `authorization` ist ein einzelner Headerwert,
 keine freie Headerliste; CR/LF und Kontrollzeichen sind vor Speicherung abzulehnen.
-URLs erlauben HTTP/S ohne eingebettete Benutzerinformationen. Der Transport muss
+URLs erlauben HTTP/S ohne eingebettete Benutzerinformationen. Notify-Konfiguration
+liegt als private Laufzeitinformation in der Hub-Datenbank wie bestehende
+Agent-Secrets. DB-Zugriffsrechte und geschützte Betriebsbackups sind erforderlich;
+es entsteht keine neue Schlüssel- oder Vault-Pflicht. Die UI-/DB-Konfiguration ist
+maßgeblich, ungenutzte SMTP-/Discord-Env-Platzhalter aktivieren keinen Versand.
+Deren Dokumentation und Entfernung gehören zum Transport-/Integrationspaket.
+Für SMTP ist server-only Nodemailer (MIT) wegen TLS und MIME begründet;
+eine selbstgebaute SMTP-Implementierung wird nicht verwendet. Der Transport muss
 zusätzlich Destinationen, Redirects, TLS und Netzwerkzugriff gemäß Vertrauensgrenze
 prüfen; Schema-Parsing allein ist keine SSRF-Abwehr. Keine Secretwerte in Logs,
 Fehlerantworten, Audit-Differenzen oder Prozessargumenten.
@@ -189,7 +207,9 @@ Entfernte Destinationen und widerrufene Credentials dürfen keine weitere Zustel
 `cancelled`. Secrets liegen geschützt referenziert, nie im öffentlichen Queuemodell.
 
 Höchstens 10.000 aktive Queueeinträge; bei voller Queue bleibt der Versandbedarf
-als persistenter, sichtbarer Ticketauftrag bestehen und wird später aufgenommen.
+als persistenter Ticketauftrag bestehen und wird später aufgenommen.
+`pendingDeliveryCount` macht noch nicht in die Queue aufgenommene Absichten pro
+Ticket sichtbar (höchstens acht: vier Dienste mal Initial-/Recoveryphase).
 Keine offene Episode oder Versandabsicht geht still verloren. Direkte Test-/Retry-
 Anfragen antworten mit `queue-full`. Terminale Zustellungen bleiben höchstens 30
 Tage und höchstens 10.000 Einträge; älteste terminale Einträge werden zuerst
@@ -197,14 +217,17 @@ entfernt. Pro Ticket bleiben höchstens 100 Historieneinträge einschließlich e
 sichtbaren Kürzungshinweises. Wachstum aktiver Tickets wird durch Episoden-
 Deduplizierung und paginierte Abfragen begrenzt, nicht durch Löschen offener Tickets.
 
-## Stabile Hub/Web-API v1
+## Stabile Hub/Web-API (Grundlage 1)
 
-Alle Routen liegen unter `/api/v1/notifications`. Lesezugriff erfordert eine
-angemeldete Sitzung, Konfigurationsänderung, Quittierung, Test und Retry zusätzlich
+Alle Routen liegen unter `/api/notifications`. Lesezugriff erfordert eine
+angemeldete Sitzung für Tickets und Deliveries. Alle Notify-Settings-/Zielregel-
+Reads sowie Konfigurationsänderung, Quittierung, Test und Retry benötigen
 Adminrechte und vorhandene Origin-/CSRF-Prüfung. Es entstehen keine anonymen
 Webhook-Eingangsrouten. HTTP-Queries konvertiert der Router explizit in den unten
 angegebenen Typ, etwa `limit` zur Zahl; Schema akzeptiert keine stillen Coercions.
-IDs und Cursor sind opaque Strings von 1 bis 200 Zeichen. Zeitpunkte sind UTC-ISO
+Das bestehende allgemeine `GET /api/settings` bleibt für alle Konten secretfrei
+und enthält keine Notify-Verbindungsdaten; maskierte Notify-Admin-Reads bleiben
+in der hier genannten separaten API. IDs und Cursor sind opaque Strings von 1 bis 200 Zeichen. Zeitpunkte sind UTC-ISO
 8601. Konfiguration hat eine gemeinsame monoton steigende `revision` für globale
 Settings und alle Zielregeln; jeder Write prüft `expectedRevision` atomar und erhöht
 sie genau einmal. Reads liefern diesen Stand, Bulk liefert ihn für alle Ziele.
@@ -213,10 +236,10 @@ sie genau einmal. Reads liefern diesen Stand, Bulk liefert ihn für alle Ziele.
 | --- | --- | --- |
 | GET `/settings` | keine | `notificationSettingsResponseSchema` / 200 |
 | PUT `/settings` | `notificationSettingsWriteSchema` | `notificationSettingsResponseSchema` / 200 |
-| GET `/hosts/:hostId/stacks/:stackName` | Pfad-ID | `notificationScopeResponseSchema` / 200 |
-| PUT `/hosts/:hostId/stacks/:stackName` | `notificationScopeRequestSchema` | `notificationScopeResponseSchema` / 200 |
-| GET `/hosts/:hostId/containers/:containerId` | Pfad-ID | `notificationScopeResponseSchema` / 200 |
-| PUT `/hosts/:hostId/containers/:containerId` | `notificationScopeRequestSchema` | `notificationScopeResponseSchema` / 200 |
+| GET `/hosts/:hostId/stacks/:projectName` | Pfad-ID | `notificationScopeResponseSchema` / 200 |
+| PUT `/hosts/:hostId/stacks/:projectName` | `notificationScopeRequestSchema` | `notificationScopeResponseSchema` / 200 |
+| POST `/targets/read` | `notificationTargetRequestSchema` | `notificationScopeResponseSchema` / 200 |
+| PUT `/targets` | `notificationTargetWriteRequestSchema` | `notificationScopeResponseSchema` / 200 |
 | PUT `/selections/bulk` | `notificationBulkRequestSchema` | `notificationBulkResponseSchema` / 200 |
 | POST `/channels/test` | `notificationTestRequestSchema` | `notificationDeliveryResponseSchema` / 202 |
 | GET `/tickets` | `notificationTicketsQuerySchema` | `notificationTicketsResponseSchema` / 200 |
@@ -260,3 +283,19 @@ belegt keine tatsächliche Zustellung, Inhaltsbereinigung, Registry-Verfügbarke
 Transaktionsatomarität, Retention oder Wiederanlauf. Diese Eigenschaften verlangen
 in den jeweiligen Backend-, Quellen-, Transport- und UI-Paketen echte Tests mit
 injizierter Uhr/Transport sowie praktische Abnahme der vollständigen Integration.
+
+Zielidentitäten folgen dem vorhandenen Update-/Stop-Intent-Vokabular: Stack
+`{ kind: "stack", hostId, projectName }`, Einzelcontainer `{ kind: "container",
+hostId, target: { kind: "container", containerName } }`, Compose-Dienst mit
+`target: { kind: "compose", projectName, serviceName }`. Docker-IDs sind nur
+aktuelle Ausführungsbindungen und stehen nicht im persistenten Override-Schlüssel.
+`POST /targets/read` ist ein ausschließlich lesender Admin-Lookup mit strukturiertem
+Ziel, `PUT /targets` setzt `{ target, expectedRevision, configuration }`. Das
+Stack-Pfadpaar ist dieselbe Operation in pfadbasierter Form. Namenswechsel oder
+Projektwechsel übertragen keine Konfiguration automatisch; verschwundene Ziele
+bleiben als inaktive Zuordnung erhalten, ohne Versand. Erneutes Auftreten desselben
+Namens erfordert nach nachgewiesenem Entfernen explizite Admin-Bestätigung durch
+einen Ziel-Write, bevor alte Regeln wirksam werden. Bloße Offline-Daten sind kein
+Entfernen. Skalierte Compose-Dienste teilen dieselbe Dienstregel; Ereignisepisoden
+bleiben pro tatsächlich betroffenem Vorfall unterscheidbar. Ticket-Ziel und Label
+bleiben für die Historie erhalten, auch wenn ein Direktlink kein Ziel mehr findet.

@@ -47,12 +47,16 @@ export const notificationAdditionalTextSchema = notificationTemplateSchema.check
 export const notificationDeliveryOptionsSchema = z.strictObject({
   includeLogs: z.boolean(), recovery: z.boolean(), additionalText: notificationAdditionalTextSchema
 });
-export const notificationTargetSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("host"), hostId: notificationIdSchema }),
-  z.strictObject({ kind: z.literal("stack"), hostId: notificationIdSchema, stackName: notificationIdSchema }),
-  z.strictObject({ kind: z.literal("container"), hostId: notificationIdSchema, containerId: notificationIdSchema })
+export const notificationContainerIdentitySchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("container"), containerName: notificationIdSchema }),
+  z.strictObject({ kind: z.literal("compose"), projectName: notificationIdSchema, serviceName: notificationIdSchema })
 ]);
-export const notificationScopeTargetSchema = z.union([notificationTargetSchema.options[1], notificationTargetSchema.options[2]]);
+const stackTarget = z.strictObject({ kind: z.literal("stack"), hostId: notificationIdSchema, projectName: notificationIdSchema });
+const containerTarget = z.strictObject({ kind: z.literal("container"), hostId: notificationIdSchema, target: notificationContainerIdentitySchema });
+export const notificationTargetSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("host"), hostId: notificationIdSchema }), stackTarget, containerTarget
+]);
+export const notificationScopeTargetSchema = z.discriminatedUnion("kind", [stackTarget, containerTarget]);
 export const notificationFailureSchema = z.strictObject({ error: z.enum([
   "invalid-input", "unauthenticated", "admin-required", "forbidden-origin", "target-unknown", "ticket-unknown",
   "channel-unconfigured", "delivery-unknown", "conflict", "queue-full", "configuration-incomplete"
