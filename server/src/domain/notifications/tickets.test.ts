@@ -176,7 +176,7 @@ test("stable filter-bound cursor, finite pages and global counts", { timeout: 10
   assert.equal((await h.service.list({ state: "resolved" })).tickets.length, 0);
 });
 
-test("retention is resolved-only and never destroys pending intentions; admission is restart-safe", { timeout: 1000 }, async () => {
+test("retention preserves unresolved tickets and pending intentions; admission permits resolved-ticket pruning", { timeout: 1000 }, async () => {
   const h = harness();
   const ticket = await h.service.observe(h.observation);
   await h.service.recover(ticket.id, async () => ({ recovered: true, observedAt: "2026-01-01T01:00:00.000Z" }));
