@@ -59,7 +59,7 @@ export const notificationTargetSchema = z.discriminatedUnion("kind", [
 export const notificationScopeTargetSchema = z.discriminatedUnion("kind", [stackTarget, containerTarget]);
 export const notificationFailureSchema = z.strictObject({ error: z.enum([
   "invalid-input", "unauthenticated", "admin-required", "forbidden-origin", "target-unknown", "ticket-unknown",
-  "channel-unconfigured", "delivery-unknown", "conflict", "queue-full", "configuration-incomplete"
+  "channel-unconfigured", "delivery-unknown", "conflict", "queue-full", "configuration-incomplete", "internal-error"
 ]) });
 export type NotificationChannel = z.infer<typeof notificationChannelSchema>;
 export type NotificationEvent = z.infer<typeof notificationEventSchema>;
