@@ -199,8 +199,10 @@ export function createNotificationTickets(database: NotificationDatabase, depend
       return notificationCountsResponseSchema.parse({ open, acknowledged, active: open + acknowledged });
     },
     pruneResolved: () => database.transaction(async (query) => {
+      await readConfig(query, true);
       const result = await query.query(`DELETE FROM notification_ticket WHERE state = 'resolved' AND resolved_at < $1
-        AND NOT EXISTS (SELECT 1 FROM notification_delivery_intention i WHERE i.ticket_id = notification_ticket.id AND i.admitted_at IS NULL)`,
+        AND NOT EXISTS (SELECT 1 FROM notification_delivery_intention i WHERE i.ticket_id = notification_ticket.id AND i.admitted_at IS NULL)
+        AND NOT EXISTS (SELECT 1 FROM notification_delivery d WHERE d.ticket_id = notification_ticket.id)`,
       [new Date(dependencies.now().getTime() - NOTIFICATION_LIMITS.resolvedRetentionMs).toISOString()]);
       return result.rowCount ?? 0;
     })

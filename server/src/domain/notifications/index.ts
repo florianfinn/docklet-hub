@@ -8,3 +8,7 @@ export { readStoredScope, createNotificationScopes } from "./scopes.js";
 export { notificationBindingDigest, notificationRuntimeSelection, prepareNotificationIntentions,
   createNotificationTickets, pendingNotificationIntentions, admitNotificationIntention } from "./tickets.js";
 export type { NotificationDeliveryIntention, NotificationTicketDependencies } from "./tickets.js";
+export { createNotificationDeliveries, NOTIFICATION_DELIVERY_LEASE_MS } from "./deliveries.js";
+export { NotificationDeliveryError } from "./delivery-types.js";
+export type { NotificationDeliveryClaim, NotificationDeliveryDependencies, NotificationPreparedDispatch } from "./delivery-types.js";
+export { renderNotificationMessage, NotificationMessageError } from "./message.js";

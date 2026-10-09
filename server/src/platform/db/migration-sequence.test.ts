@@ -149,7 +149,8 @@ test("die Neuinstallationsgrundlage bleibt Byte für Byte erhalten", () => {
     "016-account-issuer.sql": "09c5333914b90d3602ced0d566905106e3ae8a34d4d3743c0ae3849f0472b34d",
     "017-runtime-settings.sql": "c17d3d7fa68c24b9977cfb5251357c3c2dbed3c96270a2dae577f1253c23f5e1",
     "018-container-updates.sql": "02740ed82361314aef243bf6848cde72366a68b2d133954958bb7df56dadeb5e",
-    "019-notifications.sql": "30a2ed04e859adaeeacc7fb3a07b9dff54217a8c1fcc7bc32cb38835189409b2"
+    "019-notifications.sql": "30a2ed04e859adaeeacc7fb3a07b9dff54217a8c1fcc7bc32cb38835189409b2",
+    "020-notification-deliveries.sql": "0efad617731262a51fbf40a3b2a52bee3de1b74fe645f242bf54f7d4fd5a5c14"
   };
   const files = new Map(available().map((entry) => [entry.filename, entry.checksum]));
   for (const [filename, expected] of Object.entries(shipped)) {
