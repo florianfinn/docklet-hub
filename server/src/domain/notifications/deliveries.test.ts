@@ -274,6 +274,8 @@ test("manual retry CAS preserves id/history, resets attempts and rebuilds curren
   assert.equal(h.rows().get(id)!.private_snapshot.format,h.config.format);
   await assert.rejects(h.service.retry(id,{ expectedGeneration:1 }),{ code:"conflict" });
   await assert.rejects(h.service.retry(id,{ expectedGeneration:1,endpoint:"https://example.invalid" }),{ code:"invalid-input" });
+  await h.service.finish(claim,{ status:"failed",failure:"validation" });
+  await assert.rejects(h.service.retry(id,{ expectedGeneration:0 }),{ code:"conflict" });
 });
 
 test("saved test jobs use all four private channel configs, never logs or caller destinations, and cancelled tests retry", { timeout: 1000 }, async () => {
@@ -415,4 +417,77 @@ test("immutable queue migration protects active ticket ownership and checks stat
   assert.match(sql,/attempts BETWEEN 0 AND 4/);
   assert.match(sql,/lease_deadline > updated_at/);
   assert.match(sql,/notification_delivery_due/); assert.match(sql,/notification_delivery_lease/);
+});
+
+test("revocation and credential rotation cover four channels in queued/sending/retrying/failed paths", { timeout: 3000 }, async () => {
+  for(const channel of NOTIFICATION_CHANNELS) for(const state of ["queued","sending","retrying","failed"] as const) {
+    const h=harness(); h.intention("ticket-a",channel); await h.service.admitPending(); const id=[...h.rows().keys()][0];
+    let claim=state==="queued"?null:(await h.service.claim())[0];
+    if(state==="retrying") {
+      await h.service.finish(claim!,{ status:"failed",failure:"transient" }); h.advance(30000);
+    }
+    if(state==="failed") await h.service.finish(claim!,{ status:"failed",failure:"authentication" });
+    const saved=h.config.channels.find((item)=>item.kind===channel)!;
+    if(channel==="smtp") saved.connection={ ...saved.connection!,password:"rotated-synthetic",username:"synthetic-user" };
+    else if(channel==="gotify") saved.token="rotated-synthetic";
+    else if(channel==="webhook") saved.authorization="rotated-synthetic";
+    else saved.endpoint="https://example.invalid/rotated-discord";
+    if(state==="failed") {
+      const retried=await h.service.retry(id,{ expectedGeneration:0 }); assert.equal(retried.generation,1);
+      claim=(await h.service.claim())[0]; assert.ok(await h.service.prepareDispatch(claim));
+    } else {
+      if(state!=="sending") claim=(await h.service.claim())[0];
+      assert.equal(await h.service.prepareDispatch(claim!),null); assert.equal((await h.service.read(id)).state,"cancelled");
+      assert.equal(h.rows().get(id)!.cancellation_reason,"binding-changed");
+      assert.equal((await h.service.retry(id,{ expectedGeneration:0 })).generation,1);
+    }
+    const fresh=(await h.service.claim())[0];
+    if(fresh) {
+      if(channel==="smtp") saved.connection=null; else saved.endpoint=null;
+      assert.equal(await h.service.prepareDispatch(fresh),null); assert.equal(h.rows().get(id)!.cancellation_reason,"channel-unconfigured");
+    }
+    assert.ok(!JSON.stringify(await h.service.read(id)).includes("rotated-synthetic"));
+    assert.ok(!JSON.stringify(h.history()).includes("rotated-synthetic"));
+  }
+});
+
+test("B1 intentions preserve 2001 combined options and explicit false; default saved configuration admits nothing", { timeout: 1000 }, async () => {
+  const h=harness(); h.config.hostRules=[]; h.config.defaults=[];
+  const tickets=createNotificationTickets(h.database,{ ...h.dependencies,sanitizeText:(value)=>value,
+    sanitizeEvidence:(evidence)=>evidence });
+  const observation: TicketObservation={ ...ticket,source:"synthetic-source",observedAt:instant };
+  const off=await tickets.observe(observation); assert.equal(off.pendingDeliveryCount,0);
+  assert.equal((await h.service.admitPending()).admitted,0);
+  const channel=h.config.channels.find((item)=>item.kind==="webhook")!;
+  channel.defaults={ includeLogs:true,recovery:true,additionalText:"G".repeat(1000) };
+  h.config.defaults=[{ channel:"webhook",events:["update-failed"],overrides:{ includeLogs:false,recovery:false,
+    additionalText:"L".repeat(1000),destination:null } }];
+  const next: TicketObservation={ ...observation,episodeKey:"episode-next",event:"update-failed",action:"inspect-update",
+    target:{ kind:"container",hostId:"host-a",target:{ kind:"container",containerName:"container-a" } },
+    evidence:{ logs:{ state:"available",text:"Bereinigter Logauszug",truncated:false } } };
+  const created=await tickets.observe(next); assert.equal(created.pendingDeliveryCount,1); await h.service.admitPending();
+  const row=[...h.rows().values()][0]; assert.equal(row.private_snapshot.options.additionalText.length,2001);
+  assert.equal(row.private_snapshot.options.includeLogs,false); assert.equal(row.private_snapshot.options.recovery,false);
+  assert.equal(row.private_snapshot.ticket.evidence.logs.state,"unavailable");
+  const claim=(await h.service.claim())[0]; const prepared=await h.service.prepareDispatch(claim);
+  assert.equal(prepared!.message.optionalText!.length,2001);
+  assert.ok(!prepared!.message.optionalText!.includes("Logauszug"));
+});
+
+test("render validation is a visible permanent queue failure and claim/CAS writes roll back on commit errors", { timeout: 1000 }, async () => {
+  const h=harness(); const item=h.intention();
+  item.snapshot.ticket.cause="*_".repeat(500); item.channel="discord";
+  h.intents().delete("ticket-a|initial|webhook"); item.snapshot.bindingDigest=h.snapshot("discord").bindingDigest;
+  h.intents().set("ticket-a|initial|discord",item);
+  await h.service.admitPending(); const id=[...h.rows().keys()][0];
+  h.fail("commit"); await assert.rejects(h.service.claim(),/synthetic-commit/);
+  assert.equal((await h.service.read(id)).state,"queued"); assert.equal((await h.service.read(id)).attempts,0);
+  h.fail(null); const claim=(await h.service.claim())[0];
+  assert.equal(await h.service.prepareDispatch(claim),null);
+  assert.equal((await h.service.read(id)).state,"failed"); assert.equal((await h.service.read(id)).failure,"validation");
+  assert.equal((await h.service.read(id)).attempts,1);
+  await h.service.retry(id,{ expectedGeneration:0 }); const fresh=(await h.service.claim())[0];
+  h.fail("commit"); await assert.rejects(h.service.finish(fresh,{ status:"delivered" }),/synthetic-commit/);
+  assert.equal((await h.service.read(id)).state,"sending"); assert.equal(h.history().length,1);
+  h.fail(null); assert.equal((await h.service.finish(fresh,{ status:"delivered" }))!.state,"delivered");
 });

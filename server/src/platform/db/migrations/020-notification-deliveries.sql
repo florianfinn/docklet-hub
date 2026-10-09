@@ -29,7 +29,7 @@ CREATE TABLE notification_delivery (
   CHECK (claim_token IS NULL OR length(claim_token) = 36),
   CHECK (lease_deadline IS NULL OR lease_deadline > updated_at),
   CHECK (state <> 'queued' OR (attempts = 0 AND failure IS NULL)),
-  CHECK (state <> 'retrying' OR (attempts BETWEEN 1 AND 3 AND failure IN ('transient', 'timeout'))),
+  CHECK (state <> 'retrying' OR (attempts BETWEEN 1 AND 3 AND failure IS NOT NULL AND failure IN ('transient', 'timeout'))),
   CHECK (state NOT IN ('sending', 'delivered') OR attempts >= 1),
   CHECK (state <> 'delivered' OR failure IS NULL),
   CHECK (state <> 'failed' OR failure IS NOT NULL),
