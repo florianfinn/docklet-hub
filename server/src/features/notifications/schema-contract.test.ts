@@ -114,7 +114,7 @@ test("all channel write variants accept keep, replace and clear with complete SM
 test("channel configuration rejects unsafe protocols and malformed SMTP inputs", () => {
   for (const url of ["https://example.invalid/destination", "http://example.invalid/destination"])
     assert.equal(notificationChannelWriteSchema.safeParse({ ...writes[0], endpoint: { operation: "set", value: url } }).success, true);
-  for (const value of ["file:///example", "ftp://example.invalid", "https://user:pass@example.invalid/path", "https://@example.invalid/path", "https://example.invalid/path\nvalue", "bad"])
+  for (const value of ["file:///example", "ftp://example.invalid", "https://user:pass@example.invalid/path", "https://@example.invalid/path", "https://example.invalid/path\nvalue", "https://example.invalid/path\rvalue", "https://example.invalid/path\tvalue", "bad"])
     assert.equal(notificationChannelWriteSchema.safeParse({ ...writes[0], endpoint: { operation: "set", value } }).success, false);
   for (const change of [{ security: "none" }, { port: 0 }, { port: 65536 }, { port: 465.5 }, { to: [] },
     { from: "not-an-address" }, { username: "example-user" }, { password: "synthetic-example-value" }])

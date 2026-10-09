@@ -1,13 +1,14 @@
 import * as z from "zod/mini";
+import { hasControlCharacter } from "../agent/spec.js";
 import { NOTIFICATION_LIMITS, notificationAdditionalTextSchema, notificationChannelSchema,
-  notificationDeliveryOptionsSchema, notificationFormatSchema, notificationIdSchema,
+  notificationDeliveryOptionsSchema, notificationFormatSchema,
   notificationScopeTargetSchema } from "./notifications.js";
 
 const secretValue = z.string().check(z.minLength(1), z.maxLength(NOTIFICATION_LIMITS.maxSecretChars),
-  z.refine((value) => !/[\u0000-\u001f\u007f]/u.test(value)));
-const endpoint = z.url().check(z.maxLength(NOTIFICATION_LIMITS.maxSecretChars),
-  z.refine((value) => !/[\u0000-\u0020\u007f]/u.test(value) && /^https?:\/\/[^/@\s]+(?:[/?#]|$)/iu.test(value)));
-const secretUpdate = (value: typeof secretValue) => z.discriminatedUnion("operation", [
+  z.refine((value) => !hasControlCharacter(value)));
+const endpoint = z.pipe(z.string().check(z.maxLength(NOTIFICATION_LIMITS.maxSecretChars),
+  z.refine((value) => !hasControlCharacter(value) && !value.includes(" ") && /^https?:\/\/[^/@\s]+(?:[/?#]|$)/iu.test(value))), z.url());
+const secretUpdate = <T extends z.core.$ZodType<string>>(value: T) => z.discriminatedUnion("operation", [
   z.strictObject({ operation: z.literal("keep") }),
   z.strictObject({ operation: z.literal("set"), value }),
   z.strictObject({ operation: z.literal("clear") })
