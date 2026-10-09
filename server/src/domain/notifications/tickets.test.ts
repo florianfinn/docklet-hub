@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { notificationTicketResponseSchema, notificationTicketsResponseSchema, type NotificationTicketView } from "contract";
 import { initialConfig } from "./config.js";
 import { createNotificationTickets, pendingNotificationIntentions, admitNotificationIntention } from "./tickets.js";
-import type { NotificationDatabase, NotificationQuery, TicketObservation } from "./types.js";
+import { targetKey, type NotificationDatabase, type NotificationQuery, type TicketObservation } from "./types.js";
 
 type Row = { document: NotificationTicketView; observed_at: string; source: string; target_key: string };
 type Intention = { ticket_id: string; phase: string; channel: string; configuration_revision: string; snapshot: unknown; admitted_at: string | null };
@@ -17,11 +17,13 @@ function harness() {
   let readerCalls = 0;
   const statements: string[] = [];
   const config = initialConfig();
+  const scopes = new Map<string, { configuration: unknown; active: boolean }>();
   config.channels.find((channel) => channel.kind === "webhook")!.endpoint = "https://example.invalid/webhook";
   config.hostRules = [{ channel: "webhook", events: ["connection-lost"], overrides: { recovery: true } }];
   const query = async (sql: string, values: unknown[] = []) => {
     statements.push(sql);
     if (sql.startsWith("INSERT INTO notification_config")) return { rows: [], rowCount: 0 };
+    if (sql.startsWith("SELECT configuration, active")) return { rows: scopes.has(values[0] as string) ? [scopes.get(values[0] as string)] : [], rowCount: 1 };
     if (sql.startsWith("SELECT revision")) return { rows: [{ revision: "0", document: structuredClone(config) }], rowCount: 1 };
     if (sql.includes("SELECT count(*)::text AS count")) return { rows: [{ count: String([...intentions.values()].filter((item) => item.ticket_id === values[0] && !item.admitted_at).length) }], rowCount: 1 };
     if (sql.startsWith("SELECT document, observed_at FROM notification_ticket WHERE id")) return { rows: rows.has(values[0] as string) ? [structuredClone(rows.get(values[0] as string))] : [], rowCount: 1 };
@@ -93,12 +95,12 @@ function harness() {
     episodeKey: "episode-a", event: "connection-lost", target: { kind: "host", hostId: "host-a" },
     targetLabel: "Synthetic host", cause: "Connection unavailable", action: "check-connection",
     affectedContainers: [{ containerId: "container-a", label: "Synthetic container" }], affectedContainerCount: 3 };
-  return { database, service, observation, statements, rows: () => rows, intentions: () => intentions,
+  return { database, service, observation, statements, config, scopes, rows: () => rows, intentions: () => intentions,
     clock: (value: string) => { clock = new Date(value); }, fail: () => { failCommit = true; }, failIntent: () => { failIntention = true; },
     readerCalls: () => readerCalls };
 }
 
-test("dedup, idempotent ack without dispatch, fresh recovery only, new episodes and full public DTO", async () => {
+test("dedup, idempotent ack without dispatch, fresh recovery only, new episodes and full public DTO", { timeout: 1000 }, async () => {
   const h = harness();
   const ticket = await h.service.observe(h.observation);
   notificationTicketResponseSchema.parse({ ticket });
@@ -126,7 +128,7 @@ test("dedup, idempotent ack without dispatch, fresh recovery only, new episodes 
   assert.notEqual(next.id, ticket.id);
 });
 
-test("unproven logs fail closed, malicious text rejected, schema bounds enforced", async () => {
+test("unproven logs fail closed, malicious text rejected, schema bounds enforced", { timeout: 1000 }, async () => {
   const h = harness();
   const ticket = await h.service.observe({ ...h.observation, evidence: { logs: { state: "available", text: "private evidence", truncated: false } } });
   assert.deepEqual(ticket.evidence, { logs: { state: "unavailable", reason: "redaction-unavailable" } });
@@ -139,7 +141,7 @@ test("unproven logs fail closed, malicious text rejected, schema bounds enforced
   assert.equal(notificationTicketResponseSchema.safeParse({ ticket: { ...ticket, credentials: "secret" } }).success, false);
 });
 
-test("ticket and intentions rollback together on intention/commit failure and parallel duplicate observations converge", async () => {
+test("ticket and intentions rollback together on intention/commit failure and parallel duplicate observations converge", { timeout: 1000 }, async () => {
   const failed = harness(); failed.failIntent();
   await assert.rejects(failed.service.observe(failed.observation), /synthetic-intention-failure/);
   assert.equal(failed.rows().size, 0); assert.equal(failed.intentions().size, 0);
@@ -152,7 +154,7 @@ test("ticket and intentions rollback together on intention/commit failure and pa
   assert.ok(h.statements.some((sql) => sql.includes("FOR UPDATE")));
 });
 
-test("stable filter-bound cursor, finite pages and global counts", async () => {
+test("stable filter-bound cursor, finite pages and global counts", { timeout: 1000 }, async () => {
   const h = harness();
   const first = await h.service.observe(h.observation);
   await h.service.observe({ ...h.observation, episodeKey: "episode-b" });
@@ -171,7 +173,7 @@ test("stable filter-bound cursor, finite pages and global counts", async () => {
   assert.equal((await h.service.list({ state: "resolved" })).tickets.length, 0);
 });
 
-test("retention is resolved-only and never destroys pending intentions; admission is restart-safe", async () => {
+test("retention is resolved-only and never destroys pending intentions; admission is restart-safe", { timeout: 1000 }, async () => {
   const h = harness();
   const ticket = await h.service.observe(h.observation);
   await h.service.recover(ticket.id, async () => ({ recovered: true, observedAt: "2026-01-01T01:00:00.000Z" }));
@@ -203,4 +205,26 @@ test("migration enforces singleton, revision bounds, stable dedup and cascading 
   assert.match(sql, /REFERENCES notification_ticket\(id\) ON DELETE CASCADE/);
   assert.match(sql, /PRIMARY KEY \(ticket_id, phase, channel\)/);
   assert.match(sql, /CHECK \(\(state = 'resolved'\) = \(resolved_at IS NOT NULL\)\)/);
+});
+
+
+test("runtime defaults honor false overrides and explicit empty cancels selection rather than falling through", { timeout: 1000 }, async () => {
+  const h = harness();
+  const channel = h.config.channels.find((item) => item.kind === "webhook")!;
+  channel.defaults = { includeLogs: true, recovery: true, additionalText: "Global" };
+  h.config.defaults = [{ channel: "webhook", events: ["update-failed"], overrides: {
+    includeLogs: false, recovery: false, additionalText: "Local", destination: "https://example.invalid/custom" } }];
+  const target = { kind: "container" as const, hostId: "host-a", target: { kind: "container" as const, containerName: "container-a" } };
+  const observation: TicketObservation = { ...h.observation, target, event: "update-failed", action: "inspect-update",
+    affectedContainers: [], affectedContainerCount: 0 };
+  const ticket = await h.service.observe(observation);
+  const snapshot = [...h.intentions().values()][0].snapshot as { options: { includeLogs: boolean; recovery: boolean; additionalText: string }; ticket: NotificationTicketView };
+  assert.deepEqual(snapshot.options, { includeLogs: false, recovery: false, additionalText: "Global\nLocal" });
+  assert.deepEqual(snapshot.ticket.evidence.logs, { state: "unavailable", reason: "not-collected" });
+  await h.service.recover(ticket.id, async () => ({ recovered: true, observedAt: "2026-01-01T01:00:00.000Z" }));
+  assert.equal(h.intentions().size, 1);
+  h.scopes.set(targetKey(target), { active: true, configuration: { mode: "explicit", selections: [] } });
+  const disabled = await h.service.observe({ ...observation, episodeKey: "episode-b" });
+  assert.equal(disabled.pendingDeliveryCount, 0);
+  assert.equal(h.intentions().size, 1);
 });

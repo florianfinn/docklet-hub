@@ -59,7 +59,7 @@ function configuredWrite(config: StoredConfig, expectedRevision = config.revisio
 const explicit = { mode: "explicit", selections: [{ channel: "webhook", events: ["update-failed"],
   overrides: { includeLogs: false, recovery: false, additionalText: "", destination: { operation: "set", value: "https://example.invalid/custom" } } }] };
 
-test("global writes mask every private value and keep/clear secrets atomically", async () => {
+test("global writes mask every private value and keep/clear secrets atomically", { timeout: 1000 }, async () => {
   const h = harness();
   const view = await h.service.write(configuredWrite(h.config()));
   notificationSettingsResponseSchema.parse({ notifications: view });
@@ -78,7 +78,7 @@ test("global writes mask every private value and keep/clear secrets atomically",
   assert.ok(h.statements.some((sql) => sql.includes("AND revision = $2")));
 });
 
-test("inheritance includes flags/custom destination; explicit empty fully replaces; keep and clear are local", async () => {
+test("inheritance includes flags/custom destination; explicit empty fully replaces; keep and clear are local", { timeout: 1000 }, async () => {
   const h = harness();
   await h.service.write(configuredWrite(h.config()));
   await h.rules.bulk({ expectedRevision: 1, targets: [h.stack], configuration: explicit });
@@ -101,7 +101,7 @@ test("inheritance includes flags/custom destination; explicit empty fully replac
   assert.equal(h.scopes().get(targetKey(h.stack))!.configuration.mode, "inherit");
 });
 
-test("bulk validates all targets before writes, rejects revision/invalid input and rolls back commit failure", async () => {
+test("bulk validates all targets before writes, rejects revision/invalid input and rolls back commit failure", { timeout: 1000 }, async () => {
   const h = harness();
   await h.service.write(configuredWrite(h.config()));
   await assert.rejects(h.rules.bulk({ expectedRevision: 1, targets: [h.stack, { ...h.stack, hostId: "missing" }], configuration: explicit }), { code: "target-unknown" });
@@ -115,7 +115,7 @@ test("bulk validates all targets before writes, rejects revision/invalid input a
   assert.equal(h.config().revision, 1);
 });
 
-test("selected incomplete channels are rejected and removed identities stay disabled until explicit write", async () => {
+test("selected incomplete channels are rejected and removed identities stay disabled until explicit write", { timeout: 1000 }, async () => {
   const h = harness();
   await assert.rejects(h.rules.bulk({ expectedRevision: 0, targets: [h.stack], configuration: explicit }), { code: "configuration-incomplete" });
   const write = configuredWrite(h.config());
@@ -126,7 +126,7 @@ test("selected incomplete channels are rejected and removed identities stay disa
   assert.equal((await h.rules.read(h.container)).effective.length, 1);
 });
 
-test("SMTP private connection is masked; malformed secrets and extra DTO fields fail closed", async () => {
+test("SMTP private connection is masked; malformed secrets and extra DTO fields fail closed", { timeout: 1000 }, async () => {
   const h = harness();
   const write = configuredWrite(h.config());
   Object.assign(write.channels.find((item) => item.kind === "smtp")!, { connection: { operation: "set", value: {
@@ -140,7 +140,7 @@ test("SMTP private connection is masked; malformed secrets and extra DTO fields 
   assert.equal(notificationSettingsResponseSchema.safeParse({ notifications: { ...view, connection: "private" } }).success, false);
 });
 
-test("pool adapter rolls back commit errors and always releases connection", async () => {
+test("pool adapter rolls back commit errors and always releases connection", { timeout: 1000 }, async () => {
   const calls: string[] = [];
   const pool = { connect: async () => ({ query: async (sql: string) => {
     calls.push(sql);
@@ -149,4 +149,16 @@ test("pool adapter rolls back commit errors and always releases connection", asy
   }, release: () => calls.push("release") }), query: async () => ({ rows: [], rowCount: 0 }) } as unknown as Pool;
   await assert.rejects(createNotificationDatabase(pool).transaction(async (query) => { await query.query("SELECT 1"); return 1; }), /synthetic-commit-failure/);
   assert.deepEqual(calls, ["BEGIN", "SELECT 1", "COMMIT", "ROLLBACK", "release"]);
+});
+
+
+test("revision losers and over-limit bulk cannot make partial progress", { timeout: 1000 }, async () => {
+  const h = harness();
+  await h.service.write(configuredWrite(h.config()));
+  await h.rules.bulk({ expectedRevision: 1, targets: [h.stack], configuration: explicit });
+  await assert.rejects(h.rules.bulk({ expectedRevision: 1, targets: [h.container], configuration: explicit }), { code: "conflict" });
+  const targets = Array.from({ length: 201 }, (_, i) => ({ ...h.stack, projectName: `project-${i}` }));
+  await assert.rejects(h.rules.bulk({ expectedRevision: 2, targets, configuration: explicit }), { code: "invalid-input" });
+  assert.equal(h.scopes().size, 1);
+  assert.equal(h.config().revision, 2);
 });

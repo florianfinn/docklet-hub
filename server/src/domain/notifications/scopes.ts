@@ -1,4 +1,4 @@
-import { notificationBulkRequestSchema, notificationScopeResponseSchema, notificationScopeTargetSchema,
+import { notificationBulkRequestSchema, notificationScopeResponseSchema, notificationScopeTargetSchema, notificationTargetWriteRequestSchema,
   resolveNotificationSelection } from "contract";
 import { assertConfigured, readConfig, replaceSelections, saveConfig, scopeView, selectionViews } from "./config.js";
 import { NotificationError, targetKey, type NotificationDatabase, type NotificationQuery, type ScopeTarget,
@@ -20,7 +20,7 @@ async function response(query: NotificationQuery, reader: TargetReader, target: 
   return notificationScopeResponseSchema.parse({ target, revision: config.revision, configuration: scopeView(configuration), ...resolved });
 }
 export function createNotificationScopes(database: NotificationDatabase, reader: TargetReader) {
-  return {
+  const service = {
     read: async (input: unknown) => {
       const parsed = notificationScopeTargetSchema.safeParse(input);
       if (!parsed.success) throw new NotificationError("invalid-input");
@@ -59,4 +59,10 @@ export function createNotificationScopes(database: NotificationDatabase, reader:
       await saveConfig(query, { ...config, revision: config.revision + 1 }, config.revision);
     })
   };
+  return { ...service, write: async (input: unknown) => {
+    const parsed = notificationTargetWriteRequestSchema.safeParse(input);
+    if (!parsed.success) throw new NotificationError("invalid-input");
+    const { target, ...write } = parsed.data;
+    return (await service.bulk({ ...write, targets: [target] })).targets[0];
+  } };
 }
