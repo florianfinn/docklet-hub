@@ -593,6 +593,8 @@ export type {
 } from "./api/notifications-settings.js";
 
 export {
+  notificationLogEvidenceSchema,
+  notificationTicketEvidenceSchema,
   notificationTicketStateSchema,
   notificationTicketViewSchema,
   notificationTicketResponseSchema,
@@ -608,6 +610,8 @@ export {
   notificationRetryRequestSchema
 } from "./api/notifications-tickets.js";
 export type {
+  NotificationLogEvidence,
+  NotificationTicketEvidence,
   NotificationTicketView,
   NotificationTicketState,
   NotificationDeliveryView,

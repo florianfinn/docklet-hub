@@ -2,11 +2,19 @@ import * as z from "zod/mini";
 import { NOTIFICATION_LIMITS, notificationChannelSchema, notificationEventSchema, notificationIdSchema,
   notificationInstantSchema, notificationLabelSchema, notificationTargetSchema } from "./notifications.js";
 
+// Available evidence contains only sanitized text; unknown or unsafe sources fail closed.
+export const notificationLogEvidenceSchema = z.discriminatedUnion("state", [
+  z.strictObject({ state: z.literal("available"),
+    text: z.string().check(z.minLength(1), z.maxLength(NOTIFICATION_LIMITS.maxLogChars)), truncated: z.boolean() }),
+  z.strictObject({ state: z.literal("unavailable"), reason: z.enum(["not-collected", "source-unavailable", "redaction-unavailable"]) })
+]);
+export const notificationTicketEvidenceSchema = z.strictObject({ logs: notificationLogEvidenceSchema });
 export const notificationTicketStateSchema = z.enum(["open", "acknowledged", "resolved"]);
 export const notificationTicketViewSchema = z.strictObject({
   id: notificationIdSchema, episodeKey: notificationIdSchema, event: notificationEventSchema,
   target: notificationTargetSchema, targetLabel: notificationLabelSchema,
   cause: z.string().check(z.minLength(1), z.maxLength(1000)),
+  evidence: notificationTicketEvidenceSchema,
   action: z.enum(["inspect-self-healing", "check-connection", "inspect-update", "review-update"]),
   state: notificationTicketStateSchema, openedAt: notificationInstantSchema,
   acknowledgedAt: z.nullable(notificationInstantSchema), resolvedAt: z.nullable(notificationInstantSchema),
@@ -89,3 +97,6 @@ export type NotificationDeliveryView = z.infer<typeof notificationDeliveryViewSc
 export type NotificationDeliveryState = z.infer<typeof notificationDeliveryStateSchema>;
 export type NotificationTicketsQuery = z.infer<typeof notificationTicketsQuerySchema>;
 export type NotificationDeliveriesQuery = z.infer<typeof notificationDeliveriesQuerySchema>;
+
+export type NotificationLogEvidence = z.infer<typeof notificationLogEvidenceSchema>;
+export type NotificationTicketEvidence = z.infer<typeof notificationTicketEvidenceSchema>;

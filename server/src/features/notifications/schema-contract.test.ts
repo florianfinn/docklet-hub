@@ -7,7 +7,8 @@ import {
   notificationBulkResponseSchema, notificationChannelViewSchema, notificationChannelWriteSchema,
   notificationCountsResponseSchema, notificationDeliveriesQuerySchema, notificationDeliveriesResponseSchema,
   notificationDeliveryResponseSchema, notificationDeliveryViewSchema, notificationFailureSchema,
-  notificationFormatSchema, notificationRetryRequestSchema, notificationScopeRequestSchema,
+  notificationFormatSchema, notificationLogEvidenceSchema, notificationTicketEvidenceSchema,
+  notificationRetryRequestSchema, notificationScopeRequestSchema,
   notificationScopeResponseSchema, notificationScopeViewSchema, notificationScopeWriteSchema,
   notificationSecretInputSchema, notificationSelectionViewSchema, notificationSelectionWriteSchema,
   notificationSettingsResponseSchema, notificationSettingsWriteSchema, notificationTargetRequestSchema,
@@ -47,7 +48,8 @@ const writes = [
 const settingsWrite = { expectedRevision: 0, channels: writes, format: DEFAULT_NOTIFICATION_FORMAT,
   defaults: [], hostRules: [] };
 const ticket = { id: "ticket-example", episodeKey: "episode-example", event: "connection-lost", target: host,
-  targetLabel: "Example host", cause: "Connection unavailable", action: "check-connection", state: "open",
+  targetLabel: "Example host", cause: "Connection unavailable",
+  evidence: { logs: { state: "unavailable", reason: "not-collected" } }, action: "check-connection", state: "open",
   openedAt: now, acknowledgedAt: null, resolvedAt: null, affectedContainers: [], affectedContainerCount: 0, pendingDeliveryCount: 0 };
 const delivery = { id: "delivery-example", ticketId: ticket.id, phase: "initial", channel: "discord", generation: 0,
   state: "queued", attempts: 0, createdAt: now, updatedAt: now, nextAttemptAt: now, finishedAt: null,
@@ -265,4 +267,35 @@ test("manual retry and test requests carry no new event, secret or repair action
   rejects(notificationTestRequestSchema, [{ channel: "unknown" }, { channel: "smtp", endpoint: "https://example.invalid" }]);
   assert.deepEqual(notificationFailureSchema.parse({ error: "queue-full" }), { error: "queue-full" });
   rejects(notificationFailureSchema, [{ error: "queue-full", message: "raw-example" }, { error: "unknown" }]);
+});
+
+
+test("ticket evidence fails closed and bounds sanitized log excerpts", () => {
+  for (const reason of ["not-collected", "source-unavailable", "redaction-unavailable"]) {
+    const logs = { state: "unavailable", reason };
+    assert.deepEqual(notificationLogEvidenceSchema.parse(logs), logs);
+    assert.deepEqual(notificationTicketViewSchema.parse({ ...ticket, evidence: { logs } }), { ...ticket, evidence: { logs } });
+  }
+  for (const [text, truncated] of [["Sanitized example log", false], ["x".repeat(4000), true]] as const) {
+    const logs = { state: "available", text, truncated };
+    assert.deepEqual(notificationTicketEvidenceSchema.parse({ logs }), { logs });
+    assert.deepEqual(notificationTicketResponseSchema.parse({ ticket: { ...ticket, evidence: { logs } } }),
+      { ticket: { ...ticket, evidence: { logs } } });
+  }
+  rejects(notificationLogEvidenceSchema, [{ state: "available", text: "x".repeat(4001), truncated: true },
+    { state: "available", text: "", truncated: false }, { state: "available", text: "example" },
+    { state: "available", text: "example", truncated: "false" },
+    { state: "unavailable", reason: "redaction-unavailable", text: "unsafe-example" },
+    { state: "unavailable", reason: "arbitrary-raw-diagnostic" },
+    { state: "available", text: "example", truncated: false, rawLogs: "unsafe-example" }, null]);
+  rejects(notificationTicketEvidenceSchema, [{}, { logs: null }, { logs: ticket.evidence.logs, rawLogs: "unsafe-example" }]);
+  const { evidence: _evidence, ...withoutEvidence } = ticket;
+  rejects(notificationTicketViewSchema, [withoutEvidence]);
+});
+
+test("pending delivery count exposes only the bounded eight durable intents", () => {
+  for (const pendingDeliveryCount of [0, 8])
+    assert.equal(notificationTicketViewSchema.safeParse({ ...ticket, pendingDeliveryCount }).success, true);
+  for (const pendingDeliveryCount of [-1, 9, 0.5, "1", null, undefined])
+    assert.equal(notificationTicketViewSchema.safeParse({ ...ticket, pendingDeliveryCount }).success, false);
 });

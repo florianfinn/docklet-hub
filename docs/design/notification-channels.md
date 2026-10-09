@@ -160,6 +160,17 @@ Ursache, Zeitpunkt und empfohlene Handlung Pflichtinformationen. Transportgerech
 Escaping erfolgt nach der Ersetzung, etwa JSON, Mailtext/MIME oder Discord-Markup
 und deaktivierte Mentions; Texte steuern keine Header oder URLs.
 
+Der Hub zeigt für #157 einen bereinigten Ticket-Logauszug über `evidence.logs`.
+`notificationTicketEvidenceSchema` enthält `notificationLogEvidenceSchema`: genau
+`{ state: "available", text, truncated }` oder `{ state: "unavailable", reason }`.
+Verfügbare Evidenz hat 1 bis 4000 Zeichen und einen expliziten Kürzungswert.
+`reason` ist ausschließlich `not-collected`, `source-unavailable` oder
+`redaction-unavailable`; ein nicht verfügbarer Auszug enthält niemals Text.
+Fehlender sicherer Bereinigungsnachweis führt zu `redaction-unavailable`, nie zum
+Rückfall auf rohe Logs. Diese Schemaform beweist keine Inhaltsbereinigung; die
+Quelle muss das sichere Ergebnis nachweisen. Der Hub-Logauszug aktiviert keinen
+externen Versand. Tickets ohne gesammelte Logs liefern `not-collected`.
+
 Logs sind ausschließlich pro wirksamem Versandziel opt-in, standardmäßig aus.
 Der Hub bereinigt Ursachen und Logs durch ein Positivmodell; rohe Agentdiagnostik,
 Credentials, private Endpoints und Verbindungskonfiguration werden nie automatisch
@@ -213,8 +224,9 @@ Ticket sichtbar (höchstens acht: vier Dienste mal Initial-/Recoveryphase).
 Keine offene Episode oder Versandabsicht geht still verloren. Direkte Test-/Retry-
 Anfragen antworten mit `queue-full`. Terminale Zustellungen bleiben höchstens 30
 Tage und höchstens 10.000 Einträge; älteste terminale Einträge werden zuerst
-entfernt. Pro Ticket bleiben höchstens 100 Historieneinträge einschließlich eines
-sichtbaren Kürzungshinweises. Wachstum aktiver Tickets wird durch Episoden-
+entfernt. Pro Ticket bleiben höchstens 100 interne Historieneinträge. Eine öffentlich
+sichtbare Historie oder ein Kürzungshinweis wird ohne eigenes Wire-DTO nicht
+zugesagt; die Ticketansicht liefert Zustand, Evidenz und ausstehende Absichten. Wachstum aktiver Tickets wird durch Episoden-
 Deduplizierung und paginierte Abfragen begrenzt, nicht durch Löschen offener Tickets.
 
 ## Stabile Hub/Web-API (Grundlage 1)
