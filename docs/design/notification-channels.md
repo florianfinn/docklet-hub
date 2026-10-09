@@ -284,7 +284,14 @@ Fehlerantwort ist immer `notificationFailureSchema`, `{ error: <key> }` ohne
 Rohdetails: 400 `invalid-input`, 401 `unauthenticated`, 403 `admin-required` oder
 `forbidden-origin`, 404 `target-unknown`, `ticket-unknown`, `delivery-unknown`,
 409 `conflict`, 422 `channel-unconfigured` oder `configuration-incomplete`,
-503 `queue-full`. Jede konfigurative Schreibanfrage ist ein vollständiger Ersatz
+500 `internal-error`, 503 `queue-full`. Bei unerwarteten Server- oder
+Datenbankfehlern ist HTTP 500 mit exakt `{ error: "internal-error" }` vorgeschrieben.
+Das strikte Fehlerschema lehnt zusätzliche Felder wie `message`, `cause`, `endpoint`
+oder `secret` ab; Rohdetails und rohe Logs dürfen auch als Rückfall nicht in die
+Antwort gelangen. `queue-full` und `configuration-incomplete` behalten ihre
+fachliche Bedeutung und dürfen solche unerwarteten Fehler nicht ersetzen.
+Dies ist der normative Fehlervertrag; das Schema allein belegt keine implementierte
+HTTP-Fehlerboundary. Jede konfigurative Schreibanfrage ist ein vollständiger Ersatz
 der angegebenen Ebene; nur Geheimnisbefehle erlauben gezieltes Beibehalten. Alle
 Schreibschemas sind strict und lehnen zusätzliche Felder wie `rearm` ab.
 
