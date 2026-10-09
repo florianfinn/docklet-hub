@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { NOTIFICATION_CHANNELS, NOTIFICATION_LIMITS, notificationDeliveryViewSchema, notificationDeliveriesResponseSchema,
   DEFAULT_NOTIFICATION_FORMAT, type NotificationTicketView, type NotificationChannel } from "contract";
+import { renderNotificationMessage } from "./message.js";
 import { initialConfig } from "./config.js";
 import { createNotificationDeliveries, NOTIFICATION_DELIVERY_LEASE_MS } from "./deliveries.js";
 import { createNotificationTickets, notificationBindingDigest } from "./tickets.js";
@@ -502,4 +503,32 @@ test("dispatch requires the full send deadline plus buffer inside the persisted 
   assert.equal((await h.service.read(claim.id)).state,"sending");
   h.advance(15999); assert.equal(await h.service.recoverExpiredSending(),1);
   assert.equal((await h.service.read(claim.id)).attempts,1);
+});
+
+test("admit claim prepare preserves an exactly admissible Discord addition and permanently rejects required overflow", { timeout: 1000 }, async () => {
+  for (const overflow of [false, true]) {
+    const h = harness();
+    const item = h.intention("ticket-a", "discord");
+    item.snapshot.ticket.cause = "C".repeat(1000);
+    const baseline = renderNotificationMessage(item.snapshot, { id: "delivery-a", generation: 0, channel: "discord", phase: "initial" });
+    const escaped = (value: string) => value.replace(/[\\`*_{}[\]()<>#+.!|~-]/gu, "\\$&");
+    const size = escaped(`${baseline.title}\n${baseline.requiredText}`).length;
+    item.snapshot.format += "x".repeat((overflow ? 2001 : 1994) - size);
+    item.snapshot.options.additionalText = "abcde";
+    assert.equal((await h.service.admitPending()).admitted, 1);
+    const claim = (await h.service.claim())[0];
+    const prepared = await h.service.prepareDispatch(claim);
+    const row = await h.service.read(claim.id);
+    if (overflow) {
+      assert.equal(prepared, null); assert.equal(row.state, "failed"); assert.equal(row.failure, "validation");
+      assert.equal(row.nextAttemptAt, null); assert.equal(row.attempts, 1);
+      assert.deepEqual(await h.service.claim(), []);
+    } else {
+      assert.ok(prepared, "An exactly admissible message must produce a dispatch");
+      assert.equal(prepared.message.optionalText, "abcde");
+      assert.equal(escaped(`${prepared.message.title}\n${prepared.message.requiredText}\n${prepared.message.optionalText}`).length, 2000);
+      assert.equal(row.state, "sending"); assert.equal(row.failure, null); assert.equal(row.finishedAt, null);
+      assert.equal(h.history().length, 0);
+    }
+  }
 });

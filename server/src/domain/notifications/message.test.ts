@@ -1,6 +1,12 @@
-import test from "node:test";
+import test, { type TestContext } from "node:test";
+import https, { type RequestOptions } from "node:https";
+import { EventEmitter } from "node:events";
+import { syncBuiltinESMExports } from "node:module";
+import type { ClientRequest, IncomingMessage } from "node:http";
+import nodemailer from "nodemailer";
 import assert from "node:assert/strict";
 import { DEFAULT_NOTIFICATION_FORMAT, NOTIFICATION_LIMITS, NOTIFICATION_CHANNELS } from "contract";
+import { sendNotification, type NotificationMessage, type NotificationRuntimeConfig } from "../../platform/notification-delivery/index.js";
 import { renderNotificationMessage } from "./message.js";
 import type { NotificationDeliverySnapshot } from "./delivery-types.js";
 
@@ -143,4 +149,156 @@ test("optional expansion fits the combined exact boundary with a visible marker 
   const message=render(input); assert.equal(message.optionalText,"\n[…]");
   assert.equal(message.title.length+message.requiredText.length+message.optionalText!.length+2,8000);
   input.format+="x"; assert.throws(()=>render(input),{ message:"validation" });
+});
+
+function captureTransport(t: TestContext) {
+  let payload: Record<string, unknown> | undefined;
+  t.mock.method(https, "request", (_url: URL, options: RequestOptions, callback: (response: IncomingMessage) => void) => {
+    const request = new EventEmitter() as ClientRequest;
+    request.destroy = () => request;
+    request.end = (body?: unknown) => {
+      payload = JSON.parse(String(body));
+      const response = new EventEmitter() as IncomingMessage;
+      response.statusCode = 200;
+      callback(response);
+      queueMicrotask(() => {
+        response.emit("data", Buffer.from(JSON.stringify({ id: Object.hasOwn(options.headers ?? {}, "X-Gotify-Key") ? 1 : "1" })));
+        response.emit("end");
+      });
+      return request;
+    };
+    return request;
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  t.mock.method(nodemailer, "createTransport", () => ({
+    close: () => undefined,
+    sendMail: async (mail: Record<string, unknown>) => {
+      payload = mail;
+      return { accepted: ["receiver@example.invalid"], rejected: [] };
+    }
+  }));
+  const readPayload = () => payload;
+  return async (channel: typeof NOTIFICATION_CHANNELS[number], message: NotificationMessage, markerFits = true) => {
+    payload = undefined;
+    const config: NotificationRuntimeConfig = channel === "smtp"
+      ? { kind: "smtp", host: "example.invalid", port: 465, security: "tls", username: null, password: null,
+        from: "hub@example.invalid", to: ["receiver@example.invalid"] }
+      : channel === "gotify" ? { kind: "gotify", endpoint: "https://example.invalid", token: "synthetic-token" }
+      : channel === "webhook" ? { kind: "webhook", endpoint: "https://example.invalid", authorization: null }
+      : { kind: "discord", endpoint: "https://example.invalid" };
+    assert.deepEqual(await sendNotification(config, message, new AbortController().signal), markerFits ? { status: "delivered" } : { status: "failed", failure: "validation" },
+      `${channel}: ${message.title.length}/${message.requiredText.length}/${message.optionalText?.length ?? 0}`);
+    const captured = readPayload();
+    if (!markerFits) { assert.equal(captured, undefined); return ""; }
+    assert.ok(captured);
+    if (channel === "discord") assert.deepEqual(captured.allowed_mentions, { parse: [] });
+    else assert.equal(channel === "smtp" ? captured.subject : captured.title, message.title);
+    return String(channel === "discord" ? captured.content : channel === "gotify" ? captured.message : captured.text);
+  };
+}
+
+function requiredBoundary(limit: number, channel: typeof NOTIFICATION_CHANNELS[number], phase: "initial" | "recovery" | "test") {
+  const input = snapshot();
+  input.ticket.targetLabel = "Target";
+  input.ticket.cause = "C".repeat(1000);
+  if (phase === "recovery") { input.ticket.state = "resolved"; input.ticket.resolvedAt = input.ticket.openedAt; }
+  const message = renderNotificationMessage(input, { ...identity, channel, phase });
+  const base = channel === "discord" ? escaped(`${message.title}\n${message.requiredText}`).length
+    : message.title.length + message.requiredText.length + 2;
+  const difference = limit - base;
+  const causeSize = input.ticket.cause.length + (phase === "recovery" ? "Erholung: ".length : 0);
+  input.format += "{cause}".repeat(Math.floor(difference / causeSize)) + "x".repeat(difference % causeSize);
+  assert.ok(input.format.length <= 2000);
+  return input;
+}
+
+test("fully fitting optional additions and logs stay byte-identical at every channel and phase boundary", { timeout: 3000 }, async (t) => {
+  const transport = captureTransport(t);
+  for (const channel of NOTIFICATION_CHANNELS) for (const phase of ["initial", "recovery", "test"] as const) {
+    for (const mode of ["addition", "logs", "both"] as const) {
+      for (const value of ["a", "ab", "abc", "abcd", "abcde", "abcdef", "x".repeat(100), "😀", "😀*_[]\\.!~"]) {
+        const addition = mode === "logs" ? "" : value;
+        const logs = mode === "addition" || phase === "test" ? "" : `Logs:\n${value}`;
+        const expected = [addition, logs].filter(Boolean).join("\n");
+        const size = channel === "discord" ? escaped(expected).length : expected.length;
+        for (const spare of [0, 1]) {
+          const limit = channel === "discord" ? 2000 : 8000;
+          const input = requiredBoundary(limit - size - (expected ? 1 : 0) - spare, channel, phase);
+          input.options.additionalText = addition;
+          input.options.includeLogs = true;
+          input.ticket.evidence.logs = { state: "available", text: value, truncated: false };
+          let message!: NotificationMessage;
+          assert.doesNotThrow(() => { message = renderNotificationMessage(input, { ...identity, channel, phase }); });
+          assert.equal(message.optionalText ?? "", expected, `${channel}/${phase}/${mode}/${value}/${spare}`);
+          const required = channel === "discord" ? escaped(`${message.title}\n${message.requiredText}`) : message.requiredText;
+          const text = await transport(channel, message);
+          assert.equal(text, required + (expected ? `\n${channel === "discord" ? escaped(expected) : expected}` : ""));
+          assert.equal(channel === "discord" ? text.length : message.title.length + text.length + 2, limit - spare);
+        }
+      }
+    }
+  }
+});
+
+test("overlong optional content keeps a visible marker or fails when its escaped marker cannot fit", { timeout: 3000 }, async (t) => {
+  const transport = captureTransport(t);
+  for (const channel of NOTIFICATION_CHANNELS) for (const phase of ["initial", "recovery", "test"] as const) {
+    for (const mode of ["addition", "logs", "both"] as const) for (const value of ["a", "ab", "abc", "abcd", "abcde", "abcdef", "x".repeat(100), "😀*_[]\\.!~"]) {
+      const addition = mode === "logs" ? "" : value;
+      const logs = mode === "addition" || phase === "test" ? "" : `Logs:\n${value}`;
+      const expected = [addition, logs].filter(Boolean).join("\n");
+      if (!expected) continue;
+      const size = channel === "discord" ? escaped(expected).length : expected.length;
+      const limit = channel === "discord" ? 2000 : 8000;
+      const input = requiredBoundary(limit - size + 1 - (channel === "discord" ? 1 : 0), channel, phase);
+      input.options.additionalText = addition;
+      input.options.includeLogs = true;
+      input.ticket.evidence.logs = { state: "available", text: value, truncated: false };
+      const remaining = size - 1;
+      if (remaining < (channel === "discord" ? escaped("\n[…]").length : "\n[…]".length)) {
+        assert.throws(() => renderNotificationMessage(input, { ...identity, channel, phase }), { message: "validation" });
+      } else {
+        const message = renderNotificationMessage(input, { ...identity, channel, phase });
+        assert.ok(message.optionalText!.endsWith("\n[…]"));
+        assert.notEqual(message.optionalText, expected);
+        const markerFits = channel === "discord" || message.requiredText.length + 1 + "\n[…]".length <= limit - message.title.length - 2;
+        const text = await transport(channel, message, markerFits);
+        assert.ok(channel === "discord" ? text.length <= limit : message.title.length + message.requiredText.length + message.optionalText!.length + 2 <= limit);
+        if (markerFits) assert.ok(text.endsWith(channel === "discord" ? escaped("\n[…]") : "\n[…]"));
+      }
+    }
+  }
+});
+
+test("Discord truncation reserves escaped marker space and searches complete Unicode prefixes", { timeout: 1000 }, async (t) => {
+  const transport = captureTransport(t);
+  for (const [value, budget, expected] of [["😀z", 7, "\n[…]"], ["😀z", 8, "😀\n[…]"],
+    ["*".repeat(20), 8, "*\n[…]"], ["😀*_".repeat(20), 10, "😀*\n[…]"],
+    ["😀".repeat(20), 7, "\n[…]"], ["abcde", 5, "abcde"]] as const) {
+    const input = requiredBoundary(2000 - budget - 1, "discord", "initial");
+    input.options.additionalText = value;
+    // The short emoji fixtures must exceed the wire budget to exercise prefix search.
+    if (value === "😀z") input.options.additionalText = value.repeat(10);
+    let message!: NotificationMessage;
+    assert.doesNotThrow(() => { message = renderNotificationMessage(input, { ...identity, channel: "discord" }); });
+    assert.equal(message.optionalText, expected);
+    assert.ok(!/[\uD800-\uDFFF]/u.test(message.optionalText!));
+    assert.equal(await transport("discord", message), escaped(`${message.title}\n${message.requiredText}\n${expected}`));
+  }
+});
+
+test("required transport budgets accept under and exact boundaries and reject overflow in all phases", { timeout: 1000 }, async (t) => {
+  const transport = captureTransport(t);
+  for (const channel of NOTIFICATION_CHANNELS) for (const phase of ["initial", "recovery", "test"] as const) {
+    const limit = channel === "discord" ? 2000 : 8000;
+    for (const spare of [0, 1]) {
+      const input = requiredBoundary(limit - spare, channel, phase);
+      const message = renderNotificationMessage(input, { ...identity, channel, phase });
+      const text = await transport(channel, message);
+      assert.equal(channel === "discord" ? text.length : message.title.length + text.length + 2, limit - spare);
+      input.format += "x".repeat(spare + 1);
+      assert.throws(() => renderNotificationMessage(input, { ...identity, channel, phase }), { message: "validation" });
+    }
+  }
 });
