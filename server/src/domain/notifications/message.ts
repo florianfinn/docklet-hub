@@ -15,7 +15,11 @@ const actions = {
   "review-update": "Verfügbares Update prüfen."
 };
 function safeText(value: string): boolean {
-  return !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/u.test(value) && !/[\uD800-\uDFFF]/u.test(value);
+  return Array.from(value).every((character) => {
+    const code = character.codePointAt(0)!;
+    return (code === 9 || code === 10 || code === 13 || code >= 32) &&
+      !(code >= 127 && code <= 159) && !(code >= 0xd800 && code <= 0xdfff);
+  });
 }
 function expand(template: string, values: Record<string, string>, limit: number, optional = false): string {
   // Measure expansion first and allocate at most the output budget.
