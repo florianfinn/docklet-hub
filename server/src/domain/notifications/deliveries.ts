@@ -205,7 +205,7 @@ export function createNotificationDeliveries(database: NotificationDatabase, dep
         let admitted = 0;
         for (const intention of intentions) {
           const existing = await store.existing(intention.ticketId, intention.phase, intention.channel);
-          if (existing) { await admitNotificationIntention(query, intention, now.toISOString()); continue; }
+          if (existing) { await admitNotificationIntention(query, intention, now.toISOString()); admitted += 1; continue; }
           if (available <= 0) continue;
           const row = await store.insert(queued(intention.snapshot, intention.channel, intention.phase, intention.ticketId, now));
           if (!row) continue;

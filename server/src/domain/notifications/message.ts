@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { NOTIFICATION_LIMITS, notificationFormatSchema, notificationTemplateIsValid, notificationTicketViewSchema,
+import { NOTIFICATION_LIMITS, notificationFormatSchema, notificationTicketViewSchema,
   type NotificationChannel } from "contract";
 import type { NotificationMessage } from "../../platform/notification-delivery/index.js";
 import type { NotificationDeliverySnapshot } from "./delivery-types.js";
@@ -17,14 +17,31 @@ const actions = {
 function safeText(value: string): boolean {
   return !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/u.test(value) && !/[\uD800-\uDFFF]/u.test(value);
 }
-function expand(template: string, values: Record<string, string>, limit: number): string {
-  // Measure literal expansion before allocating the expanded string.
+function expand(template: string, values: Record<string, string>, limit: number, optional = false): string {
+  // Measure expansion first and allocate at most the output budget.
   let size = template.length;
-  for (const match of template.matchAll(/\{(target|cause|time|action)\}/gu)) {
-    size += values[match[1]].length - match[0].length;
-    if (size > limit) throw new NotificationMessageError();
+  const tokens = /\{(target|cause|time|action)\}/gu;
+  for (const match of template.matchAll(tokens)) size += values[match[1]].length - match[0].length;
+  if (size > limit && !optional) throw new NotificationMessageError();
+  const budget = size > limit ? Math.max(0, limit - marker.length) : limit;
+  const parts: string[] = [];
+  let used = 0; let offset = 0;
+  const append = (text: string) => {
+    const part = text.slice(0, Math.max(0, budget - used));
+    parts.push(part); used += part.length;
+  };
+  for (const match of template.matchAll(tokens)) {
+    append(template.slice(offset, match.index)); append(values[match[1]]);
+    offset = match.index + match[0].length;
+    if (used >= budget) break;
   }
-  return template.replace(/\{(target|cause|time|action)\}/gu, (_token, key: string) => values[key]);
+  if (used < budget) append(template.slice(offset));
+  let result = parts.join("");
+  if (size > limit) {
+    if (/[\uD800-\uDBFF]$/u.test(result)) result = result.slice(0, -1);
+    return result + marker;
+  }
+  return result;
 }
 function truncate(value: string, budget: number): string {
   if (value.length <= budget) return value;
@@ -41,7 +58,7 @@ export function renderNotificationMessage(snapshot: NotificationDeliverySnapshot
 }): NotificationMessage {
   const checked = notificationTicketViewSchema.safeParse(snapshot.ticket);
   if (!checked.success || !notificationFormatSchema.safeParse(snapshot.format).success ||
-    snapshot.options.additionalText.length > 2001 || !notificationTemplateIsValid(snapshot.options.additionalText) ||
+    snapshot.options.additionalText.length > 2001 || !safeText(snapshot.options.additionalText) || /[{}]/u.test(snapshot.options.additionalText.replace(/\{(target|cause|time|action)\}/gu, "")) ||
     !Number.isSafeInteger(identity.generation) || identity.generation < 0) throw new NotificationMessageError();
   const ticket = checked.data;
   const title = identity.phase === "recovery" ? "docklet hub: Erholung" : identity.phase === "test" ? "docklet hub: Testnachricht" : "docklet hub: Ereignis";
@@ -51,8 +68,8 @@ export function renderNotificationMessage(snapshot: NotificationDeliverySnapshot
   const requiredText = expand(snapshot.format, values, NOTIFICATION_LIMITS.maxMessageChars - title.length - 2);
   if (!safeText(title) || title.length > 200 || !safeText(requiredText)) throw new NotificationMessageError();
   if (identity.channel === "discord" && escapedLength(`${title}\n${requiredText}`) > 2000) throw new NotificationMessageError();
-  const addition = expand(snapshot.options.additionalText, values, 400_000);
-  const logs = snapshot.options.includeLogs && ticket.evidence.logs.state === "available"
+  const addition = expand(snapshot.options.additionalText, values, NOTIFICATION_LIMITS.maxMessageChars, true);
+  const logs = identity.phase !== "test" && snapshot.options.includeLogs && ticket.evidence.logs.state === "available"
     ? `Logs:\n${ticket.evidence.logs.text}${ticket.evidence.logs.truncated ? marker : ""}` : "";
   const optional = [addition, logs].filter(Boolean).join("\n");
   if (!safeText(optional)) throw new NotificationMessageError();

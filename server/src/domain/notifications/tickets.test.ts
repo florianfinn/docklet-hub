@@ -17,6 +17,7 @@ function harness() {
   let readerCalls = 0;
   const statements: string[] = [];
   const config = initialConfig();
+  const deliveries = new Map<string, { ticketId: string; state: string }>();
   const scopes = new Map<string, { configuration: unknown; active: boolean }>();
   config.channels.find((channel) => channel.kind === "webhook")!.endpoint = "https://example.invalid/webhook";
   config.hostRules = [{ channel: "webhook", events: ["connection-lost"], overrides: { recovery: true } }];
@@ -59,7 +60,8 @@ function harness() {
     if (sql.startsWith("DELETE FROM notification_ticket")) {
       let removed = 0;
       for (const [id, row] of rows) if (row.document.state === "resolved" && row.document.resolvedAt! < (values[0] as string) &&
-        ![...intentions.values()].some((item) => item.ticket_id === id && !item.admitted_at)) {
+        ![...intentions.values()].some((item) => item.ticket_id === id && !item.admitted_at) &&
+        !(sql.includes("FROM notification_delivery d") && [...deliveries.values()].some((item) => item.ticketId === id))) {
         rows.delete(id); removed += 1;
         for (const [key, intention] of intentions) if (intention.ticket_id === id) intentions.delete(key);
       }
@@ -95,7 +97,7 @@ function harness() {
     episodeKey: "episode-a", event: "connection-lost", target: { kind: "host", hostId: "host-a" },
     targetLabel: "Synthetic host", cause: "Connection unavailable", action: "check-connection",
     affectedContainers: [{ containerId: "container-a", label: "Synthetic container" }], affectedContainerCount: 3 };
-  return { database, service, observation, statements, config, scopes, rows: () => rows, intentions: () => intentions,
+  return { database, service, observation, statements, config, scopes, deliveries, rows: () => rows, intentions: () => intentions,
     clock: (value: string) => { clock = new Date(value); }, fail: () => { failCommit = true; }, failIntent: () => { failIntention = true; },
     readerCalls: () => readerCalls };
 }
@@ -233,4 +235,22 @@ test("runtime defaults honor false overrides and explicit empty cancels selectio
   const disabled = await h.service.observe({ ...observation, episodeKey: "episode-b" });
   assert.equal(disabled.pendingDeliveryCount, 0);
   assert.equal(h.intentions().size, 1);
+});
+
+
+test("resolved ticket pruning preserves admitted active deliveries and waits for terminal queue retention", { timeout: 1000 }, async () => {
+  for (const state of ["queued", "sending", "retrying", "delivered", "failed", "cancelled"]) {
+    const h = harness();
+    const ticket = await h.service.observe(h.observation);
+    await h.service.recover(ticket.id, async () => ({ recovered: true, observedAt: "2026-01-01T01:00:00.000Z" }));
+    await h.database.transaction(async (query) => {
+      for (const intention of await pendingNotificationIntentions(query)) await admitNotificationIntention(query, intention, "2026-01-02T00:00:00.000Z");
+    });
+    h.deliveries.set("delivery-a", { ticketId: ticket.id, state });
+    h.clock("2026-02-02T00:00:00.000Z");
+    assert.equal(await h.service.pruneResolved(), 0, state);
+    assert.equal((await h.service.read(ticket.id)).state, "resolved");
+    h.deliveries.delete("delivery-a");
+    assert.equal(await h.service.pruneResolved(), 1, state);
+  }
 });
