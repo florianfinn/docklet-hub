@@ -3,7 +3,7 @@ import { RuntimeBudget, type RuntimeCallOptions } from "./runtime-budget.js";
 import type { UpdateResult } from "contract";
 
 export class UpdateFailure extends Error {
-  constructor(readonly code: NonNullable<UpdateResult["updateError"]>) { super(code); }
+  constructor(readonly code: NonNullable<UpdateResult["updateError"]>, options?: ErrorOptions) { super(code, options); }
 }
 export class UpdateBudget extends RuntimeBudget {
   private readonly updateDeadline: number;

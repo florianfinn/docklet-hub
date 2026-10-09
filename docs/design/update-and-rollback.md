@@ -513,6 +513,14 @@ Vorfall ist keine Rücknahme dieser Änderung. Symlinks
 haben unter Linux den festen Modus 0777; ein davon abweichender Archivmodus
 führt beim sichtbaren Restore zum Fehler. Sie werden niemals durchschrieben.
 
+Restore überschreibt und ergänzt Dateien aus der Sicherung, löscht aber keine
+Dateien, die erst nach der Sicherung entstanden sind. Beim Docker-PUT laufen alle
+Docker-seitigen Pfadprüfungen vor dem PUT; während des offenen PUT stellt der Agent
+keine weiteren Docker-Archivanfragen am selben Container, weil Docker sie bis zum
+Ende des PUT zurückhält. Bricht das Entpacken mit einer unerwarteten Ursache ab,
+meldet das Ergebnis weiter `restore-extract-failed`; der Audit-Eintrag
+`restore-cause` nennt die interne Ursache nur als Kennung, ohne fremde Texte.
+
 Agentenseitige Pfad-, Symlink- und Rechteprüfungen gelten auch beim Entpacken; ein Archiv darf
 keine Daten außerhalb seiner bestätigten Ziele verändern. Der gestoppte
 Container allein ist keine Berechtigung zum Schreiben.

@@ -97,7 +97,7 @@ export async function* safeBackupArchive(input: ArchiveStream, root: string,
     yield Buffer.alloc(1024);
   } catch (error) {
     if (error instanceof UpdateFailure) throw error;
-    throw new UpdateFailure("restore-path-unsafe");
+    throw new UpdateFailure("restore-path-unsafe", { cause: error });
   }
 }
 export async function archiveSize(input: ArchiveStream): Promise<number> {
@@ -280,6 +280,6 @@ export async function extractVisible(input: ArchiveStream, root: string, base: s
     }
   } catch (error) {
     if (error instanceof UpdateFailure) throw error;
-    throw new RestorePathFailure(activePath);
+    throw new RestorePathFailure(activePath, { cause: error });
   } finally { await file?.close(); if (temporary) await fs.promises.rm(temporary, { force: true }); await parent?.handle.close(); }
 }

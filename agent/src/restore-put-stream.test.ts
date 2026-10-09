@@ -6,6 +6,7 @@ import path from "node:path";
 import { UpdateBudget } from "./update-budget.js";
 import { backupTarHeader } from "./backup-archive.js";
 import { archiveEntries, type ArchiveEntry } from "./archive-reader.js";
+import { EngineError } from "./engine-errors.js";
 const base = fs.mkdtempSync(path.join(os.tmpdir(), "restore-put-"));
 const state = path.join(base, "state"); fs.mkdirSync(state);
 Object.assign(process.env, { DOCKER_AGENT_SECRET: "s".repeat(64), DOCKER_AGENT_BIND_BASE_PATH: base,
@@ -13,6 +14,8 @@ Object.assign(process.env, { DOCKER_AGENT_SECRET: "s".repeat(64), DOCKER_AGENT_B
   DOCKER_AGENT_MONITOR_FILE: path.join(state, "monitor.json") });
 const { engine, registry } = await import("./runtime/state.js");
 const { backupSources, backupStore, restoreArchives } = await import("./runtime/backups.js");
+const { restoreRunner } = await import("./runtime/restores.js");
+const { agentJobs } = await import("./runtime/updates.js");
 after(() => fs.rmSync(base, { recursive: true, force: true }));
 const root: ArchiveEntry = { name: "data", kind: "directory", size: 0, content: Buffer.alloc(0), mode: 0o755, uid: 0, gid: 0, changedAt: 0, linkTarget: "" };
 const file = (name: string, text: string, mode = 0o644): ArchiveEntry => ({ ...root, name: `data/${name}`, kind: "file", mode, size: text.length, content: Buffer.from(text) });
@@ -68,4 +71,18 @@ for (const item of cases) test(`restore PUT: ${item.name} sends no Docker reques
     const expected = item.entries.find((candidate) => candidate.name === `data/${entry.name}`)!;
     assert.equal(entry.content.toString(), expected.content.toString()); assert.equal(entry.mode & 0o7777, expected.mode);
   }
+});
+// The result keeps the stable restore-extract-failed code; the audit log names the internal cause without foreign text.
+test("restore audits the internal cause of a failing PUT", async (t) => {
+  const { backupId, sourceId } = await scenario(t, acceptance);
+  t.mock.method(engine, "putArchiveStream", async () => { throw new EngineError("daemon said: private-detail", 500); });
+  const preview = await restoreRunner.preview({ target, backupId, mounts: [{ sourceId }] }, null);
+  const { jobId } = restoreRunner.start({ target, backupId, mounts: preview.mounts, previewId: preview.previewId,
+    expectedContainer: preview.expectedContainer, startDeadlineSeconds: 120, confirmed: true }, null);
+  let progress = agentJobs.get(jobId);
+  for (let attempt = 0; progress?.phase !== "completed" && attempt < 200; attempt++) { await new Promise((resolve) => setTimeout(resolve, 5)); progress = agentJobs.get(jobId); }
+  assert.equal(progress?.kind === "restore" && progress.result?.restoreError, "restore-extract-failed");
+  const audit = fs.readFileSync(path.join(state, "audit.jsonl"), "utf8");
+  assert.match(audit, /"action":"restore-cause".*"reason":"EngineError:500"/);
+  assert.doesNotMatch(audit, /private-detail/);
 });
