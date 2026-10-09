@@ -529,3 +529,86 @@ export {
 export type { AgentJobKind, AgentJobScope, AgentJobRequest, AgentJobStartResponse, AgentJobCancelResponse, AgentJobsQuery } from "./agent/jobs.js";
 export { agentJobProgressSchema, agentJobResponseSchema, agentJobsResponseSchema } from "./agent/job-progress.js";
 export type { AgentJobProgress, AgentJobResponse, AgentJobsResponse } from "./agent/job-progress.js";
+
+export {
+  NOTIFICATION_API_VERSION,
+  NOTIFICATION_CHANNELS,
+  NOTIFICATION_EVENTS,
+  NOTIFICATION_PLACEHOLDERS,
+  NOTIFICATION_LIMITS,
+  DEFAULT_NOTIFICATION_FORMAT,
+  DEFAULT_NOTIFICATION_DELIVERY_OPTIONS,
+  notificationIdSchema,
+  notificationLabelSchema,
+  notificationChannelSchema,
+  notificationEventSchema,
+  notificationInstantSchema,
+  notificationTemplateIsValid,
+  notificationTemplateSchema,
+  notificationFormatSchema,
+  notificationAdditionalTextSchema,
+  notificationDeliveryOptionsSchema,
+  notificationTargetSchema,
+  notificationScopeTargetSchema,
+  notificationFailureSchema
+} from "./api/notifications.js";
+export type {
+  NotificationChannel,
+  NotificationEvent,
+  NotificationTarget,
+  NotificationDeliveryOptions
+} from "./api/notifications.js";
+
+export {
+  notificationSecretInputSchema,
+  notificationChannelWriteSchema,
+  notificationChannelViewSchema,
+  notificationSelectionWriteSchema,
+  notificationSelectionViewSchema,
+  notificationScopeWriteSchema,
+  notificationScopeViewSchema,
+  notificationHostRuleSchema,
+  notificationSettingsViewSchema,
+  notificationSettingsWriteSchema,
+  notificationSettingsResponseSchema,
+  notificationScopeResponseSchema,
+  notificationScopeRequestSchema,
+  notificationBulkRequestSchema,
+  notificationBulkResponseSchema,
+  notificationTestRequestSchema,
+  resolveNotificationSelection
+} from "./api/notifications-settings.js";
+export type {
+  NotificationSelectionView,
+  NotificationScopeView,
+  NotificationSettingsView,
+  NotificationSettingsWrite,
+  NotificationScopeWrite,
+  NotificationBulkRequest,
+  NotificationChannelWrite,
+  NotificationChannelView
+} from "./api/notifications-settings.js";
+
+export {
+  notificationTicketStateSchema,
+  notificationTicketViewSchema,
+  notificationTicketResponseSchema,
+  notificationTicketsQuerySchema,
+  notificationTicketsResponseSchema,
+  notificationCountsResponseSchema,
+  notificationAckRequestSchema,
+  notificationDeliveryStateSchema,
+  notificationDeliveryViewSchema,
+  notificationDeliveryResponseSchema,
+  notificationDeliveriesQuerySchema,
+  notificationDeliveriesResponseSchema,
+  notificationRetryRequestSchema
+} from "./api/notifications-tickets.js";
+export type {
+  NotificationTicketView,
+  NotificationTicketState,
+  NotificationDeliveryView,
+  NotificationDeliveryState,
+  NotificationTicketsQuery,
+  NotificationDeliveriesQuery
+} from "./api/notifications-tickets.js";
