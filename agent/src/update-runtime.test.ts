@@ -23,6 +23,7 @@ const { handleStackList } = await import("./routes/stack-routes.js");
 after(() => fs.rmSync(directory, { recursive: true, force: true }));
 const offered = `sha256:${"b".repeat(64)}`;
 const digest = `sha256:${"c".repeat(64)}`;
+const moved = `sha256:${"d".repeat(64)}`;
 function fixture(t: TestContext, status = "running", compose = false, reference = "example/app:1.0") {
   fs.rmSync(path.join(directory, "update-pending.json"), { force: true });
   const projectDir = path.join(directory, "demo"); fs.mkdirSync(projectDir, { recursive: true });
@@ -47,7 +48,7 @@ function fixture(t: TestContext, status = "running", compose = false, reference 
   const resolve = (ref: string) => ref === "old-image" || ref === "new-image" ? ref : taggedImage;
   t.mock.method(engine, "inspectImage", async (ref: string) => {
     const id = resolve(ref);
-    return { Id: id, RepoDigests: [`example/app@${id === "old-image" ? digest : offered}`] };
+    return { Id: id, RepoDigests: [`example/app@${id === "old-image" ? digest : id === "new-image" ? offered : moved}`] };
   });
   t.mock.method(engine, "remoteManifestDigest", async () => offered);
   t.mock.method(engine, "pull", async () => { trace.push("pull"); taggedImage = "new-image"; });
@@ -317,4 +318,64 @@ test("R3: selected slow mount times out separately after manifest and leaves the
   assert.equal(preview.services[0].blocker, null); assert.equal(preview.services[0].offeredDigest, offered);
   const withoutBackup = await runner.preview({ target: f.selection.target, services: [f.selection] }, null);
   assert.equal(withoutBackup.services[0].blocker, null); assert.deepEqual(archives, ["/data"]);
+});
+const aborts = ["digest-changed", "space", "size-unavailable", "stop-failed", "copy-failed", "deadline", "cancel", "sync-during-pull"] as const;
+for (const compose of [false, true]) for (const abort of aborts) test(`abort after pull leaves a usable next preview and update: ${abort}, compose=${compose}`, async (t) => {
+  const f = fixture(t, "running", compose);
+  const { backupStore, dataJournal } = await import("./runtime/backups.js");
+  const { updateRecovery } = await import("./runtime/update-recovery.js");
+  const { UpdateFailure } = await import("./update-budget.js");
+  f.change({ Mounts: [{ Type: "bind", Source: "/synthetic/data", Destination: "/data", RW: true }] });
+  t.mock.method(engine, "info", async () => ({ DockerRootDir: "/var/lib/docker" }));
+  t.mock.method(engine, "listContainerIds", async () => [f.get().Id]);
+  t.mock.method(engine, "statArchive", async () => ({ name: "data", size: 0, mode: 0x80000000, mtime: "2026-10-08T00:00:00Z", linkTarget: "" }));
+  let pulls = 0; let jobId = ""; const results: import("contract").UpdateResult[] = []; let done!: () => void;
+  const jobs = new AgentJobs(() => true);
+  const pull = engine.pull;
+  t.mock.method(engine, "pull", async (...args: Parameters<typeof pull>) => {
+    if (++pulls > 1) return pull(...args);
+    f.tag(abort === "digest-changed" ? "other-image" : "new-image");
+    if (abort === "cancel") assert.equal(jobs.cancel(jobId), true);
+    if (abort === "sync-during-pull") await hubSync();
+  });
+  const stop = engine.stop;
+  t.mock.method(engine, "stop", async (...args: Parameters<typeof stop>) => { if (abort !== "stop-failed") await stop(...args); });
+  t.mock.method(engine, "openArchiveStream", async () => {
+    if (pulls === 1 && abort === "size-unavailable") throw new Error("synthetic size failure");
+    if (pulls === 1 && !f.get().State!.Running) {
+      if (abort === "copy-failed") throw new Error("synthetic copy failure");
+      if (abort === "deadline") throw new UpdateFailure("update-phase-deadline-exceeded");
+    }
+    return (async function* () { yield Buffer.alloc(1024); })();
+  });
+  t.mock.property(backupStore as unknown as { free: () => Promise<bigint> }, "free", async () => abort === "space" ? 0n : 1n << 50n);
+  const runner = new UpdateRunner(jobs, new KeyedMutex(), { ...ops, finished: (result) => { results.push(result); done(); } });
+  const run = async (backup: boolean) => {
+    const state = runtimeStateOf(f.get());
+    const selection: UpdateServiceSelection = { ...f.selection, expectedContainer: { containerId: state.containerId!, status: state.status!, startedAt: state.startedAt } };
+    if (backup) {
+      const sourceId = (await ops.prepare(selection, null, new UpdateBudget(60_000))).preview.mounts[0].sourceId;
+      selection.backup = { mode: "stop", mounts: [{ sourceId, estimatedBytes: null }] };
+    }
+    await authorizeUpdateSelection(selection, null, new UpdateBudget(60_000));
+    const preview = await runner.preview({ target: selection.target, services: [selection] }, null);
+    const finished = new Promise<void>((resolve) => { done = resolve; });
+    jobId = runner.start({ confirmed: true, target: preview.target, previewId: preview.previewId,
+      services: preview.services.map((service) => ({ ...service, offeredDigest: service.offeredDigest! })) }, null).jobId;
+    await finished; return { preview: preview.services[0], result: results.at(-1)! };
+  };
+  const first = await run(abort !== "sync-during-pull");
+  const expected = { "digest-changed": "update-digest-changed", space: "backup-space-insufficient", "size-unavailable": "backup-size-unavailable",
+    "stop-failed": "stop-failed", "copy-failed": "backup-copy-failed", deadline: "backup-deadline-exceeded", cancel: null, "sync-during-pull": null }[abort];
+  assert.deepEqual([first.result.outcome, first.result.updateError, first.result.services[0].resumeError],
+    [abort === "cancel" ? "cancelled" : abort === "sync-during-pull" ? "updated" : "failed", expected, null]);
+  if (abort === "sync-during-pull") return;
+  assert.deepEqual([f.get().Id, f.get().Image, f.get().State!.Running], ["old", "old-image", true]);
+  assert.deepEqual([f.trace.includes("stop"), f.trace.includes("start")], ["copy-failed", "deadline"].includes(abort) ? [true, true] : [false, false]);
+  assert.deepEqual([dataJournal.read(), updateJournal.read(), updateRecovery.blocks(f.selection.target)], [[], [], false]);
+  await hubSync();
+  const second = await run(false);
+  assert.deepEqual([second.preview.blocker, second.preview.imageRef, second.preview.currentDigest, second.preview.rollbackImageId],
+    [null, "example/app:1.0", digest, "old-image"]);
+  assert.deepEqual([second.result.outcome, second.result.services[0].imageId], ["updated", "new-image"]);
 });
