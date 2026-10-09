@@ -15,7 +15,7 @@ Zielbild und Begründungen. Arbeitsstand steht in GitHub Issues und Meilensteine
 | [lifecycle-controls.md](lifecycle-controls.md) | Bedienvertrag für Start, Stopp und Neustart |
 | [live-events.md](live-events.md) | Live-Ereignisse, begrenzte Wiederverbindung, Cache und Refresh-Schnittstelle |
 | [management-aids.md](management-aids.md) | Arbeitshilfen der Verwaltung |
-| [notification-channels.md](notification-channels.md) | Meldekanäle und Eskalation |
+| [notification-channels.md](notification-channels.md) | Tickets, Meldekanäle, Vererbung und Hub/Web-API v1 |
 | [outage-signals.md](outage-signals.md) | Ausfälle und Wiederherstellung |
 | [phase-2-stack-and-migrations.md](phase-2-stack-and-migrations.md) | Deploybarer Stack und neue Datenbanken |
 | [phase-3-auth-and-agent-proof.md](phase-3-auth-and-agent-proof.md) | Anmeldung, Agentenvertrag und Vertrauensgrenzen |
