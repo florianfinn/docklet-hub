@@ -24,7 +24,6 @@ export type TicketObservation = Omit<NotificationTicketView, "id" | "state" | "o
   "resolvedAt" | "pendingDeliveryCount" | "evidence"> & {
   source: string; observedAt: string;
   evidence?: NotificationTicketView["evidence"];
-  evidenceSanitized?: boolean;
 };
 export class NotificationError extends Error {
   constructor(public readonly code: "invalid-input" | "conflict" | "target-unknown" | "ticket-unknown" | "configuration-incomplete") {

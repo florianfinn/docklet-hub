@@ -226,8 +226,10 @@ Anfragen antworten mit `queue-full`. Terminale Zustellungen bleiben höchstens 3
 Tage und höchstens 10.000 Einträge; älteste terminale Einträge werden zuerst
 entfernt. Pro Ticket bleiben höchstens 100 interne Historieneinträge. Eine öffentlich
 sichtbare Historie oder ein Kürzungshinweis wird ohne eigenes Wire-DTO nicht
-zugesagt; die Ticketansicht liefert Zustand, Evidenz und ausstehende Absichten. Wachstum aktiver Tickets wird durch Episoden-
-Deduplizierung und paginierte Abfragen begrenzt, nicht durch Löschen offener Tickets.
+zugesagt; die Ticketansicht liefert Zustand, Evidenz und ausstehende Absichten. Episoden-Deduplizierung verhindert Wiederholungen desselben Vorfalls. Pagination
+begrenzt Antworten und Leseaufwand, nicht den Gesamtbestand aktiver Tickets:
+Neue offene Episoden können diesen Bestand weiter vergrößern. Offene und quittierte
+Tickets werden dafür nicht gelöscht.
 
 ## Stabile Hub/Web-API (Grundlage 1)
 
@@ -311,3 +313,26 @@ einen Ziel-Write, bevor alte Regeln wirksam werden. Bloße Offline-Daten sind ke
 Entfernen. Skalierte Compose-Dienste teilen dieselbe Dienstregel; Ereignisepisoden
 bleiben pro tatsächlich betroffenem Vorfall unterscheidbar. Ticket-Ziel und Label
 bleiben für die Historie erhalten, auch wenn ein Direktlink kein Ziel mehr findet.
+
+## Persistenzgrenze
+
+Die PostgreSQL-Persistenz hält globale Settings und Zielregeln unter einer
+gemeinsamen revisionierten Singleton-Sperre. Zielschlüssel verwenden Host, Projekt
+und Container-/Dienstname, keine flüchtige Docker-ID. Eine belegte Entfernung
+hinterlässt eine inaktive Zuordnung; Wiederauftreten aktiviert alte Regeln erst
+nach einem expliziten Admin-Write. Offline-Beobachtungen sind keine Entfernung.
+
+Ticket und Initial-/Recovery-Absichten entstehen in derselben Transaktion.
+Die Absicht bleibt bis zur atomaren Queue-Aufnahme gespeichert; Queueüberlauf
+verliert daher keinen Versandbedarf. Aufgenommene Absichten bleiben als
+Deduplizierungsbeleg am Ticket. Retention löscht ausschließlich erledigte Tickets
+nach 30 Tagen; noch nicht aufgenommene Absichten verhindern die Löschung bis zur
+Aufnahme. Der Queue-Owner muss referenzierte aktive Zustellungen vor Löschung
+schützen und seine terminale Retention separat durchsetzen.
+
+Öffentliche Lesesichten werden mit den gemeinsamen Contract-Schemas geprüft.
+Private Verbindungsdaten bleiben im Runtime-Repository; Queue-Snapshots tragen
+nur eine Bindungsprüfsumme und einen Zielregelverweis. Die Queue prüft vor Versand
+aktuelle Regeln und Credentials und beendet widerrufene Bindungen sichtbar.
+Querygebundene signierte Cursor verwenden einen stabil injizierten privaten
+Schlüssel; die App ist für dessen geschützte dauerhafte Bereitstellung zuständig.

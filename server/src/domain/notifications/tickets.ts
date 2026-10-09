@@ -1,6 +1,6 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { NOTIFICATION_LIMITS, notificationIdSchema, notificationInstantSchema, notificationTargetSchema,
-  notificationTicketViewSchema, notificationTicketsQuerySchema, notificationTicketsResponseSchema,
+  notificationTicketEvidenceSchema, notificationTicketViewSchema, notificationTicketsQuerySchema, notificationTicketsResponseSchema,
   notificationCountsResponseSchema, type NotificationChannel, type NotificationDeliveryOptions,
   type NotificationTicketEvidence, type NotificationTicketView, type NotificationTicketsQuery } from "contract";
 import { readConfig } from "./config.js";
@@ -34,17 +34,20 @@ function cleanObservation(input: TicketObservation, dependencies: NotificationTi
     if (!label) throw new NotificationError("invalid-input");
     return { ...item, label };
   });
-  const evidence = input.evidence ? dependencies.sanitizeEvidence?.(input.evidence) ??
+  const proposedEvidence = input.evidence ? dependencies.sanitizeEvidence?.(input.evidence) ??
     { logs: { state: "unavailable" as const, reason: "redaction-unavailable" as const } } :
     { logs: { state: "unavailable" as const, reason: "not-collected" as const } };
-  const { source: _source, observedAt: _observedAt, evidenceSanitized: _proof, ...rest } = input;
-  void _source; void _observedAt; void _proof;
+  const checkedEvidence = notificationTicketEvidenceSchema.safeParse(proposedEvidence);
+  const evidence = checkedEvidence.success ? checkedEvidence.data :
+    { logs: { state: "unavailable" as const, reason: "redaction-unavailable" as const } };
+  const { source: _source, observedAt: _observedAt, ...rest } = input;
+  void _source; void _observedAt;
   const parsed = notificationTicketViewSchema.safeParse({ ...rest, id: randomUUID(), state: "open", openedAt: input.observedAt,
     acknowledgedAt: null, resolvedAt: null, pendingDeliveryCount: 0, cause, targetLabel, evidence, affectedContainers });
   if (!parsed.success) throw new NotificationError("invalid-input");
   return { ...input, ...parsed.data };
 }
-function digest(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
+export function notificationBindingDigest(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
 export async function notificationRuntimeSelection(query: NotificationQuery, config: StoredConfig,
   ticket: NotificationTicketView, reader: TargetReader): Promise<{ selection: StoredSelection | StoredConfig["hostRules"][number]; scopeKey: string | null }[]> {
   if (ticket.target.kind === "host") return config.hostRules.map((selection) => ({ selection, scopeKey: null }));
@@ -75,7 +78,7 @@ export async function prepareNotificationIntentions(query: NotificationQuery, co
     const snapshot = { ticket: { ...ticket, evidence: options.includeLogs ? ticket.evidence :
       { logs: { state: "unavailable", reason: "not-collected" } } }, format: config.format, options,
       destinationScopeKey: scopeKey,
-      bindingDigest: digest({ channel, destination: localDestination ?? null }) };
+      bindingDigest: notificationBindingDigest({ channel, destination: localDestination ?? null }) };
     await query.query(`INSERT INTO notification_delivery_intention
       (ticket_id, phase, channel, configuration_revision, snapshot) VALUES ($1, $2, $3, $4, $5::jsonb)
       ON CONFLICT (ticket_id, phase, channel) DO NOTHING`, [ticket.id, phase, selection.channel, config.revision, JSON.stringify(snapshot)]);
@@ -94,7 +97,7 @@ async function findRow(query: NotificationQuery, id: string, lock = false): Prom
   return result.rows[0];
 }
 function filterKey(query: NotificationTicketsQuery): string {
-  return digest([query.state ?? null, query.event ?? null, query.hostId ?? null, query.targetKind ?? null, query.limit ?? 50]).slice(0, 16);
+  return notificationBindingDigest([query.state ?? null, query.event ?? null, query.hostId ?? null, query.targetKind ?? null, query.limit ?? 50]).slice(0, 16);
 }
 function encodeCursor(ticket: NotificationTicketView, query: NotificationTicketsQuery, secret: string): string {
   const payload = Buffer.from(JSON.stringify([ticket.openedAt, ticket.id, filterKey(query)])).toString("base64url");

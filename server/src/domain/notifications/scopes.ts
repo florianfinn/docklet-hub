@@ -52,8 +52,11 @@ export function createNotificationScopes(database: NotificationDatabase, reader:
     },
     // Call only after inventory proves removal, never on an offline snapshot.
     markRemoved: (target: ScopeTarget) => database.transaction(async (query) => {
-      await readConfig(query, true);
-      await query.query("UPDATE notification_scope SET active = false WHERE target_key = $1", [targetKey(target)]);
+      const config = await readConfig(query, true);
+      await query.query(`INSERT INTO notification_scope (target_key, host_id, target, configuration, active)
+        VALUES ($1, $2, $3::jsonb, $4::jsonb, false) ON CONFLICT (target_key) DO UPDATE SET active = false`,
+      [targetKey(target), target.hostId, JSON.stringify(target), JSON.stringify({ mode: "explicit", selections: [] })]);
+      await saveConfig(query, { ...config, revision: config.revision + 1 }, config.revision);
     })
   };
 }
