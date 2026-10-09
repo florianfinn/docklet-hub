@@ -226,10 +226,11 @@ test("fully fitting optional additions and logs stay byte-identical at every cha
           const limit = channel === "discord" ? 2000 : 8000;
           const input = requiredBoundary(limit - size - (expected ? 1 : 0) - spare, channel, phase);
           input.options.additionalText = addition;
-          input.options.includeLogs = true;
+          input.options.includeLogs = mode !== "addition";
           input.ticket.evidence.logs = { state: "available", text: value, truncated: false };
           let message!: NotificationMessage;
-          assert.doesNotThrow(() => { message = renderNotificationMessage(input, { ...identity, channel, phase }); });
+          assert.doesNotThrow(() => { message = renderNotificationMessage(input, { ...identity, channel, phase }); },
+            `${channel}/${phase}/${mode}/${value}/${spare}`);
           assert.equal(message.optionalText ?? "", expected, `${channel}/${phase}/${mode}/${value}/${spare}`);
           const required = channel === "discord" ? escaped(`${message.title}\n${message.requiredText}`) : message.requiredText;
           const text = await transport(channel, message);
@@ -253,7 +254,7 @@ test("overlong optional content keeps a visible marker or fails when its escaped
       const limit = channel === "discord" ? 2000 : 8000;
       const input = requiredBoundary(limit - size + 1 - (channel === "discord" ? 1 : 0), channel, phase);
       input.options.additionalText = addition;
-      input.options.includeLogs = true;
+      input.options.includeLogs = mode !== "addition";
       input.ticket.evidence.logs = { state: "available", text: value, truncated: false };
       const remaining = size - 1;
       if (remaining < (channel === "discord" ? escaped("\n[…]").length : "\n[…]".length)) {

@@ -47,12 +47,18 @@ function expand(template: string, values: Record<string, string>, limit: number,
   }
   return result;
 }
-function truncate(value: string, budget: number): string {
-  if (value.length <= budget) return value;
-  if (budget < marker.length) return "";
-  let prefix = value.slice(0, budget - marker.length);
-  if (/[\uD800-\uDBFF]$/u.test(prefix)) prefix = prefix.slice(0, -1);
-  return prefix + marker;
+function discordOptional(value: string, budget: number): string {
+  if (!value || escapedLength(value) <= budget) return value;
+  const prefixBudget = budget - escapedLength(marker);
+  if (prefixBudget < 0) throw new NotificationMessageError();
+  const offsets = [0];
+  for (const character of value) offsets.push(offsets[offsets.length - 1] + character.length);
+  let low = 0; let high = offsets.length - 1;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (escapedLength(value.slice(0, offsets[middle])) <= prefixBudget) low = middle; else high = middle - 1;
+  }
+  return value.slice(0, offsets[low]) + marker;
 }
 function optionalParts(parts: string[], budget: number): string {
   const nonempty = parts.filter(Boolean);
@@ -86,24 +92,14 @@ export function renderNotificationMessage(snapshot: NotificationDeliverySnapshot
   const requiredText = expand(snapshot.format, values, NOTIFICATION_LIMITS.maxMessageChars - title.length - 2);
   if (!safeText(title) || title.length > 200 || !safeText(requiredText)) throw new NotificationMessageError();
   if (identity.channel === "discord" && escapedLength(`${title}\n${requiredText}`) > 2000) throw new NotificationMessageError();
-  let budget = NOTIFICATION_LIMITS.maxMessageChars - title.length - requiredText.length - 2;
+  const budget = NOTIFICATION_LIMITS.maxMessageChars - title.length - requiredText.length - 2;
   const addition = expand(snapshot.options.additionalText, values, budget, true);
   const logs = identity.phase !== "test" && snapshot.options.includeLogs && ticket.evidence.logs.state === "available"
     ? `Logs:\n${ticket.evidence.logs.text}${ticket.evidence.logs.truncated ? marker : ""}` : "";
   const optional = optionalParts([addition, logs], budget);
   if (!safeText(optional)) throw new NotificationMessageError();
-  if (identity.channel === "discord") {
-    const escapedBudget = 2000 - escapedLength(`${title}\n${requiredText}`) - 1;
-    // Binary search the original text; T1 performs the actual Discord escaping.
-    let low = 0; let high = Math.min(optional.length, budget);
-    while (low < high) {
-      const middle = Math.ceil((low + high) / 2);
-      if (escapedLength(truncate(optional, middle)) <= escapedBudget) low = middle; else high = middle - 1;
-    }
-    budget = low;
-  }
-  const optionalText = truncate(optional, budget);
-  if (optional && !optionalText) throw new NotificationMessageError();
+  const optionalText = identity.channel === "discord"
+    ? discordOptional(optional, 2000 - escapedLength(`${title}\n${requiredText}`) - 1) : optional;
   return { title, requiredText, ...(optionalText ? { optionalText } : {}),
     idempotencyKey: `notification:${createHash("sha256").update(identity.id).digest("hex")}:${identity.generation}` };
 }
