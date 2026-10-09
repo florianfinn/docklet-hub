@@ -244,7 +244,7 @@ test("persisted lease recovery survives restart and stale token/generation canno
   const h=harness(); const id=await admitted(h); const old=(await h.service.claim())[0];
   const restart=createNotificationDeliveries(h.database,h.dependencies);
   h.advance(NOTIFICATION_DELIVERY_LEASE_MS-1); assert.equal(await restart.recoverExpiredSending(),0);
-  assert.ok(await restart.prepareDispatch(old));
+  assert.equal(await restart.prepareDispatch(old),null);
   h.advance(1); assert.equal(await restart.finish(old,{ status:"delivered" }),null);
   assert.equal(await restart.prepareDispatch(old),null);
   assert.equal(await restart.recoverExpiredSending(),1);
@@ -490,4 +490,16 @@ test("render validation is a visible permanent queue failure and claim/CAS write
   h.fail("commit"); await assert.rejects(h.service.finish(fresh,{ status:"delivered" }),/synthetic-commit/);
   assert.equal((await h.service.read(id)).state,"sending"); assert.equal(h.history().length,1);
   h.fail(null); assert.equal((await h.service.finish(fresh,{ status:"delivered" }))!.state,"delivered");
+});
+
+
+test("dispatch requires the full send deadline plus buffer inside the persisted lease", { timeout: 1000 }, async () => {
+  const h=harness(); await admitted(h); const claim=(await h.service.claim())[0];
+  const deadline=h.rows().get(claim.id)!.lease_deadline;
+  h.advance(4000); assert.ok(await h.service.prepareDispatch(claim));
+  assert.equal(h.rows().get(claim.id)!.lease_deadline,deadline);
+  h.advance(1); assert.equal(await h.service.prepareDispatch(claim),null);
+  assert.equal((await h.service.read(claim.id)).state,"sending");
+  h.advance(15999); assert.equal(await h.service.recoverExpiredSending(),1);
+  assert.equal((await h.service.read(claim.id)).attempts,1);
 });

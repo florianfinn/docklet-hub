@@ -137,3 +137,10 @@ test("controls and lone surrogates are rejected; idempotency keys are safe and s
   const oddId=renderNotificationMessage(snapshot(),{ ...identity,id:"id/with spaces ü and !" }); assert.match(oddId.idempotencyKey,/^[A-Za-z0-9._:-]{1,200}$/u);
   assert.ok(first.title.length<=NOTIFICATION_LIMITS.maxLabelChars);
 });
+
+test("optional expansion fits the combined exact boundary with a visible marker and fails when no marker can fit",()=>{
+  const input=exactRequired(7996,"webhook"); input.options.additionalText="{cause}".repeat(285);
+  const message=render(input); assert.equal(message.optionalText,"\n[…]");
+  assert.equal(message.title.length+message.requiredText.length+message.optionalText!.length+2,8000);
+  input.format+="x"; assert.throws(()=>render(input),{ message:"validation" });
+});

@@ -26,7 +26,7 @@ function validId(id: string): void {
 function validClaim(claim: NotificationDeliveryClaim): void {
   validId(claim.id);
   if (!Number.isSafeInteger(claim.generation) || claim.generation < 0 || typeof claim.token !== "string" ||
-    !/^[a-f0-9-]{36}$/u.test(claim.token)) throw new NotificationDeliveryError("invalid-input");
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/u.test(claim.token)) throw new NotificationDeliveryError("invalid-input");
 }
 function batchSize(limit: number): void {
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new NotificationDeliveryError("invalid-input");
@@ -258,7 +258,8 @@ export function createNotificationDeliveries(database: NotificationDatabase, dep
           const message = renderNotificationMessage(snapshot, { id: row.id, generation: Number(row.generation), channel: row.channel, phase: row.phase });
           // Recheck lease after asynchronous readers, then CAS before returning private dispatch data.
           const dispatchAt = dependencies.now();
-          if (!owned(row, claim, dispatchAt)) return null;
+          if (!owned(row, claim, dispatchAt) || Date.parse(iso(row.lease_deadline!)) - dispatchAt.getTime() <
+            NOTIFICATION_LIMITS.deliveryTimeoutMs + 1000) return null;
           await repository(query).save(row, { ...row, updated_at: dispatchAt.toISOString() });
           return { claim, config: current.config, message };
         } catch (error) {
