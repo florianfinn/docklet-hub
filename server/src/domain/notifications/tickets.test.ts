@@ -191,6 +191,9 @@ test("retention is resolved-only and never destroys pending intentions; admissio
       await admitNotificationIntention(query, intention, "2026-02-02T00:00:00.000Z");
     }
   });
+  h.clock("2026-01-30T00:00:00.000Z");
+  assert.equal(await h.service.pruneResolved(), 0);
+  h.clock("2026-02-02T00:00:00.000Z");
   assert.equal(await h.service.pruneResolved(), 1);
   assert.equal((await h.service.read(open.id)).state, "open");
   assert.equal((await h.service.read(ack.id)).state, "acknowledged");
