@@ -2,6 +2,8 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { NOTIFICATION_LIMITS, type NotificationDeliveryView } from "contract";
 
+import { certificateRejected } from "./tls-failure.js";
+
 export type NotificationRuntimeConfig =
   | { kind: "discord"; endpoint: string }
   | { kind: "gotify"; endpoint: string; token: string }
@@ -102,7 +104,8 @@ export function postJson(url: URL, payload: unknown, headers: Record<string, str
       response.on("aborted", () => finish({ status: "failed", failure: signal.aborted ? "timeout" : "transient" }));
     });
     const abort = () => { finish({ status: "failed", failure: "timeout" }); request.destroy(); };
-    request.on("error", () => finish({ status: "failed", failure: signal.aborted ? "timeout" : "transient" }));
+    request.on("error", (error: unknown) => finish({ status: "failed",
+      failure: signal.aborted ? "timeout" : certificateRejected(error) ? "destination-rejected" : "transient" }));
     signal.addEventListener("abort", abort, { once: true });
     if (signal.aborted) abort(); else request.end(body);
   });

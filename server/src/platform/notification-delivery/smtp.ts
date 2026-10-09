@@ -4,6 +4,8 @@ import { NOTIFICATION_LIMITS } from "contract";
 import { delivered, failed, MAX_RESPONSE_BYTES, safeHeader, transportText, type NotificationMessage, type NotificationRuntimeConfig,
   type NotificationTransportFailure, type NotificationTransportOutcome } from "./http.js";
 
+import { certificateRejected } from "./tls-failure.js";
+
 type SmtpConfig = Extract<NotificationRuntimeConfig, { kind: "smtp" }>;
 function mailbox(value: string): boolean {
   return value.length <= 320 && /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+$/u.test(value);
@@ -21,6 +23,7 @@ export function smtpFailure(error: unknown): NotificationTransportFailure {
   if (!error || typeof error !== "object") return "transient";
   const code = "code" in error ? error.code : null;
   const response = "responseCode" in error ? error.responseCode : null;
+  if (certificateRejected(error)) return "destination-rejected";
   if (code === "ETIMEDOUT") return "timeout";
   if (typeof response === "number" && response >= 400 && response < 500) return "transient";
   if (code === "EAUTH" || response === 530 || response === 535) return "authentication";
