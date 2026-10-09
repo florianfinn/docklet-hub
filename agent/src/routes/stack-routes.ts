@@ -33,6 +33,7 @@ import {
   composeUp
 } from "../compose-cli.js";
 import { applyCompose } from "../compose-apply.js";
+import { mapLimit } from "../concurrency.js";
 import {
   directoryOccupied,
   hasComposeFile,
@@ -51,7 +52,7 @@ import {
   type StackAction
 } from "../stack-control.js";
 import { config, engine, registry, audit, stackLocks, openStreams } from "../runtime/state.js";
-import { composeBasePath } from "../runtime/containers.js";
+import { composeBasePath, creationImageRef } from "../runtime/containers.js";
 import { applyOps, rawReason } from "../runtime/raw-ops.js";
 import { createProject, previewProject } from "../runtime/project-create.js";
 import { send, readJsonBody, parseRequest, rejectRequest, RouteContext } from "../runtime/http.js";
@@ -74,7 +75,7 @@ export async function handleStackList(ctx: RouteContext): Promise<void> {
   const { response, actor } = ctx;
 
   const result = discoverStacks({
-    containers: await engine.listWithComposeLabels(),
+    containers: await mapLimit(await engine.listWithComposeLabels(), 6, async (container) => ({ ...container, image: await creationImageRef(container) })),
     basePath: composeBasePath,
     directoryHasFile: hasComposeFile,
     directoriesWithFile: directoriesWithComposeFile(composeBasePath)

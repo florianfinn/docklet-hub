@@ -18,9 +18,12 @@ Object.assign(process.env, { DOCKER_AGENT_SECRET: "s".repeat(64), DOCKER_AGENT_B
   DOCKER_AGENT_MONITOR_FILE: path.join(directory, "monitor.json") });
 const { engine, registry, config, stopIntents } = await import("./runtime/state.js");
 const { updateRuntimeOps: ops, updateCompose, authorizeUpdateSelection, updateJournal } = await import("./runtime/updates.js");
+const { handleHostContainers } = await import("./routes/agent-routes.js");
+const { handleStackList } = await import("./routes/stack-routes.js");
 after(() => fs.rmSync(directory, { recursive: true, force: true }));
 const offered = `sha256:${"b".repeat(64)}`;
 const digest = `sha256:${"c".repeat(64)}`;
+const moved = `sha256:${"d".repeat(64)}`;
 function fixture(t: TestContext, status = "running", compose = false, reference = "example/app:1.0") {
   fs.rmSync(path.join(directory, "update-pending.json"), { force: true });
   const projectDir = path.join(directory, "demo"); fs.mkdirSync(projectDir, { recursive: true });
@@ -42,17 +45,19 @@ function fixture(t: TestContext, status = "running", compose = false, reference 
     const found = containers.get(id); if (!found) throw new Error(`Unknown container ${id}`); return found;
   };
   t.mock.method(engine, "inspect", async (id: string) => structuredClone(get(id)));
+  const resolve = (ref: string) => ref === "old-image" || ref === "new-image" ? ref : taggedImage;
   t.mock.method(engine, "inspectImage", async (ref: string) => {
-    const id = ref === "old-image" || ref === "new-image" ? ref : taggedImage;
-    return { Id: id, RepoDigests: [`example/app@${id === "old-image" ? digest : offered}`] };
+    const id = resolve(ref);
+    return { Id: id, RepoDigests: [`example/app@${id === "old-image" ? digest : id === "new-image" ? offered : moved}`] };
   });
   t.mock.method(engine, "remoteManifestDigest", async () => offered);
   t.mock.method(engine, "pull", async () => { trace.push("pull"); taggedImage = "new-image"; });
   t.mock.method(engine, "tagImage", async (id: string, repo: string, tag: string) => {
     assert.equal(repo, "example/app"); assert.equal(tag, reference === "example/app" ? "latest" : "1.0"); trace.push(`tag:${id}`); taggedImage = id;
   });
+  // Like Docker's container list: the image ID replaces a reference that now resolves to another image.
   t.mock.method(engine, "listWithComposeLabels", async () => [...containers.values()].map((c) => ({ id: c.Id,
-    name: c.Name.slice(1), image: c.Config!.Image!, imageId: c.Image!, status: c.State!.Status!, labels: c.Config!.Labels! })));
+    name: c.Name.slice(1), image: resolve(c.Config!.Image!) === c.Image ? c.Config!.Image! : c.Image!, imageId: c.Image!, status: c.State!.Status!, labels: c.Config!.Labels! })));
   t.mock.method(engine, "stop", async (id: string) => { trace.push("stop"); const c = get(id); c.State = { ...c.State, Running: false, Status: "exited" }; });
   t.mock.method(engine, "rename", async (id: string, name: string) => { trace.push("rename"); get(id).Name = `/${name}`; });
   t.mock.method(engine, "create", async (name: string, payload: Record<string, unknown>) => {
@@ -77,6 +82,44 @@ function fixture(t: TestContext, status = "running", compose = false, reference 
     : { kind: "container", containerName: "demo" }, expectedContainer: { containerId: "old", status, startedAt: "seen" }, startDeadlineSeconds: 10, backup: null };
   return { original, selection, trace, get: () => structuredClone(raw), tag: (id: string) => { taggedImage = id; }, tagged: () => taggedImage, change: (patch: Partial<RawInspect>) => { raw = { ...raw, ...patch }; containers.set(raw.Id, raw); } };
 }
+async function routeBody(handler: typeof handleHostContainers) {
+  let body = "";
+  const response = { headersSent: false, writeHead: () => {}, end: (payload: string) => { body = payload; } };
+  await handler({ response, actor: null } as unknown as Parameters<typeof handler>[0]);
+  return JSON.parse(body);
+}
+// Replays the hub's registry sync from the agent's real host inventory.
+async function hubSync() {
+  const listed: { id: string; name: string; image: string }[] = (await routeBody(handleHostContainers)).containers;
+  const stacks = registry.knownIds().flatMap((id) => {
+    const anchor = registry.get(id)!.compose; return anchor ? [{ ...anchor, services: [{ serviceName: anchor.serviceName, containerId: id }] }] : [];
+  });
+  registry.replaceAll(toRegistryRequestBody(buildRegistryEntries(listed.map((c) => ({ ...c, externalManagement: null })), stacks)).entries);
+}
+for (const compose of [false, true]) test(`a tag moved by an outside pull keeps preview, update and rollback on the running image: compose=${compose}`, async (t) => {
+  const f = fixture(t, "running", compose); f.tag("new-image"); await hubSync();
+  if (compose) assert.deepEqual((await routeBody(handleStackList)).stacks.flatMap((stack: { services: { image: string }[] }) =>
+    stack.services.map((service) => service.image)), ["example/app:1.0"]);
+  await authorizeUpdateSelection(f.selection, null, new UpdateBudget(60_000));
+  const runner = new UpdateRunner(new AgentJobs(() => true), new KeyedMutex(), ops);
+  const [preview] = (await runner.preview({ target: f.selection.target, services: [f.selection] }, null)).services;
+  assert.deepEqual([preview.blocker, preview.imageRef, preview.currentDigest, preview.offeredDigest, preview.rollbackImageId],
+    [null, "example/app:1.0", digest, offered, "old-image"]);
+  assert.equal(registry.expectedImageRef("old"), "example/app:1.0");
+  const snapshot = await ops.prepare(f.selection, null, new UpdateBudget(60_000));
+  const pulled = await ops.pull(snapshot, new UpdateBudget(60_000)); assert.equal(pulled.imageId, "new-image");
+  await ops.exchange(snapshot, pulled.imageId, new UpdateBudget(60_000), () => {}, () => {});
+  const restored = await ops.rollback(snapshot, new UpdateBudget(60_000));
+  assert.equal(restored.Image, "old-image"); assert.equal(f.tagged(), "old-image");
+});
+test("inventory never reports a moved tag's image ID as the reference", async (t) => {
+  const f = fixture(t); f.tag("new-image");
+  const { EngineError } = await import("./engine.js");
+  t.mock.method(engine, "inspect", async () => { throw new EngineError("synthetic engine failure", 500); });
+  await assert.rejects(routeBody(handleHostContainers), { status: 500 });
+  t.mock.method(engine, "inspect", async () => { throw new EngineError("synthetic removal", 404); });
+  assert.equal((await routeBody(handleHostContainers)).containers[0].image, "old-image"); assert.deepEqual(f.trace, []);
+});
 for (const compose of [false, true]) for (const status of ["running", "paused", "restarting", "exited", "created"]) {
   test(`immutable image and captured definition rollback: compose=${compose}, status=${status}`, async (t) => {
     const f = fixture(t, status, compose); const snapshot = await ops.prepare(f.selection, null, new UpdateBudget(60_000));
@@ -139,10 +182,7 @@ for (const compose of [false, true]) for (const rollback of [false, true]) test(
   const pulled = await ops.pull(snapshot, new UpdateBudget(60_000));
   await ops.exchange(snapshot, pulled.imageId, new UpdateBudget(60_000), () => {}, () => {});
   if (rollback) await ops.rollback(snapshot, new UpdateBudget(60_000));
-  const current = f.get(); const anchor = registry.get(current.Id)!.compose;
-  const entries = buildRegistryEntries([{ id: current.Id, name: "demo", image: current.Config!.Image!, externalManagement: null }],
-    anchor ? [{ ...anchor, services: [{ serviceName: "web", containerId: current.Id }] }] : []);
-  registry.replaceAll(toRegistryRequestBody(entries).entries);
+  const current = f.get(); await hubSync();
   assert.equal(registry.expectedImageRef(current.Id), "example/app:1.0");
   const state = runtimeStateOf(current);
   const next = await ops.prepare({ ...f.selection, expectedContainer: { containerId: state.containerId!, status: state.status!, startedAt: state.startedAt } }, null, new UpdateBudget(60_000));
@@ -278,4 +318,64 @@ test("R3: selected slow mount times out separately after manifest and leaves the
   assert.equal(preview.services[0].blocker, null); assert.equal(preview.services[0].offeredDigest, offered);
   const withoutBackup = await runner.preview({ target: f.selection.target, services: [f.selection] }, null);
   assert.equal(withoutBackup.services[0].blocker, null); assert.deepEqual(archives, ["/data"]);
+});
+const aborts = ["digest-changed", "space", "size-unavailable", "stop-failed", "copy-failed", "deadline", "cancel", "sync-during-pull"] as const;
+for (const compose of [false, true]) for (const abort of aborts) test(`abort after pull leaves a usable next preview and update: ${abort}, compose=${compose}`, async (t) => {
+  const f = fixture(t, "running", compose);
+  const { backupStore, dataJournal } = await import("./runtime/backups.js");
+  const { updateRecovery } = await import("./runtime/update-recovery.js");
+  const { UpdateFailure } = await import("./update-budget.js");
+  f.change({ Mounts: [{ Type: "bind", Source: "/synthetic/data", Destination: "/data", RW: true }] });
+  t.mock.method(engine, "info", async () => ({ DockerRootDir: "/var/lib/docker" }));
+  t.mock.method(engine, "listContainerIds", async () => [f.get().Id]);
+  t.mock.method(engine, "statArchive", async () => ({ name: "data", size: 0, mode: 0x80000000, mtime: "2026-10-08T00:00:00Z", linkTarget: "" }));
+  let pulls = 0; let jobId = ""; const results: import("contract").UpdateResult[] = []; let done!: () => void;
+  const jobs = new AgentJobs(() => true);
+  const pull = engine.pull;
+  t.mock.method(engine, "pull", async (...args: Parameters<typeof pull>) => {
+    if (++pulls > 1) return pull(...args);
+    f.tag(abort === "digest-changed" ? "other-image" : "new-image");
+    if (abort === "cancel") assert.equal(jobs.cancel(jobId), true);
+    if (abort === "sync-during-pull") await hubSync();
+  });
+  const stop = engine.stop;
+  t.mock.method(engine, "stop", async (...args: Parameters<typeof stop>) => { if (abort !== "stop-failed") await stop(...args); });
+  t.mock.method(engine, "openArchiveStream", async () => {
+    if (pulls === 1 && abort === "size-unavailable") throw new Error("synthetic size failure");
+    if (pulls === 1 && !f.get().State!.Running) {
+      if (abort === "copy-failed") throw new Error("synthetic copy failure");
+      if (abort === "deadline") throw new UpdateFailure("update-phase-deadline-exceeded");
+    }
+    return (async function* () { yield Buffer.alloc(1024); })();
+  });
+  t.mock.property(backupStore as unknown as { free: () => Promise<bigint> }, "free", async () => abort === "space" ? 0n : 1n << 50n);
+  const runner = new UpdateRunner(jobs, new KeyedMutex(), { ...ops, finished: (result) => { results.push(result); done(); } });
+  const run = async (backup: boolean) => {
+    const state = runtimeStateOf(f.get());
+    const selection: UpdateServiceSelection = { ...f.selection, expectedContainer: { containerId: state.containerId!, status: state.status!, startedAt: state.startedAt } };
+    if (backup) {
+      const sourceId = (await ops.prepare(selection, null, new UpdateBudget(60_000))).preview.mounts[0].sourceId;
+      selection.backup = { mode: "stop", mounts: [{ sourceId, estimatedBytes: null }] };
+    }
+    await authorizeUpdateSelection(selection, null, new UpdateBudget(60_000));
+    const preview = await runner.preview({ target: selection.target, services: [selection] }, null);
+    const finished = new Promise<void>((resolve) => { done = resolve; });
+    jobId = runner.start({ confirmed: true, target: preview.target, previewId: preview.previewId,
+      services: preview.services.map((service) => ({ ...service, offeredDigest: service.offeredDigest! })) }, null).jobId;
+    await finished; return { preview: preview.services[0], result: results.at(-1)! };
+  };
+  const first = await run(abort !== "sync-during-pull");
+  const expected = { "digest-changed": "update-digest-changed", space: "backup-space-insufficient", "size-unavailable": "backup-size-unavailable",
+    "stop-failed": "stop-failed", "copy-failed": "backup-copy-failed", deadline: "backup-deadline-exceeded", cancel: null, "sync-during-pull": null }[abort];
+  assert.deepEqual([first.result.outcome, first.result.updateError, first.result.services[0].resumeError],
+    [abort === "cancel" ? "cancelled" : abort === "sync-during-pull" ? "updated" : "failed", expected, null]);
+  if (abort === "sync-during-pull") return;
+  assert.deepEqual([f.get().Id, f.get().Image, f.get().State!.Running], ["old", "old-image", true]);
+  assert.deepEqual([f.trace.includes("stop"), f.trace.includes("start")], ["copy-failed", "deadline"].includes(abort) ? [true, true] : [false, false]);
+  assert.deepEqual([dataJournal.read(), updateJournal.read(), updateRecovery.blocks(f.selection.target)], [[], [], false]);
+  await hubSync();
+  const second = await run(false);
+  assert.deepEqual([second.preview.blocker, second.preview.imageRef, second.preview.currentDigest, second.preview.rollbackImageId],
+    [null, "example/app:1.0", digest, "old-image"]);
+  assert.deepEqual([second.result.outcome, second.result.services[0].imageId], ["updated", "new-image"]);
 });

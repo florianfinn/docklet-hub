@@ -20,7 +20,7 @@ import { toMonitorStatus } from "../monitor.js";
 import { sendLine } from "../ndjson-line.js";
 import { forcedManagement } from "../stacks.js";
 import { config, engine, registry, monitors, audit, statsHistory, monitorStreams, dockerEvents } from "../runtime/state.js";
-import { hardeningOptionsFor, imageManagerLabelOf, volumeBindsOf } from "../runtime/containers.js";
+import { creationImageRef, hardeningOptionsFor, imageManagerLabelOf, volumeBindsOf } from "../runtime/containers.js";
 import { send, readJsonBody, parseRequest, rejectRequest, RouteContext } from "../runtime/http.js";
 
 export async function handleContract(ctx: RouteContext): Promise<void> {
@@ -82,7 +82,7 @@ export async function handleHostContainers(ctx: RouteContext): Promise<void> {
   const containers = await mapLimit(listed, 6, async (container) => ({
     id: container.id,
     name: container.name,
-    image: container.image,
+    image: await creationImageRef(container),
     status: container.status,
     compose: composeLabelsOf(container.labels),
     externalManagement: foreignManagementOf(

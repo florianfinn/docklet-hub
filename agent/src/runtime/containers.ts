@@ -146,6 +146,17 @@ export async function violationKey(raw: RawInspect, containerId: string): Promis
 
 export const imageManagerLabelOf = createImageManagerLabelLookup((imageId) => engine.inspectImage(imageId));
 
+// Docker lists the image ID instead of the creation reference once that reference resolves
+// to another image, e.g. after a pull. Inventories feeding the registry keep the reference.
+export async function creationImageRef(container: { id: string; image: string; imageId: string }): Promise<string> {
+  if (!container.imageId || container.image !== container.imageId) return container.image;
+  try { return (await engine.inspect(container.id)).Config?.Image || container.image; }
+  catch (error) {
+    if (error instanceof EngineError && error.status === 404) return container.image;
+    throw error;
+  }
+}
+
 // CPU/RAM sampling (S13); the CPU baseline per container lives only here.
 const cpuCounters = new CpuCounterHistory();
 
