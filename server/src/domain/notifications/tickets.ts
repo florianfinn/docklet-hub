@@ -34,7 +34,8 @@ function cleanObservation(input: TicketObservation, dependencies: NotificationTi
     if (!label) throw new NotificationError("invalid-input");
     return { ...item, label };
   });
-  const proposedEvidence = input.evidence ? dependencies.sanitizeEvidence?.(input.evidence) ??
+  const proposedEvidence = input.evidence?.logs.state === "unavailable" ? input.evidence :
+    input.evidence ? dependencies.sanitizeEvidence?.(input.evidence) ??
     { logs: { state: "unavailable" as const, reason: "redaction-unavailable" as const } } :
     { logs: { state: "unavailable" as const, reason: "not-collected" as const } };
   const checkedEvidence = notificationTicketEvidenceSchema.safeParse(proposedEvidence);

@@ -132,6 +132,9 @@ test("unproven logs fail closed, malicious text rejected, schema bounds enforced
   const h = harness();
   const ticket = await h.service.observe({ ...h.observation, evidence: { logs: { state: "available", text: "private evidence", truncated: false } } });
   assert.deepEqual(ticket.evidence, { logs: { state: "unavailable", reason: "redaction-unavailable" } });
+  const unavailable = await h.service.observe({ ...h.observation, episodeKey: "unavailable-episode",
+    evidence: { logs: { state: "unavailable", reason: "source-unavailable" } } });
+  assert.deepEqual(unavailable.evidence, { logs: { state: "unavailable", reason: "source-unavailable" } });
   assert.ok(!JSON.stringify([...h.intentions().values()]).includes("private evidence"));
   assert.ok(!JSON.stringify([...h.intentions().values()]).includes("example.invalid"));
   await assert.rejects(h.service.observe({ ...h.observation, cause: "private endpoint" }), { code: "invalid-input" });
