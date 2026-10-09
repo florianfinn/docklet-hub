@@ -37,6 +37,7 @@ class Response extends EventEmitter {
   status = 0;
   chunks: string[] = [];
   writeHead(status: number) { this.status = status; this.headersSent = true; }
+  flushHeaders() { this.headersSent = true; }
   write(chunk: string) { this.chunks.push(chunk); return true; }
   end(chunk?: string) {
     if (this.writableEnded) return;

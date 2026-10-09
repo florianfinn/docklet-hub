@@ -1,8 +1,8 @@
 import type { RawStats } from "./engine.js";
+import { mapLimit } from "./concurrency.js";
 
-// Reine Umrechnung der Docker-Stats-Antwort (Etappe 6b). Getrennt von
-// engine.ts gehalten, damit die Formel ohne Docker testbar ist — dieselbe
-// Trennung wie bei hardening.ts (Beschaffen vs. Auswerten).
+// Conversion of Docker stats responses, kept apart from engine.ts so the
+// formula and the sampling wave are testable without Docker.
 
 export type ContainerStats = {
   cpuPercent: number | null;
@@ -27,14 +27,16 @@ const EMPTY_STATS: ContainerStats = {
   samples: []
 };
 
-export function containerStatsOf(raw: RawStats | null): ContainerStats {
+// `cpuPercent` comes from the caller, because one-shot stats carry no
+// previous sample; see CpuCounterHistory.
+export function containerStatsOf(raw: RawStats | null, cpuPercent: number | null = null): ContainerStats {
   if (!raw) return EMPTY_STATS;
 
   const memUsageBytes = memUsageOf(raw);
   const memLimit = raw.memory_stats?.limit;
 
   return withHistory({
-    cpuPercent: cpuPercentOf(raw),
+    cpuPercent,
     memUsageBytes,
     // 0 means "no limit set", not "0 bytes available" — the same Docker
     // convention as for memoryLimitBytes in hardening.ts.
@@ -88,24 +90,77 @@ export class StatsRingBuffer {
   }
 }
 
-// Dieselbe Formel, die `docker stats` selbst verwendet: die Differenz zweier
-// Messungen (aktuell/vorherig) relativ zur verstrichenen System-Zeit, skaliert
-// auf die Anzahl der CPUs. Ohne beide Messungen (Container gerade erst
-// gestartet, precpu_stats noch leer) gibt es keinen sinnvollen Wert.
-function cpuPercentOf(raw: RawStats): number | null {
-  const cpu = raw.cpu_stats;
-  const precpu = raw.precpu_stats;
-  if (!cpu?.cpu_usage || !precpu?.cpu_usage) return null;
-  if (typeof cpu.system_cpu_usage !== "number" || typeof precpu.system_cpu_usage !== "number") return null;
+type CpuCounters = { total: number; system: number; cpus: number };
 
-  const cpuDelta = (cpu.cpu_usage.total_usage ?? 0) - (precpu.cpu_usage.total_usage ?? 0);
-  const systemDelta = cpu.system_cpu_usage - precpu.system_cpu_usage;
-  if (systemDelta <= 0) return 0;
-  if (cpuDelta <= 0) return 0;
+function cpuCountersOf(raw: RawStats | null): CpuCounters | null {
+  const cpu = raw?.cpu_stats;
+  if (typeof cpu?.cpu_usage?.total_usage !== "number" || typeof cpu.system_cpu_usage !== "number") return null;
+  return {
+    total: cpu.cpu_usage.total_usage,
+    system: cpu.system_cpu_usage,
+    cpus: cpu.online_cpus || cpu.cpu_usage.percpu_usage?.length || 1
+  };
+}
 
-  const numberCpus = cpu.online_cpus || cpu.cpu_usage.percpu_usage?.length || 1;
-  const percent = (cpuDelta / systemDelta) * numberCpus * 100;
-  return Math.round(percent * 10) / 10;
+// The `docker stats` formula, applied between two own one-shot samples of the
+// same container. The first sample after start, a gap or a counter reset
+// (container restart) yields null instead of a guess.
+export class CpuCounterHistory {
+  private readonly lastByContainer = new Map<string, CpuCounters>();
+
+  percent(containerId: string, raw: RawStats | null): number | null {
+    const current = cpuCountersOf(raw);
+    const previous = this.lastByContainer.get(containerId);
+    if (!current) {
+      this.lastByContainer.delete(containerId);
+      return null;
+    }
+    this.lastByContainer.set(containerId, current);
+    if (!previous) return null;
+
+    const cpuDelta = current.total - previous.total;
+    const systemDelta = current.system - previous.system;
+    if (cpuDelta < 0 || systemDelta < 0) return null;
+    if (systemDelta === 0 || cpuDelta === 0) return 0;
+
+    const percent = (cpuDelta / systemDelta) * current.cpus * 100;
+    return Math.round(percent * 10) / 10;
+  }
+
+  forget(containerId: string): void {
+    this.lastByContainer.delete(containerId);
+  }
+
+  retain(containerIds: Iterable<string>): void {
+    const current = new Set(containerIds);
+    for (const id of this.lastByContainer.keys()) {
+      if (!current.has(id)) this.lastByContainer.delete(id);
+    }
+  }
+}
+
+export type StatsWave = {
+  history: StatsRingBuffer;
+  counters: CpuCounterHistory;
+  fetchStats: (containerId: string) => Promise<RawStats | null>;
+  concurrency?: number;
+};
+
+// One sampling wave over the allowed containers. Best effort: a failed call
+// records an empty sample and drops the container's CPU baseline.
+export async function collectStatsWave(containerIds: readonly string[], wave: StatsWave): Promise<void> {
+  wave.history.retain(containerIds);
+  wave.counters.retain(containerIds);
+  await mapLimit(containerIds, wave.concurrency ?? 6, async (containerId) => {
+    try {
+      const raw = await wave.fetchStats(containerId);
+      wave.history.record(containerId, containerStatsOf(raw, wave.counters.percent(containerId, raw)));
+    } catch (error) {
+      console.error(`[agent] stats for ${containerId} not readable:`, error);
+      wave.counters.forget(containerId);
+      wave.history.record(containerId, containerStatsOf(null));
+    }
+  });
 }
 
 // With Linux cgroups the cache share counts towards "usage", but it can be

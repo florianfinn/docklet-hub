@@ -552,6 +552,7 @@ test("0.31.0 ist zu alt, 0.32.0 ist online, keine Angabe ist zu alt", () => {
   const base = { state: "registered" as const, reachable: true, contractVersion: CONTRACT_VERSION };
   assert.equal(deriveHostStatus({ ...base, agentVersion: "0.31.0" }), "outdated");
   assert.equal(deriveHostStatus({ ...base, agentVersion: "0.32.0" }), "online");
+  assert.equal(deriveHostStatus({ ...base, agentVersion: "0.32.0-rc.3" }), "online");
   assert.equal(deriveHostStatus({ ...base, agentVersion: null }), "outdated");
 });
 

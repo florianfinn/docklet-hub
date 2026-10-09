@@ -26,8 +26,7 @@ import {
   resolveContainerId,
   type ComposeProject
 } from "../compose-cli.js";
-import { mapLimit } from "../concurrency.js";
-import { containerStatsOf } from "../stats.js";
+import { collectStatsWave, CpuCounterHistory } from "../stats.js";
 import { composeCandidates } from "../compose-selection.js";
 import { createImageManagerLabelLookup } from "../external-management.js";
 import { config, engine, registry, composeSelections, statsHistory, hardeningOptions } from "./state.js";
@@ -147,30 +146,22 @@ export async function violationKey(raw: RawInspect, containerId: string): Promis
 
 export const imageManagerLabelOf = createImageManagerLabelLookup((imageId) => engine.inspectImage(imageId));
 
-// CPU/RAM sampling (S13) — best effort. A failed stats call (container is
-// stopping, Docker refuses instrumentation for a non-running one) must topple
-// neither the sampling nor the container list.
-export async function collectStatsFor(containerId: string): Promise<void> {
-  try {
-    statsHistory.record(containerId, containerStatsOf(await engine.stats(containerId)));
-  } catch (error) {
-    console.error(`[agent] stats for ${containerId} not readable:`, error);
-    statsHistory.record(containerId, containerStatsOf(null));
-  }
-}
+// CPU/RAM sampling (S13); the CPU baseline per container lives only here.
+const cpuCounters = new CpuCounterHistory();
 
 export let statsCollectionRunning = false;
 
 export async function collectStats(): Promise<void> {
-  // On a small host a wave can take longer than ten seconds. Then it is
-  // skipped instead of stacking a second parallel wave on the same socket;
-  // the buffer stays with the last consistent sample.
+  // A wave that outlasts the interval is not stacked with a second one on the
+  // same socket; the buffer keeps the last consistent sample.
   if (statsCollectionRunning) return;
   statsCollectionRunning = true;
   try {
-    const ids = registry.allowedIds();
-    statsHistory.retain(ids);
-    await mapLimit(ids, 6, collectStatsFor);
+    await collectStatsWave(registry.allowedIds(), {
+      history: statsHistory,
+      counters: cpuCounters,
+      fetchStats: (containerId) => engine.stats(containerId)
+    });
   } finally {
     statsCollectionRunning = false;
   }

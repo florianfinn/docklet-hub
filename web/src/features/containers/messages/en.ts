@@ -168,7 +168,6 @@ export const enContainers = {
   lifecycleActorUnknown: "Unknown actor",
   lifecycleCrashed: "crashed · exit code {code}",
   lifecycleRestarting: "restarting repeatedly",
-  lifecycleMaintenance: "Maintenance",
   lifecycleMaintenanceUntil: "Maintenance until {time}",
   lifecycleMaintenanceUnlimited: "Maintenance indefinitely",
   lifecycleMaintenanceOn: "Enable maintenance",

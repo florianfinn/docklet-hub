@@ -182,7 +182,6 @@ export const deContainers = {
   lifecycleActorUnknown: "Akteur unbekannt",
   lifecycleCrashed: "abgestürzt · Exit-Code {code}",
   lifecycleRestarting: "startet wiederholt neu",
-  lifecycleMaintenance: "Wartung",
   lifecycleMaintenanceUntil: "Wartung bis {time}",
   lifecycleMaintenanceUnlimited: "Wartung unbegrenzt",
   lifecycleMaintenanceOn: "Wartung einschalten",

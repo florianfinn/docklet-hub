@@ -83,3 +83,30 @@ test("externallyManaged erst ab v0.31.0, eine unlesbare Fassung heißt nein", ()
   assert.equal(supportsExternallyManaged(null), false);
   assert.equal(supportsExternallyManaged("latest"), false);
 });
+
+
+test("release candidates retain their numeric identifier", () => {
+  assert.deepEqual(parseAgentVersion(" v0.32.0-rc.10 "), [0, 32, 0, 10]);
+  assert.deepEqual(parseAgentVersion("0.32.0-rc.4+build.1"), [0, 32, 0, 4]);
+  for (const value of ["0.32.0-rc", "0.32.0-rc.x", "0.32.0-rc.01", "0.32.0-beta.1", "0.32.0-rc.9007199254740992", "9007199254740992.0.0"]) {
+    assert.equal(parseAgentVersion(value), null, value);
+  }
+});
+
+test("update ordering follows numeric rc precedence and then the release core", () => {
+  const versions = ["0.32.0-rc.3", "0.32.0-rc.4", "0.32.0-rc.10", "0.32.0", "0.32.1-rc.1"];
+  for (const [i, left] of versions.entries()) {
+    for (const [j, right] of versions.entries()) {
+      const a = parseAgentVersion(left);
+      const b = parseAgentVersion(right);
+      assert.ok(a && b);
+      assert.equal(Math.sign(compareAgentVersions(a, b)) || 0, Math.sign(i - j) || 0, `${left} vs ${right}`);
+    }
+  }
+});
+
+test("minimum release admits candidates without admitting an older release", () => {
+  assert.equal(isAgentOutdated("0.32.0-rc.3"), false);
+  assert.equal(isAgentOutdated("0.31.9-rc.10"), true);
+  assert.equal(supportsExternallyManaged("0.31.0-rc.3"), true);
+});

@@ -30,7 +30,7 @@ async function fixture(kind: "container" | "stack" = "container", blocker: strin
     if (path.endsWith("updates")) return Response.json({ jobId: "job" });
     return Response.json({ jobId: "job", accepted: true });
   };
-  const f = await renderInDom(<AppLanguageProvider><LifecycleProvider role="admin"><UpdateControls target={target} detail={kind === "container"} /></LifecycleProvider></AppLanguageProvider>);
+  const f = await renderInDom(<AppLanguageProvider><LifecycleProvider role="admin"><UpdateControls target={target} /></LifecycleProvider></AppLanguageProvider>);
   f.queryClient.setDefaultOptions({ ...f.queryClient.getDefaultOptions(), mutations: { gcTime: 0 } });
   await React.act(async () => { f.queryClient.setQueryData(queryKeys.containers.overview(), [current]); }); await settle();
   return { ...f, target, preview, calls, close: async () => { await f.unmount(); globalThis.fetch = before;

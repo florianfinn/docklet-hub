@@ -155,3 +155,27 @@ test("der Stand geht als GET ohne Rumpf", async () => {
   assert.equal(calls[0].method, "GET");
   assert.equal(calls[0].body, undefined);
 });
+
+
+test("image tag versions retain rc suffixes with and without a digest", () => {
+  const ref = "registry.example:5000/agent:v0.32.0-rc.4";
+  assert.equal(versionOfImageRef(ref), "0.32.0-rc.4");
+  assert.equal(versionOfImageRef(`${ref}@${DIGEST}`), "0.32.0-rc.4");
+});
+
+for (const [running, target, state] of [
+  ["0.32.0-rc.3", "0.32.0-rc.4", "available"],
+  ["0.32.0-rc.4", "0.32.0-rc.4", "current"],
+  ["0.32.0", "0.32.0-rc.4", "current"],
+  ["0.32.0-rc.10", "0.32.0-rc.9", "current"],
+  ["0.32.0-rc.9", "0.32.0-rc.10", "available"],
+  ["0.31.9", "0.32.0-rc.4", "manual"],
+  ["unbekannt", "0.32.0-rc.4", "manual"],
+  ["0.32.0-rc.10", "0.32.0", "available"],
+  ["0.32.0", "0.32.1-rc.1", "available"]
+] as const) {
+  test(`update offer: ${running} against ${target} is ${state}`, () => {
+    const targetImageRef = `registry.example/agent:v${target}@${DIGEST}`;
+    assert.deepEqual(agentUpdateOffer(running, targetImageRef), { targetVersion: target, targetImageRef, state });
+  });
+}

@@ -206,7 +206,7 @@ function ContainerDetail({ found, tab }: { found: Found; tab: ContainerTab }) {
           Adresse wüsste davon nichts, und ein Neuladen fiele auf den ersten
           Reiter zurück. Genau das ist der Fall, den Entscheidung 1 des
           Betreibers ausschließt. */}
-      <LifecycleControls target={{ kind: "container", hostId: host.host.id, container }} detail />
+      <LifecycleControls target={{ kind: "container", hostId: host.host.id, container }} />
       <nav aria-label={t("containerTabsLabel")} className="flex gap-1 border-b border-border">
         {TABS.map((entry) => (
           <Link
