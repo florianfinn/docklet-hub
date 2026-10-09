@@ -8,6 +8,7 @@ import { containerIdsForTarget } from "../routes/contract-route-stubs.js";
 import { engine, stackLocks, audit } from "./state.js";
 import { runtimeStateOf } from "../runtime-actions.js";
 import { appendRecoveryIncident } from "../update-recovery.js";
+import { restoreCause } from "../restore-cause.js";
 import { updateRecovery } from "./update-recovery.js";
 import { selfHealingState, dockerEvents } from "./state.js";
 
@@ -66,7 +67,18 @@ export const restoreRunner = new RestoreRunner(agentJobs, stackLocks, {
   async stop(snapshot, budget) {
     dataJournal.begin(snapshot.preview.target, snapshot.raw, "restore"); await stopForData(snapshot.raw, budget);
   },
-  async extract(snapshot, budget) { dataJournal.extracting(snapshot.preview.target); await archives(snapshot, budget, false); },
+  async extract(snapshot, budget) {
+    dataJournal.extracting(snapshot.preview.target);
+    try { await archives(snapshot, budget, false); }
+    catch (error) {
+      try {
+        audit.write({ action: "restore-cause", actor: null, containerId: snapshot.raw.Id, containerName: null, outcome: "error", reason: restoreCause(error) });
+      } catch {
+        // A diagnostic write failure must preserve the original restore error.
+      }
+      throw error;
+    }
+  },
   async resume(snapshot, budget) {
     const raw = await resumeAfterData(snapshot.raw, budget); dataJournal.complete(snapshot.preview.target); return raw;
   },

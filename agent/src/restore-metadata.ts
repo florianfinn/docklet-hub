@@ -6,7 +6,7 @@ import { UpdateFailure } from "./update-budget.js";
 import type { ArchiveStream } from "./archive-stream.js";
 
 export class RestorePathFailure extends UpdateFailure {
-  constructor(readonly relative: string) { super("restore-extract-failed"); }
+  constructor(readonly relative: string, options?: ErrorOptions) { super("restore-extract-failed", options); }
 }
 export class RestoreBindingFailure extends RestorePathFailure {}
 export type RestoreMetadataFallback = (entry: ArchiveEntry, relative: string, body?: ArchiveStream, verify?: () => Promise<void>) => Promise<void>;
