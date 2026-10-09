@@ -71,7 +71,11 @@ export const restoreRunner = new RestoreRunner(agentJobs, stackLocks, {
     dataJournal.extracting(snapshot.preview.target);
     try { await archives(snapshot, budget, false); }
     catch (error) {
-      audit.write({ action: "restore-cause", actor: null, containerId: snapshot.raw.Id, containerName: null, outcome: "error", reason: restoreCause(error) });
+      try {
+        audit.write({ action: "restore-cause", actor: null, containerId: snapshot.raw.Id, containerName: null, outcome: "error", reason: restoreCause(error) });
+      } catch {
+        // A diagnostic write failure must preserve the original restore error.
+      }
       throw error;
     }
   },
