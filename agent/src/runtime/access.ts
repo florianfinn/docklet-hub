@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { VisibleFiles } from "../visible-files.js";
 import { protectionOf, within } from "../file-sources.js";
 import {
@@ -111,6 +112,12 @@ export type WebftpPrecheck =
       entryActions: VisibleFileActions;
     }
   | { ok: false; status: number; reason: string };
+const compareExactStrings = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
+// Docker mount properties are scalar JSON values; include every returned field.
+// Exact ordering preserves distinct filesystem names and ignores object key order.
+const canonicalMounts = (mounts: RawInspect["Mounts"]) => mounts?.map((mount) => ({
+  mount, key: JSON.stringify(Object.entries(mount).sort(([a], [b]) => compareExactStrings(a, b)))
+})).sort((a, b) => compareExactStrings(a.key, b.key)).map(({ mount }) => mount) ?? mounts;
 export async function checkWebftpAccess(
   containerId: string,
   options: {
@@ -130,7 +137,7 @@ export async function checkWebftpAccess(
     if (options.mutating && !selected.source.writable) return { ok: false, status: 403, reason: selected.source.writeBlocker ?? "not-writable" };
     const fresh = await gate(containerId, { mutating: options.mutating, action: options.action, actor: options.actor });
     if (!fresh.ok) return fresh;
-    if (JSON.stringify(fresh.inspect.Mounts) !== JSON.stringify(sources.inspect.Mounts))
+    if (!isDeepStrictEqual(canonicalMounts(fresh.inspect.Mounts), canonicalMounts(sources.inspect.Mounts)))
       return { ok: false, status: 409, reason: "file-replaced" };
     const archive = new FileArchive(engine, { containerId, root: selected.source.target, hostRoot: selected.absolute, policy: sources.policy, mounts: fresh.inspect.Mounts ?? [], volumeRoots: sources.volumeRoots, volumeDevices: sources.volumeDevices });
     const visibleRoot = sources.visibleRoots.get(selected.source.sourceId);
