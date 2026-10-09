@@ -4,10 +4,13 @@ import { assertConfigured, readConfig, replaceSelections, saveConfig, scopeView,
 import { NotificationError, targetKey, type NotificationDatabase, type NotificationQuery, type ScopeTarget,
   type StoredConfig, type StoredScope, type TargetReader } from "./types.js";
 
-export async function readStoredScope(query: NotificationQuery, target: ScopeTarget): Promise<StoredScope> {
+async function readScopeRow(query: NotificationQuery, target: ScopeTarget) {
   const result = await query.query<{ configuration: StoredScope; active: boolean }>(
     "SELECT configuration, active FROM notification_scope WHERE target_key = $1", [targetKey(target)]);
-  const row = result.rows[0];
+  return result.rows[0];
+}
+export async function readStoredScope(query: NotificationQuery, target: ScopeTarget): Promise<StoredScope> {
+  const row = await readScopeRow(query, target);
   return !row ? { mode: "inherit" } : row.active ? row.configuration : { mode: "explicit", selections: [] };
 }
 async function response(query: NotificationQuery, reader: TargetReader, target: ScopeTarget, config: StoredConfig) {
@@ -37,7 +40,8 @@ export function createNotificationScopes(database: NotificationDatabase, reader:
         for (const target of write.targets) if (!(await reader(target, query)).exists) throw new NotificationError("target-unknown");
         if (write.configuration.mode === "explicit") assertConfigured(config, write.configuration.selections.map((rule) => rule.channel));
         for (const target of write.targets) {
-          const previous = await readStoredScope(query, target);
+          // Explicit admin writes retain stored destinations even while reads are disabled.
+          const previous = (await readScopeRow(query, target))?.configuration ?? { mode: "inherit" as const };
           const configuration: StoredScope = write.configuration.mode === "inherit" ? { mode: "inherit" } : {
             mode: "explicit", selections: replaceSelections(write.configuration.selections, previous.mode === "explicit" ? previous.selections : []) };
           await query.query(`INSERT INTO notification_scope (target_key, host_id, target, configuration, active)

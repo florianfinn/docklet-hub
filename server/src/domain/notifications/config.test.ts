@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Pool } from "pg";
+import type { NotificationScopeWrite, NotificationTicketView } from "contract";
 import { notificationSettingsResponseSchema, notificationScopeResponseSchema } from "contract";
 import { createNotificationConfig, initialConfig, settingsView } from "./config.js";
 import { createNotificationScopes } from "./scopes.js";
+import { notificationRuntimeSelection } from "./tickets.js";
 import { createNotificationDatabase } from "./repository.js";
 import { targetKey, type NotificationDatabase, type NotificationQuery, type ScopeTarget, type StoredConfig, type StoredScope } from "./types.js";
 
@@ -47,7 +49,7 @@ function harness() {
   const container: ScopeTarget = { kind: "container", hostId: "host-a", target: { kind: "compose", projectName: "project-a", serviceName: "service-a" } };
   const reader = async (target: ScopeTarget) => ({ exists: target.hostId !== "missing", stack: target.kind === "container" ? stack : null });
   return { database, config: () => config, scopes: () => scopes, statements, stack, container,
-    service: createNotificationConfig(database), rules: createNotificationScopes(database, reader), fail: () => { failCommit = true; } };
+    reader, service: createNotificationConfig(database), rules: createNotificationScopes(database, reader), fail: () => { failCommit = true; } };
 }
 function configuredWrite(config: StoredConfig, expectedRevision = config.revision) {
   return { expectedRevision, format: config.format, defaults: [], hostRules: [], channels: config.channels.map((channel) =>
@@ -162,3 +164,77 @@ test("revision losers and over-limit bulk cannot make partial progress", { timeo
   assert.equal(h.scopes().size, 1);
   assert.equal(h.config().revision, 2);
 });
+
+const reactivationTargets: ScopeTarget[] = [
+  { kind: "stack", hostId: "host-a", projectName: "project-a" },
+  { kind: "container", hostId: "host-a", target: { kind: "container", containerName: "container-a" } },
+  { kind: "container", hostId: "host-a", target: { kind: "compose", projectName: "project-a", serviceName: "service-a" } }
+];
+function runtimeTicket(target: ScopeTarget): NotificationTicketView {
+  return { id: "ticket-a", target, targetLabel: "Synthetic target", episodeKey: "episode-a", event: "update-failed",
+    action: "inspect-update", cause: "Synthetic failure", state: "open", openedAt: "2026-01-01T00:00:00.000Z",
+    acknowledgedAt: null, resolvedAt: null, affectedContainers: [], affectedContainerCount: 0,
+    pendingDeliveryCount: 0, evidence: { logs: { state: "unavailable", reason: "not-collected" } } };
+}
+const reactivationPaths = [
+  ...reactivationTargets.map((target, index) => ({ name: `single-${index}`, targets: [target], single: true })),
+  ...reactivationTargets.map((target, index) => ({ name: `bulk-${index}`, targets: [target], single: false })),
+  { name: "bulk-mixed", targets: reactivationTargets, single: false }
+];
+for (const path of reactivationPaths) for (const channel of ["webhook", "discord"] as const) {
+  for (const command of ["keep", "missing", "clear", "set", "inherit", "removed-channel", "empty"] as const) {
+    test(`inactive reactivation ${path.name}/${channel}/${command} retains only authorized rules`, { timeout: 1000 }, async () => {
+      const h = harness();
+      await h.service.write({ ...configuredWrite(h.config()), defaults: explicit.selections });
+      const selection = (destination?: { operation: "keep" | "clear" } | { operation: "set"; value: string }): NotificationScopeWrite => ({
+        mode: "explicit", selections: [{ channel, events: ["update-failed"],
+          overrides: { includeLogs: false, recovery: false, additionalText: "", ...(destination ? { destination } : {}) } }] });
+      const local = (target: ScopeTarget) => `https://example.invalid/local/${encodeURIComponent(targetKey(target))}`;
+      for (const target of path.targets) {
+        await h.rules.write({ target, expectedRevision: h.config().revision, configuration: selection({ operation: "set", value: local(target) }) });
+        await h.rules.markRemoved(target);
+      }
+      const beforeRead = structuredClone(h.scopes());
+      for (const target of path.targets) {
+        assert.deepEqual(await notificationRuntimeSelection(h.database, h.config(), runtimeTicket(target), h.reader), []);
+        const view = await h.rules.read(target);
+        assert.deepEqual(view.configuration, { mode: "explicit", selections: [] });
+        assert.deepEqual(view.effective, []);
+        const stored = h.scopes().get(targetKey(target))!;
+        assert.equal(stored.active, false);
+        assert.equal(stored.configuration.mode === "explicit" && stored.configuration.selections[0].overrides.destination, local(target));
+      }
+      assert.deepEqual(h.scopes(), beforeRead);
+      const replacement = "https://example.invalid/replacement";
+      const configuration: NotificationScopeWrite = command === "inherit" ? { mode: "inherit" } :
+        command === "empty" || command === "removed-channel" ? { mode: "explicit", selections: [] } :
+          selection(command === "missing" ? undefined : command === "set" ? { operation: "set", value: replacement } : { operation: command });
+      // A different selected channel proves omission removes only the old channel override.
+      if (command === "removed-channel") Object.assign(configuration, selection({ operation: "keep" }), {
+        selections: [{ channel: channel === "webhook" ? "discord" : "webhook", events: ["update-failed"], overrides: {} }] });
+      const expectedRevision = h.config().revision;
+      const responses = path.single ? [await h.rules.write({ target: path.targets[0], expectedRevision, configuration })] :
+        (await h.rules.bulk({ targets: path.targets, expectedRevision, configuration })).targets;
+      assert.equal(h.config().revision, expectedRevision + 1);
+      for (const [index, target] of path.targets.entries()) {
+        const stored = h.scopes().get(targetKey(target))!;
+        assert.equal(stored.active, true);
+        const expected: StoredScope = configuration.mode === "inherit" ? { mode: "inherit" } : {
+          mode: "explicit", selections: configuration.selections.map(({ overrides: { destination: _destination, ...flags }, ...rule }) => {
+            void _destination;
+            return { ...rule, overrides: { ...flags, destination: command === "keep" || command === "missing" ? local(target) : command === "set" ? replacement : null } };
+          }) };
+        assert.deepEqual(stored.configuration, expected);
+        const runtime = await notificationRuntimeSelection(h.database, h.config(), runtimeTicket(target), h.reader);
+        const expectedRules = expected.mode === "explicit" ? expected.selections : h.config().defaults;
+        assert.deepEqual(runtime.map(({ selection }) => selection), expectedRules);
+        const view = responses[index];
+        notificationScopeResponseSchema.parse(view);
+        assert.deepEqual(await h.rules.read(target), view);
+        assert.deepEqual(view.effective, expectedRules.map(({ overrides: { destination, ...flags }, ...rule }) => ({
+          ...rule, overrides: { ...flags, destinationConfigured: destination !== null } })));
+        assert.ok(!JSON.stringify(view).includes("example.invalid"));
+      }
+    });
+  }
+}
