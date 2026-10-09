@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { VisibleFiles } from "../visible-files.js";
 import { protectionOf, within } from "../file-sources.js";
 import {
@@ -111,6 +112,9 @@ export type WebftpPrecheck =
       entryActions: VisibleFileActions;
     }
   | { ok: false; status: number; reason: string };
+// Docker inspect can return unchanged mounts in a different order.
+const mountsByDestination = (mounts: RawInspect["Mounts"]) =>
+  mounts?.slice().sort((a, b) => (a.Destination ?? "").localeCompare(b.Destination ?? "")) ?? mounts;
 export async function checkWebftpAccess(
   containerId: string,
   options: {
@@ -130,7 +134,7 @@ export async function checkWebftpAccess(
     if (options.mutating && !selected.source.writable) return { ok: false, status: 403, reason: selected.source.writeBlocker ?? "not-writable" };
     const fresh = await gate(containerId, { mutating: options.mutating, action: options.action, actor: options.actor });
     if (!fresh.ok) return fresh;
-    if (JSON.stringify(fresh.inspect.Mounts) !== JSON.stringify(sources.inspect.Mounts))
+    if (!isDeepStrictEqual(mountsByDestination(fresh.inspect.Mounts), mountsByDestination(sources.inspect.Mounts)))
       return { ok: false, status: 409, reason: "file-replaced" };
     const archive = new FileArchive(engine, { containerId, root: selected.source.target, hostRoot: selected.absolute, policy: sources.policy, mounts: fresh.inspect.Mounts ?? [], volumeRoots: sources.volumeRoots, volumeDevices: sources.volumeDevices });
     const visibleRoot = sources.visibleRoots.get(selected.source.sourceId);
