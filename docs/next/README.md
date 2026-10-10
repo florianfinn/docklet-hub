@@ -10,6 +10,7 @@ issues and milestones.
 | --- | --- |
 | [decisions.md](decisions.md) | Agreed architecture, feature scope, removals and evaluation boundaries |
 | [design-concept.md](design-concept.md) | Arcane-based visual direction, navigation and important workflows |
+| [mockups/README.md](mockups/README.md) | Supplied Compact and Arcane clickable references and editable source |
 | [evaluation-plan.md](evaluation-plan.md) | Evaluation stages and acceptance criteria before implementation |
 
 This documentation does not authorize deployment or changes to existing mockups.

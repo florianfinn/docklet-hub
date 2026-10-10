@@ -1,0 +1,231 @@
+{
+  "retrieved": "2026-10-10",
+  "source": "opus-pc/src/app/variants",
+  "upstreamCommit": null,
+  "files": [
+    {
+      "path": "src/app/variants/opus-arcane/account.component.ts",
+      "sha256": "b63863a0d42cc28bcb65d3f8342782fda861bf1202f158302790f38176ee1fe6"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/action-center.component.ts",
+      "sha256": "ee11eace8188f1418f9d194fd524148954f092af4c3867b64367b59dcb692d4a"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/add-host.component.ts",
+      "sha256": "52b5af356bd36bacdee0d0aa102738f5382458e273a7c9457a20e9c1640f93a4"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/apps.component.ts",
+      "sha256": "dfa6be44d627f58773fd6cfda7498e077fc3af14aa24a265ebc31efd0fc28f89"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/compose.ts",
+      "sha256": "118837d66b9073f42f18a708dd3f6abc1b77a15ecd26af98bc6f8de11a6cbc1f"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/containers.component.ts",
+      "sha256": "752a270cf0be10fbc86eca3e91933b2d88d0dbcc3c5111b92458d3493d4a6106"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/dashboard.component.ts",
+      "sha256": "42f582f2d7ff4fc23ed92c674f614d748c41e71fc6811836bf902a36502d0f57"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/data.ts",
+      "sha256": "3a97e46e302b31e1549380fe2aa149b004c029d34901439d19de3f79d06cd633"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/design.component.css",
+      "sha256": "4cc9906f82886f33d8e4645755a1dd3f623ce60a644d6f6bcb9a82ca5813a9cf"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/design.component.ts",
+      "sha256": "2b42b16f3ebdb41d37d6acd999843a14425e7183a6f14e8453fe649df81b4d46"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/dialog.component.ts",
+      "sha256": "a7854242cfe4f9f123a30cfe7b77263309ee52596d8b7bf37dae4551068dade5"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/editor.component.ts",
+      "sha256": "9ff7c15c715799fb52bdf90448aa82c00d5457c8097cb34ec925ddb489e9e5ff"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/hosts.component.ts",
+      "sha256": "f8b90d569681bc29d06a0ddbf11439e6d3684ce25f6b26322783cb5215d24aed"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/icon.component.ts",
+      "sha256": "46066d78335807bd93c9244317a33e7c5896274c41f49d6251cf8e757c3ab660"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/import-dialogs.component.ts",
+      "sha256": "5be34eeeb5cb71fd8e1a66f1b71f2301dc670389746d6d85db73a1e9a0f6b52b"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/logstream.component.ts",
+      "sha256": "931ddb73bf0abbf3c8774dd11106fa1a169b7efd554bba9e2ff2b611e927187c"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/network.component.ts",
+      "sha256": "974784c7aa6595fd2c7f3c30858170815cedb063fdf1c121d362ac1f7ca00866"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/preview.component.ts",
+      "sha256": "725937da6733fbe99e917e46b35347d62e9304ce3d6ddbabf7055355e89342ad"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/primitives.component.ts",
+      "sha256": "0c2f951d00f6987d3b7802cac0f0f7f0f7e4425c7fc3a8d03831ec1b3f3d8460"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/resources.component.ts",
+      "sha256": "8004f943e1317dbf3a0bc1a87423abb52baa0c0f9c3ab83a60e5f0c98845ee6c"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/security.component.ts",
+      "sha256": "65cabf5be270d015f1ac6632d326f1af2c99f22745fc5c3b7069d5894b90fbf6"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/service-form.component.ts",
+      "sha256": "13f819719a213a03fcd132ba034ba094fbae9ceaf1205fe36e598f1388df3e59"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/settings.component.ts",
+      "sha256": "ea894e15ffac5498b0013e91fc9683326a42770626dd9537eebd19e5a46083b4"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/stack-detail.component.ts",
+      "sha256": "b047166703f0e43e4aacb8e469e8caa77f6990a964dc5de456c4870ac5273371"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/store.ts",
+      "sha256": "648e1ead8e670aee6bc77011d16dd7a89731cbbff49bd6beeb59cd3cd08b9947"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/toasts.component.ts",
+      "sha256": "d0538962c8172f5111f71bfe707d27109dc2e8901091948beb78a6f629fe371c"
+    },
+    {
+      "path": "src/app/variants/opus-arcane/user-menu.component.ts",
+      "sha256": "a262a457440d1ccfb4c964c7f54dc6d1ba86606b656f59a55ba2c166ba23b6da"
+    },
+    {
+      "path": "src/app/variants/opus-compact/action-center.ts",
+      "sha256": "aa42ab95784b3de3bcfe74df7961e9c595c31c49ec2c4a82d008dacfa997d23e"
+    },
+    {
+      "path": "src/app/variants/opus-compact/apps.ts",
+      "sha256": "9aa8f6d869baec1d1aef145233d6d25a0cb9a5f455b7767faf1fbdd5c63a8642"
+    },
+    {
+      "path": "src/app/variants/opus-compact/compose.ts",
+      "sha256": "195c53af27e3c4b6b90b36f112bd0de5350378cda981b4bf49ecc7d29c2fe6c1"
+    },
+    {
+      "path": "src/app/variants/opus-compact/containers.ts",
+      "sha256": "a2de157f3e9939a5e16bb89c00f5abe0152791d54e8d92aa560680ecab73e41d"
+    },
+    {
+      "path": "src/app/variants/opus-compact/dashboard.ts",
+      "sha256": "75707541043eabdacbc520234ebd4fd605de6017aa80dedfa05c20911674568b"
+    },
+    {
+      "path": "src/app/variants/opus-compact/data.ts",
+      "sha256": "8b7e100db1de0d1f2798be74072c14fec592d286adc749d101e5fa4eac3d91b1"
+    },
+    {
+      "path": "src/app/variants/opus-compact/design.component.ts",
+      "sha256": "674481584059801cdddea4daf8e6762c5f72cec79def9d2810e1f6fa97f067f3"
+    },
+    {
+      "path": "src/app/variants/opus-compact/draft.ts",
+      "sha256": "f6741c21681e1d0efd415327c323f8519f76081eee014f466ca1e96ac0e9dd6c"
+    },
+    {
+      "path": "src/app/variants/opus-compact/editor-service.ts",
+      "sha256": "365a1e80f92286d5d0aade4740837e2328781e3b2b753fec6665cc57c6b036e5"
+    },
+    {
+      "path": "src/app/variants/opus-compact/editor.ts",
+      "sha256": "4469be548762252d84038b57b7b090324d58ef0e0171908dd943c2724ec74fdb"
+    },
+    {
+      "path": "src/app/variants/opus-compact/flow.ts",
+      "sha256": "421a2a7927d89c1c0687ed431d966252857d8c3dd5c8ad87528e7e12ad56562e"
+    },
+    {
+      "path": "src/app/variants/opus-compact/hosts.ts",
+      "sha256": "558675c04c1be7b5e13506f4910f97aeb5eb9534bb4984967df777284e454434"
+    },
+    {
+      "path": "src/app/variants/opus-compact/icon.ts",
+      "sha256": "e87d1c63823b4939376a2b24a235e154e59d5802991952baf813ebdf78936d20"
+    },
+    {
+      "path": "src/app/variants/opus-compact/import-dialog.ts",
+      "sha256": "3f27972cab359345137b85cbfeafe1611a6cf756664135f27f28040afcbfde88"
+    },
+    {
+      "path": "src/app/variants/opus-compact/networks.ts",
+      "sha256": "a2dfe3a6dc1feb948a69df573b17b44b2ff21fa15b669ab0414c625cf65a0f50"
+    },
+    {
+      "path": "src/app/variants/opus-compact/preview.ts",
+      "sha256": "0b04492ab17ccb57f34554c1e1f1870f87b22e0afd021ffb097e159c65396936"
+    },
+    {
+      "path": "src/app/variants/opus-compact/profile.ts",
+      "sha256": "c180e8cd1c1c78a7d5f98ec6200cac2257cb4642e6b88728af0d497e743c6364"
+    },
+    {
+      "path": "src/app/variants/opus-compact/resources.ts",
+      "sha256": "3240cf7776d8d85509d7dcf460b452a3be16d43d96d9ac79ebc276f62ccfbd4b"
+    },
+    {
+      "path": "src/app/variants/opus-compact/security.ts",
+      "sha256": "a567011e4ed0abf08947382b68984eb1ac6a38e4b720210cdafa89d955c0a90b"
+    },
+    {
+      "path": "src/app/variants/opus-compact/settings-state.ts",
+      "sha256": "93b8e629575cf94817da13e5ff0dd8ce11ae199446b26337ab4169e0e49ac7f7"
+    },
+    {
+      "path": "src/app/variants/opus-compact/settings.ts",
+      "sha256": "10fb0d868467dbadafc551553af47d9406ef9230553b764605ed3c88d1f87f68"
+    },
+    {
+      "path": "src/app/variants/opus-compact/stack-detail.ts",
+      "sha256": "4aa5de983340b00d3090da0fb92d6d190441bbc2729325a903f44d171828ada5"
+    },
+    {
+      "path": "src/app/variants/opus-compact/stack-logs.ts",
+      "sha256": "0a187affea28ca8bb761bbe3708f0bfc8d867a877a4cd5aebd4773d278ac38fd"
+    },
+    {
+      "path": "src/app/variants/opus-compact/stack-page.ts",
+      "sha256": "e5076e205c292fe57f8f4c65e5047355fdde557b571d5a0db9757e3817c7a061"
+    },
+    {
+      "path": "src/app/variants/opus-compact/stacks.ts",
+      "sha256": "dfcb9aeded34592623d644db50c053dae44f9709d93c22f67c52f86e58cbafb5"
+    },
+    {
+      "path": "src/app/variants/opus-compact/store.ts",
+      "sha256": "2c5b660390ddc4c2ee7521e3ce5ce14952e9d73edb5d63531631c979daaba198"
+    },
+    {
+      "path": "src/app/variants/opus-compact/toasts.ts",
+      "sha256": "f55c19c09fc8cee52660419fcd4b990c208fb9a91011e90bba3662edcd0d7cd5"
+    },
+    {
+      "path": "src/app/variants/opus-compact/ui.ts",
+      "sha256": "e44809048ea37e7961c7ce9e89a7ec6de7a9cf5152a90ab1ca29bad36dbd8f0f"
+    },
+    {
+      "path": "src/app/variants/opus-compact/user-menu.ts",
+      "sha256": "1a9ffa0e788dc552ef4b6f4fa2ddb2f1ae7db1183930e20aebcbce58912b43d2"
+    }
+  ]
+}

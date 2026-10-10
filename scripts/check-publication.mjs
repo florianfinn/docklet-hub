@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 
+import { PUBLIC_SOURCE_ARCHIVE, inspectPublicSourceArchive } from "./check-publication-archive.mjs";
+
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const EMAIL = /[A-Z0-9._%+-]+@(?:[A-Z0-9-]+\.)+[A-Z][A-Z0-9-]*/giy;
 const PRIVATE_ADDRESS = /\b(?:192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3})\b/g;
@@ -103,11 +105,21 @@ function lineLocator(text) {
   };
 }
 
+// Preserve the published yaml copyright contact only in its original notice.
+function isLicenseContact(text, path, match) {
+  const licenses = new Set([
+    "docs/next/mockups/THIRD-PARTY-LICENSES.txt",
+    PUBLIC_SOURCE_ARCHIVE + "!/third-party/ANGULAR-BUNDLE-LICENSES.txt"
+  ]);
+  return licenses.has(path) && match[0] === ["eemeli", "gmail.com"].join("@") &&
+    text.slice(text.lastIndexOf("\n", match.index) + 1, text.indexOf("\n", match.index) === -1 ? undefined : text.indexOf("\n", match.index)).trim() === "Copyright Eemeli Aro <" + match[0] + ">";
+}
+
 export function inspectText(text, path = "text") {
   const findings = [];
   const lineOf = lineLocator(text);
   const report = (category, index) => findings.push({ path, line: lineOf(index), category });
-  for (const match of emailMatches(text)) if (!EXAMPLE_EMAIL.test(match[0]) && !PUBLIC_AUTOMATION_EMAILS.has(match[0].toLowerCase())) report("non-example-email", match.index);
+  for (const match of emailMatches(text)) if (!EXAMPLE_EMAIL.test(match[0]) && !PUBLIC_AUTOMATION_EMAILS.has(match[0].toLowerCase()) && !isLicenseContact(text, path, match)) report("non-example-email", match.index);
   for (const match of text.matchAll(SECRET)) report("credential-pattern", match.index);
   for (const match of text.matchAll(LOCAL_PATH)) report("workstation-path", match.index);
   for (const index of privateHostIndexes(text)) report("private-hostname", index);
@@ -122,8 +134,15 @@ function inspectPath(path) {
   const findings=[];
   if (/(?:^|\/)\.env(?:\..+)?$/.test(path) && !path.endsWith(".env.example")) findings.push({ path, line: 1, category: "runtime-env-file" });
   // Shared project settings are public; everything else below .claude/ stays local.
-  if ((path!==".claude/settings.json" && /(?:^|\/)(?:\.claude|\.remember|\.private|review-reports)\//.test(path)) || /\.(?:pem|key|p12|dump|sqlite3?|log|zip|tgz)$/.test(path)) findings.push({path,line:1,category:"private-artifact"});
+  if ((path!==".claude/settings.json" && /(?:^|\/)(?:\.claude|\.remember|\.private|review-reports)\//.test(path)) || (path !== PUBLIC_SOURCE_ARCHIVE && /\.(?:pem|key|p12|dump|sqlite3?|log|zip|tgz)$/.test(path))) findings.push({path,line:1,category:"private-artifact"});
   return findings;
+}
+
+function inspectContent(content, path) {
+  if (path === PUBLIC_SOURCE_ARCHIVE) return inspectPublicSourceArchive(content, (text, entry) => [
+    ...inspectPath(entry), ...inspectText(text, path + "!/" + entry)
+  ]);
+  return content.includes(0) ? [] : inspectText(content.toString("utf8"), path);
 }
 
 function environment() {
@@ -156,7 +175,7 @@ function inspectObjects(root,objects) {
   for(const {path,sha} of objects) {
     findings.push(...inspectPath(path));
     const content=blobs.get(sha);
-    if(!content.includes(0))findings.push(...inspectText(content.toString("utf8"),path));
+    findings.push(...inspectContent(content,path));
   }
   return findings;
 }
@@ -173,7 +192,7 @@ export function inspectRepository(root = ROOT, { staged = false, history = false
   else for(const {path} of entries) {
     findings.push(...inspectPath(path));
     const content=readFileSync(resolve(root,path));
-    if(!content.includes(0))findings.push(...inspectText(content.toString("utf8"),path));
+    findings.push(...inspectContent(content,path));
   }
   if(history) {
     const historyRef=root===ROOT && process.env.GITHUB_EVENT_NAME==="pull_request" && process.env.PUBLICATION_HEAD_SHA ? process.env.PUBLICATION_HEAD_SHA : "--all";
