@@ -13,7 +13,7 @@
 # (nur noch Sicherheits- und kritische Korrekturen) und endet 2027-04-30, die
 # 24er ist die aktive LTS bis 2028-04-30. Quelle: nodejs/Release, schedule.json,
 # abgerufen am 2026-09-01.
-FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS build
 
 # Corepack zieht die in package.json gepinnte pnpm-Fassung. Ohne die
 # Abschaltung der Rückfrage bleibt der Bau an einer Eingabeaufforderung stehen,
@@ -53,7 +53,7 @@ RUN pnpm run build
 RUN pnpm install --frozen-lockfile --prod --config.confirm-modules-purge=false
 
 
-FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runtime
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS runtime
 
 ENV NODE_ENV=production
 # Der Port steht im Image, damit der Healthcheck unten denselben Wert benutzt
